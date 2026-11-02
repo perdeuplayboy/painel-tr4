@@ -577,15 +577,20 @@ function exitStandby() {
   $('standby').hidden = true;
 }
 
-// No standby: toque passa para o próximo vídeo/GIF/animação; arrastar ou tocar no relógio sai
+// No standby: toque no meio passa para o próximo vídeo/GIF/animação;
+// toque nas laterais (fora da área central), no relógio ou arrastar sai
 let sbTouch = null;
+function inSbCenter(e) {
+  const r = $('stage').getBoundingClientRect(), mm = r.width / 140;
+  return e.clientX > r.left + 24 * mm && e.clientX < r.right - 24 * mm;
+}
 $('standby').addEventListener('pointerdown', e => { e.stopPropagation(); sbTouch = { x: e.clientX, y: e.clientY }; });
 $('standby').addEventListener('pointerup', e => {
   e.stopPropagation();
   if (!sbTouch) return;
   const moved = Math.hypot(e.clientX - sbTouch.x, e.clientY - sbTouch.y) > parseFloat(document.documentElement.style.fontSize) * 6;
   sbTouch = null;
-  if (moved || $('sbClock').contains(e.target) || sbPlayer.empty) {
+  if (moved || !inSbCenter(e) || $('sbClock').contains(e.target) || sbPlayer.empty) {
     const engineOff = sb.engineOffSince != null;
     sb.suppressUntil = performance.now() + (engineOff ? 60000 : S.standbyMin * 60000);
     exitStandby();
