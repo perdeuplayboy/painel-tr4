@@ -192,20 +192,24 @@ export function pipes(ctx, w, h, t) {
 // ---------- Labirinto de tijolos ----------
 const MAZE_VS = `
 attribute vec3 pos; attribute vec2 uv; attribute float tex;
-uniform mat4 mvp; uniform vec3 eye;
-varying vec2 vUv; varying float vTex, vD;
-void main() { vUv = uv; vTex = tex; vD = distance(pos, eye); gl_Position = mvp * vec4(pos, 1.0); }`;
+uniform mat4 mvp; uniform float rise;
+varying vec2 vUv; varying float vTex;
+void main() {
+  vec3 p = pos;
+  if (tex < 0.5 || tex > 2.5) p.y *= rise;                          // paredes (e a placa) sobem do chão no começo
+  vUv = uv; vTex = tex; gl_Position = mvp * vec4(p, 1.0);
+}`;
 const MAZE_FS = `
 precision mediump float;
-uniform sampler2D wall, floor, ceil;
-varying vec2 vUv; varying float vTex, vD;
+uniform sampler2D wall, floor, ceil, sign;
+varying vec2 vUv; varying float vTex;
 void main() {
-  vec3 c = vTex < 0.5 ? texture2D(wall, vUv).rgb : vTex < 1.5 ? texture2D(floor, vUv).rgb : texture2D(ceil, vUv).rgb;
-  gl_FragColor = vec4(c * (1.0 / (1.0 + vD * vD * 0.035)), 1.0);
+  gl_FragColor = vTex < 0.5 ? texture2D(wall, vUv) : vTex < 1.5 ? texture2D(floor, vUv) : vTex < 2.5 ? texture2D(ceil, vUv) : texture2D(sign, vUv);
 }`;
-function texture(gl, unit, draw, tx = gl.createTexture()) {
-  const c = Object.assign(document.createElement('canvas'), { width: 128, height: 128 });
-  draw(c.getContext('2d'));
+function texture(gl, unit, draw, size = [128, 128]) {
+  const c = Object.assign(document.createElement('canvas'), { width: size[0], height: size[1] });
+  draw(c.getContext('2d'), size[0], size[1]);
+  const tx = gl.createTexture();
   gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tx);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
   gl.generateMipmap(gl.TEXTURE_2D);
@@ -213,78 +217,108 @@ function texture(gl, unit, draw, tx = gl.createTexture()) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
   return tx;
 }
-const noisy = (g, x, y, w, h, base, amt) => {                        // manchinhas para não ficar chapado
-  for (let i = 0; i < w * h / 6; i++) {
+const speckle = (g, x, y, w, h, base, amt, n = w * h / 3) => {    // granulado de textura antiga
+  for (let i = 0; i < n; i++) {
     const v = (Math.random() - 0.5) * amt;
-    g.fillStyle = `rgb(${base.map(b => Math.max(0, Math.min(255, b + v))).join(',')})`;
-    g.fillRect(x + Math.random() * w, y + Math.random() * h, 1.5, 1.5);
+    g.fillStyle = `rgb(${base.map(b => Math.round(Math.max(0, Math.min(255, b + v)))).join(',')})`;
+    g.fillRect(x + Math.random() * w, y + Math.random() * h, 2, 2);
   }
 };
-let tint = [1, 1, 1];                                                // tom do tijolo sorteado a cada labirinto
-function brickTex(g) {
-  g.fillStyle = '#b9b3a6'; g.fillRect(0, 0, 128, 128);                 // argamassa
-  for (let r = 0; r < 8; r++) for (let k = -1; k < 4; k++) {
-    const x = k * 32 + (r % 2) * 16 + 2, y = r * 16 + 2;
-    const base = [(150 + Math.random() * 30) * tint[0], (45 + Math.random() * 20) * tint[1], (30 + Math.random() * 12) * tint[2]].map(Math.round);
-    g.fillStyle = `rgb(${base.join(',')})`; g.fillRect(x, y, 28, 12);
-    noisy(g, x, y, 28, 12, base, 40);
-    g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(x, y + 10, 28, 2);   // sombra embaixo do tijolo
+function brickTex(g) {                                               // 4 fileiras de tijolo por parede
+  g.fillStyle = '#d4d4d0'; g.fillRect(0, 0, 256, 256);               // argamassa clara
+  speckle(g, 0, 0, 256, 256, [212, 212, 208], 30, 4000);
+  for (let r = 0; r < 4; r++) for (let k = -1; k < 3; k++) {
+    const x = k * 128 + (r % 2) * 64 + 7, y = r * 64 + 7, bw = 114, bh = 50;
+    g.fillStyle = 'rgba(70, 70, 70, .55)'; g.fillRect(x + 3, y + 4, bw, bh);   // sombra do tijolo na argamassa
+    const base = [128 + Math.random() * 20, 8 + Math.random() * 8, 12 + Math.random() * 8];
+    g.fillStyle = `rgb(${base.map(Math.round).join(',')})`; g.fillRect(x, y, bw, bh);
+    speckle(g, x, y, bw, bh, base, 45, 900);
+    for (let m = 0; m < 6; m++) {                                     // manchas escuras e claras
+      g.fillStyle = Math.random() < 0.5 ? 'rgba(60,0,0,.25)' : 'rgba(190,40,40,.18)';
+      g.beginPath(); g.ellipse(x + Math.random() * bw, y + Math.random() * bh, 8 + Math.random() * 16, 4 + Math.random() * 8, 0, 0, TAU); g.fill();
+    }
+    g.fillStyle = 'rgba(255,170,170,.18)'; g.fillRect(x, y, bw, 3);     // quina de cima iluminada
   }
 }
-function floorTex(g) {
-  const f = [90, 86, 80].map(v => Math.round(v * (0.6 + tint[2] * 0.5)));
-  g.fillStyle = `rgb(${f.join(',')})`; g.fillRect(0, 0, 128, 128);
-  noisy(g, 0, 0, 128, 128, f, 50);
-  g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 2;
-  for (let i = 0; i <= 128; i += 64) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 128); g.moveTo(0, i); g.lineTo(128, i); g.stroke(); }
+function floorTex(g) {                                               // chão bege granulado
+  g.fillStyle = '#b8823e'; g.fillRect(0, 0, 128, 128);
+  speckle(g, 0, 0, 128, 128, [184, 130, 62], 70, 5000);
 }
-function ceilTex(g) {
-  g.fillStyle = '#d8d6cf'; g.fillRect(0, 0, 128, 128);
-  noisy(g, 0, 0, 128, 128, [216, 214, 207], 40);
-  g.strokeStyle = 'rgba(0,0,0,.15)'; g.lineWidth = 2; g.strokeRect(1, 1, 126, 126);
+function ceilTex(g) {                                                // forro de placas cinza
+  g.fillStyle = '#c9c9c9'; g.fillRect(0, 0, 128, 128);
+  speckle(g, 0, 0, 128, 128, [200, 200, 200], 110, 6000);
+  for (const o of [0, 64]) {
+    g.fillStyle = '#8c8c8c'; g.fillRect(o, 0, 3, 128); g.fillRect(0, o, 128, 3);
+    g.fillStyle = '#ececec'; g.fillRect(o + 3, 0, 2, 128); g.fillRect(0, o + 3, 128, 2);
+  }
 }
+function signTex(g, w, h) {                                          // placa translúcida "Start"
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = 'rgba(205, 205, 205, .5)'; g.fillRect(6, 6, w - 12, h - 12);
+  g.strokeStyle = 'rgba(25, 25, 25, .85)'; g.lineWidth = 5; g.strokeRect(6, 6, w - 12, h - 12);
+  g.strokeStyle = 'rgba(255, 255, 255, .6)'; g.lineWidth = 3; g.strokeRect(14, 14, w - 28, h - 28);
+  g.fillStyle = 'rgba(20, 20, 20, .9)'; g.font = `bold ${h * 0.5}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('Start', w / 2, h / 2 + 4);
+}
+const STEP = [[1, 0], [0, 1], [-1, 0], [0, -1]];                      // direções: x+, z+, x-, z-
 let M = null;
 function mazeBuild() {                                               // labirinto perfeito sorteado (busca em profundidade)
-  const R = Math.random, N = 7 + Math.floor(R() * 6), open = Array.from({ length: N * N }, () => [false, false, false, false]);   // L, N, O, S (x+, z+, x-, z-)
-  const seen = new Uint8Array(N * N), stack = [0];
-  seen[0] = 1;
-  const D = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  const R = Math.random, N = 7 + Math.floor(R() * 6), open = Array.from({ length: N * N }, () => [false, false, false, false]);
+  const seen = new Uint8Array(N * N), stack = [Math.floor(R() * N * N)];
+  seen[stack[0]] = 1;
   while (stack.length) {
     const c = stack.at(-1), x = c % N, z = Math.floor(c / N);
-    const opts = [0, 1, 2, 3].filter(d => { const nx = x + D[d][0], nz = z + D[d][1]; return nx >= 0 && nz >= 0 && nx < N && nz < N && !seen[nz * N + nx]; });
+    const opts = [0, 1, 2, 3].filter(d => { const nx = x + STEP[d][0], nz = z + STEP[d][1]; return nx >= 0 && nz >= 0 && nx < N && nz < N && !seen[nz * N + nx]; });
     if (!opts.length) { stack.pop(); continue; }
-    const d = opts[Math.floor(Math.random() * opts.length)], n = (z + D[d][1]) * N + x + D[d][0];
+    const d = opts[Math.floor(R() * opts.length)], n = (z + STEP[d][1]) * N + x + STEP[d][0];
     open[c][d] = true; open[n][(d + 2) % 4] = true; seen[n] = 1; stack.push(n);
   }
-  const v = [], q = (a, b, c, d, tex, uw, uh) => {
-    for (const [p, uv] of [[a, [0, uh]], [b, [uw, uh]], [c, [uw, 0]], [a, [0, uh]], [c, [uw, 0]], [d, [0, 0]]]) v.push(...p, ...uv, tex);
+  const v = [], q = (a, b, c, d, tex) => {
+    for (const [p, uv] of [[a, [0, 1]], [b, [1, 1]], [c, [1, 0]], [a, [0, 1]], [c, [1, 0]], [d, [0, 0]]]) v.push(...p, ...uv, tex);
   };
   for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
-    q([x, 0, z], [x + 1, 0, z], [x + 1, 0, z + 1], [x, 0, z + 1], 1, 1, 1);
-    q([x, 1, z], [x + 1, 1, z], [x + 1, 1, z + 1], [x, 1, z + 1], 2, 1, 1);
+    q([x, 0, z], [x + 1, 0, z], [x + 1, 0, z + 1], [x, 0, z + 1], 1);
+    q([x, 1, z], [x + 1, 1, z], [x + 1, 1, z + 1], [x, 1, z + 1], 2);
     const o = open[z * N + x];
-    if (!o[0]) q([x + 1, 0, z], [x + 1, 0, z + 1], [x + 1, 1, z + 1], [x + 1, 1, z], 0, 1, 1);
-    if (!o[1]) q([x, 0, z + 1], [x + 1, 0, z + 1], [x + 1, 1, z + 1], [x, 1, z + 1], 0, 1, 1);
-    if (!o[2]) q([x, 0, z], [x, 0, z + 1], [x, 1, z + 1], [x, 1, z], 0, 1, 1);
-    if (!o[3]) q([x, 0, z], [x + 1, 0, z], [x + 1, 1, z], [x, 1, z], 0, 1, 1);
+    if (!o[0]) q([x + 1, 0, z], [x + 1, 0, z + 1], [x + 1, 1, z + 1], [x + 1, 1, z], 0);
+    if (!o[1]) q([x, 0, z + 1], [x + 1, 0, z + 1], [x + 1, 1, z + 1], [x, 1, z + 1], 0);
+    if (!o[2]) q([x, 0, z], [x, 0, z + 1], [x, 1, z + 1], [x, 1, z], 0);
+    if (!o[3]) q([x, 0, z], [x + 1, 0, z], [x + 1, 1, z], [x, 1, z], 0);
   }
+  const walls = v.length / 6;
+  // começa num beco olhando para a parede com a placa Start
+  const ends = [];
+  for (let i = 0; i < N * N; i++) if (open[i].filter(Boolean).length === 1) ends.push(i);
+  const sc = ends.length ? ends[Math.floor(R() * ends.length)] : 0, sx = sc % N, sz = Math.floor(sc / N);
+  const dir = [0, 1, 2, 3].find(d => !open[sc][d]) ?? 0, D = STEP[dir], L = [-D[1], D[0]];
+  const cx = sx + 0.5 + D[0] * 0.49, cz = sz + 0.5 + D[1] * 0.49;
+  q([cx - L[0] * 0.32, 0.34, cz - L[1] * 0.32], [cx + L[0] * 0.32, 0.34, cz + L[1] * 0.32],
+    [cx + L[0] * 0.32, 0.66, cz + L[1] * 0.32], [cx - L[0] * 0.32, 0.66, cz - L[1] * 0.32], 3);
   const gl = M.gl;
-  tint = [[1, 1, 1], [1.12, 1.25, 1.3], [0.8, 0.9, 1], [1.15, 1.6, 1.9], [0.95, 0.75, 0.7]][Math.floor(R() * 5)];
-  texture(gl, 0, brickTex, M.tex[0]); texture(gl, 1, floorTex, M.tex[1]); texture(gl, 2, ceilTex, M.tex[2]);
   gl.bindBuffer(gl.ARRAY_BUFFER, M.buf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
-  const sx = Math.floor(R() * N), sz = Math.floor(R() * N), o = open[sz * N + sx];
-  Object.assign(M, { N, open, n: v.length / 6, x: sx, z: sz, dir: [0, 1, 2, 3].find(d => o[d]) ?? 0, move: null, steps: 0, walkNext: false,
-    ex: N - 1 - sx, ez: N - 1 - sz });                               // começa num canto qualquer, sai do lado oposto
+  let far = sc, best = -1;                                           // a saída é a casa mais longe do começo
+  const dist = new Int16Array(N * N).fill(-1), queue = [sc];
+  dist[sc] = 0;
+  while (queue.length) {
+    const c = queue.shift();
+    if (dist[c] > best) { best = dist[c]; far = c; }
+    for (let d = 0; d < 4; d++) if (open[c][d]) {
+      const n = c + STEP[d][0] + STEP[d][1] * N;
+      if (dist[n] < 0) { dist[n] = dist[c] + 1; queue.push(n); }
+    }
+  }
+  Object.assign(M, { N, open, walls, n: v.length / 6, x: sx, z: sz, dir, move: null, steps: 0, walkNext: false,
+    ex: far % N, ez: Math.floor(far / N), intro: 0 });
 }
 function mazeNext() {                                                // sempre com a mão direita na parede
-  if (M.walkNext) { M.walkNext = false; return { kind: 'walk', dur: 0.85, t: 0 }; }   // acabou de virar: anda
+  if (M.walkNext) { M.walkNext = false; return { kind: 'walk', dur: 0.7, t: 0 }; }   // acabou de virar: anda
   const o = M.open[M.z * M.N + M.x];
   for (const turn of [1, 0, -1, 2]) {                               // direita, frente, esquerda, volta (+1 = direita)
     if (!o[(M.dir + turn + 4) % 4]) continue;
-    if (!turn) return { kind: 'walk', dur: 0.85, t: 0 };
+    if (!turn) return { kind: 'walk', dur: 0.7, t: 0 };
     M.walkNext = true;
-    return { kind: 'turn', from: M.dir, to: M.dir + turn, dur: turn === 2 ? 1 : 0.55, t: 0 };
+    return { kind: 'turn', from: M.dir, to: M.dir + turn, dur: turn === 2 ? 0.9 : 0.45, t: 0 };
   }
 }
 export function maze(ctx, w, h, t) {
@@ -292,8 +326,9 @@ export function maze(ctx, w, h, t) {
     try {
       const G = makeGL(MAZE_VS, MAZE_FS, [['pos', 3], ['uv', 2], ['tex', 1]]);
       if (!G) M = { failed: true }; else {
-        M = { ...G, last: Infinity, buf: G.gl.createBuffer(), tex: [0, 1, 2].map(() => G.gl.createTexture()) };
-        G.gl.uniform1i(G.u('wall'), 0); G.gl.uniform1i(G.u('floor'), 1); G.gl.uniform1i(G.u('ceil'), 2);
+        M = { ...G, last: Infinity, buf: G.gl.createBuffer() };
+        texture(G.gl, 0, brickTex, [256, 256]); texture(G.gl, 1, floorTex); texture(G.gl, 2, ceilTex); texture(G.gl, 3, signTex, [256, 128]);
+        ['wall', 'floor', 'ceil', 'sign'].forEach((n, i) => G.gl.uniform1i(G.u(n), i));
       }
     } catch (e) { console.warn('labirinto', e); M = { failed: true }; }
   }
@@ -303,26 +338,33 @@ export function maze(ctx, w, h, t) {
   if (t < M.last) mazeBuild();
   const dt = Math.min(0.2, Math.max(0, t - M.last));
   M.last = t;
+  M.intro += dt;
+  if (M.intro > 4.2) {                                               // paredes subiram e mostrou a placa: anda sem parar
     M.move ??= mazeNext();
-  M.move.t += dt / M.move.dur;
-  if (M.move.t >= 1) {
-    if (M.move.kind === 'walk') { const D = [[1, 0], [0, 1], [-1, 0], [0, -1]][M.dir]; M.x += D[0]; M.z += D[1]; M.steps++; }
-    else M.dir = ((M.move.to % 4) + 4) % 4;
-    M.move = null;
-    if (M.x === M.ex && M.z === M.ez || M.steps > 160) mazeBuild();   // achou a saída: outro labirinto
-    M.move = mazeNext();
+    M.move.t += dt / M.move.dur;
+    while (M.move.t >= 1) {
+      const rest = (M.move.t - 1) * M.move.dur;                      // sobra de tempo passa para o próximo passo
+      if (M.move.kind === 'walk') { M.x += STEP[M.dir][0]; M.z += STEP[M.dir][1]; M.steps++; }
+      else M.dir = ((M.move.to % 4) + 4) % 4;
+      if (M.x === M.ex && M.z === M.ez || M.steps > 220) { mazeBuild(); break; }   // achou a saída: outro labirinto
+      M.move = mazeNext();
+      M.move.t = rest / M.move.dur;
+    }
   }
-  const e = 0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, M.move.t));   // começa e termina devagar
+  const mv = M.move, e = mv ? Math.min(1, mv.t) : 0;
   let ang = M.dir * Math.PI / 2, px = M.x + 0.5, pz = M.z + 0.5;
-  if (M.move.kind === 'turn') ang = (M.move.from + (M.move.to - M.move.from) * e) * Math.PI / 2;
-  else { const D = [[1, 0], [0, 1], [-1, 0], [0, -1]][M.dir]; px += D[0] * e; pz += D[1] * e; }
-  const eye = [px - Math.cos(ang) * 0.25, 0.5, pz - Math.sin(ang) * 0.25];
-  gl.uniformMatrix4fv(M.u('mvp'), false, mul(perspective(0.62, aspect, 0.02, 30),
-    lookAt(eye, [eye[0] + Math.cos(ang), 0.5, eye[2] + Math.sin(ang)], [0, 1, 0])));
-  gl.uniform3f(M.u('eye'), ...eye);
+  if (mv?.kind === 'turn') ang = (mv.from + (mv.to - mv.from) * e) * Math.PI / 2;
+  else if (mv) { px += STEP[M.dir][0] * e; pz += STEP[M.dir][1] * e; }
+  const ex = px - Math.cos(ang) * 0.3, ez = pz - Math.sin(ang) * 0.3;   // olho no fundo da casa: vê a parede inteira
+  gl.uniformMatrix4fv(M.u('mvp'), false, mul(perspective(1.0, aspect, 0.02, 40),
+    lookAt([ex, 0.5, ez], [ex + Math.cos(ang), 0.5, ez + Math.sin(ang)], [0, 1, 0])));
+  gl.uniform1f(M.u('rise'), Math.min(1, Math.max(0.001, (M.intro - 0.6) / 2.2)));
   gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST);
   gl.bindBuffer(gl.ARRAY_BUFFER, M.buf); M.bind();
-  gl.drawArrays(gl.TRIANGLES, 0, M.n);
+  gl.disable(gl.BLEND);
+  gl.drawArrays(gl.TRIANGLES, 0, M.walls);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.drawArrays(gl.TRIANGLES, M.walls, M.n - M.walls);               // placa translúcida por cima
   ctx.drawImage(M.canvas, 0, 0, w, h);
 }
