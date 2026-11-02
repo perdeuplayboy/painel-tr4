@@ -161,6 +161,23 @@
             <div class="nav-pick-list" id="navPickList"></div>
           </div>
         </section>
+        <section class="page" data-page="music">
+          <div class="music">
+            <div class="m-art"><img id="mArt" alt="" hidden><span id="mNoArt">♪</span></div>
+            <div class="m-info">
+              <b data-k="mTitle">--</b>
+              <small data-k="mArtist"></small>
+              <div class="m-bar"><i id="mProg"></i></div>
+              <div class="m-time"><span data-k="mPos"></span><span data-k="mDur"></span></div>
+              <div class="m-btns">
+                <button class="mbtn" id="mPrev" aria-label="Anterior"><svg viewBox="0 0 24 24"><path d="M6 5v14M18 5 8 12l10 7z"/></svg></button>
+                <button class="mbtn big" id="mPlay" aria-label="Tocar ou pausar"><svg viewBox="0 0 24 24"><path id="mPlayIcon" d="M7 4l13 8-13 8z"/></svg></button>
+                <button class="mbtn" id="mNext" aria-label="Próxima"><svg viewBox="0 0 24 24"><path d="M18 5v14M6 5l10 7-10 7z"/></svg></button>
+                <small class="m-dev" data-k="mDevice"></small>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
 
       <aside id="wing-right" class="wing">
@@ -227,6 +244,13 @@
     <p class="muted">Do seu celular (Google Maps → Compartilhar): aponte a câmera do seu celular para o código, abra o endereço e instale a página.</p>
     <div class="row"><div id="phoneQr" class="qr"></div><b id="phoneLink" class="muted"></b></div>
     <p class="muted">Mapa © colaboradores do OpenStreetMap, rotas OSRM, busca Nominatim, envio pelo ntfy.sh.</p>
+  </section>
+
+  <section>
+    <h3>Spotify</h3>
+    <label>Client ID <input id="sSpotifyId" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <div class="row"><button id="btnSpotify" class="pill">Conectar Spotify</button><span id="spotifyInfo" class="muted"></span></div>
+    <p class="muted">No app criado em developer.spotify.com, cadastre como Redirect URI exatamente: <b id="spotifyRedirect"></b></p>
   </section>
 
   <section>

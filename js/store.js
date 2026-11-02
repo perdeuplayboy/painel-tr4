@@ -23,6 +23,7 @@ export const DEFAULTS = {
   voice: 'all',             // 'all' | 'alerts' | 'off'
   theme: 'auto',            // 'auto' (pelo pôr do sol) | 'day' | 'night'
   nightDim: 45,             // % de escurecimento à noite
+  spotifyClient: '',        // Client ID do app criado em developer.spotify.com
 };
 
 // Intervalos de partida para a TR4 2.0 flex em uso misto; confira no manual e ajuste.

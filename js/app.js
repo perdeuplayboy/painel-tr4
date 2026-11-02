@@ -3,6 +3,7 @@ import {
 } from './obd.js';
 import { loadSettings, loadUpkeep, load, save, addVideos, listVideos, clearVideos } from './store.js';
 import { MapView, Navigator, geocode, distM, fmtDist, arrowPath, arrowChar } from './nav.js';
+import { Spotify } from './spotify.js';
 
 const $ = id => document.getElementById(id);
 const S = loadSettings();
@@ -15,7 +16,7 @@ const fmtInt = v => Math.round(v).toLocaleString('pt-BR');
 const hhmm = t => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 const DAY = 864e5;
 
-const PAGES = ['drive', 'engine', 'trip', 'fuel', 'trail', 'diag', 'nav'];
+const PAGES = ['drive', 'engine', 'trip', 'fuel', 'trail', 'diag', 'nav', 'music'];
 const STANDBY_ENGINE_OFF_MS = 10000;
 const TRIP_RESET_MS = 15 * 60000;       // motor desligado por mais que isso = nova viagem
 
@@ -428,6 +429,34 @@ $('btnNavPickClose').addEventListener('click', () => { $('navPick').hidden = tru
 armed($('btnNavCancel'), stopNav);
 
 // ---------------------------------------------------------------------------
+// Spotify: a música da sua conta, tocando no seu celular ou em outro aparelho
+const spot = new Spotify({ load, save });
+if (DEMO && !spot.connected) {                                  // música de mentira para testar a tela
+  Object.defineProperty(spot, 'connected', { value: true });
+  spot.now = { title: 'Highway Star', artist: 'Deep Purple', art: '', playing: true, progress: 62000, duration: 368000, device: 'Moto G (demo)', at: Date.now() };
+  spot.poll = async () => {};
+  spot.control = async cmd => {
+    const m = spot.now;
+    if (cmd === 'play' || cmd === 'pause') { m.progress = spot.position(); m.at = Date.now(); m.playing = cmd === 'play'; } else { m.progress = 0; m.at = Date.now(); }
+  };
+}
+spot.finishLogin()
+  .then(ok => { if (ok) { log('Spotify conectado'); showPage(PAGES.indexOf('music')); } })
+  .catch(e => { spot.err = e.message; log('Spotify: ' + e.message); })
+  .finally(() => spot.poll());
+// mais frequente quando a música está na tela
+let spotLast = 0;
+setInterval(() => {
+  const visible = document.visibilityState === 'visible' && (PAGES[page] === 'music' || sb.on);
+  if (Date.now() - spotLast >= (visible ? 3000 : 15000)) { spotLast = Date.now(); spot.poll(); }
+}, 1000);
+
+const mmss = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+$('mPrev').addEventListener('click', () => spot.control('prev'));
+$('mNext').addEventListener('click', () => spot.control('next'));
+$('mPlay').addEventListener('click', () => spot.control(spot.now?.playing ? 'pause' : 'play'));
+
+// ---------------------------------------------------------------------------
 // Destino enviado pelo seu celular (página "Enviar ao carro"), pelo ntfy.sh.
 // O canal é um código aleatório gerado aqui; só quem sabe o código publica nele.
 if (!S.channel) { S.channel = 'tr4-' + crypto.randomUUID().replace(/-/g, '').slice(0, 20); saveSettings(); }
@@ -612,8 +641,24 @@ function render(d, fresh, speed, running, t) {
   set('coolant', `${fmt(v.coolantC)}°`);
   $('engTemp').classList.toggle('cold', v.coolantC < 60);
   $('engTemp').classList.toggle('hot', v.coolantC >= S.coolLimit - 5);
-  set('sbLine', `${date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}` +
+  const song = spot.now;
+  set('sbLine', song?.playing ? `♪ ${song.title} · ${song.artist}` :
+    `${date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}` +
     (wOk ? ` · ${fmt(weather.temp)}°` : '') + (isNum(v.coolantC) ? ` · motor ${fmt(v.coolantC)}°` : ''));
+
+  // música
+  set('mTitle', !spot.connected ? 'Spotify não conectado' : song ? song.title : 'nada tocando');
+  set('mArtist', !spot.connected ? 'segure o relógio → Configurações → Spotify' : song ? song.artist : 'abra o Spotify no celular');
+  set('mDevice', spot.err || (song?.device ? `tocando em ${song.device}` : ''));
+  const pos = spot.position();
+  set('mPos', song ? mmss(pos) : '');
+  set('mDur', song ? mmss(song.duration) : '');
+  $('mProg').style.width = song?.duration ? `${pos / song.duration * 100}%` : '0';
+  const art = song?.art || '';
+  if ($('mArt').dataset.src !== art) { $('mArt').dataset.src = art; $('mArt').src = art; }
+  $('mArt').hidden = !art; $('mNoArt').hidden = !!art;
+  const icon = song?.playing ? 'M7 4h4v16H7zM14 4h4v16h-4z' : 'M7 4l13 8-13 8z';
+  if ($('mPlayIcon').getAttribute('d') !== icon) $('mPlayIcon').setAttribute('d', icon);
 
   // direção
   set('speed', fmt(speed));
@@ -757,8 +802,15 @@ const FIELDS = {
   sStandbyMin: 'standbyMin', sCoolLimit: 'coolLimit', sBattLimit: 'battLimit',
   sRollLimit: 'rollLimit', sPitchLimit: 'pitchLimit',
   sScreenW: 'screenW', sOffX: 'offX', sOffY: 'offY', sMask: 'mask', sOutline: 'outline',
-  sVoice: 'voice', sTheme: 'theme', sNightDim: 'nightDim',
+  sVoice: 'voice', sTheme: 'theme', sNightDim: 'nightDim', sSpotifyId: 'spotifyClient',
 };
+
+function renderSpotifySettings() {
+  $('spotifyRedirect').textContent = spot.redirect;
+  $('btnSpotify').textContent = spot.connected ? 'Desconectar Spotify' : 'Conectar Spotify';
+  $('spotifyInfo').textContent = spot.connected
+    ? (spot.err || (spot.now ? `tocando: ${spot.now.title}` : 'conectado')) : spot.err;
+}
 
 const phoneLink = () => new URL(`enviar.html#${S.channel}`, location.href).href;
 
@@ -860,7 +912,7 @@ function openSettings() {
   }
   $('log').textContent = logLines.join('\n');
   $('sOdo').value = isNum(odo) ? Math.round(odo) : '';
-  renderNavSettings(); renderUpkeep(); renderTrips();
+  renderNavSettings(); renderUpkeep(); renderTrips(); renderSpotifySettings();
   updateSettingsInfo();
   $('settings').hidden = false;
   exitStandby();
@@ -872,7 +924,7 @@ function updateSettingsInfo() {
   $('btnEngine').textContent = src.engineOn === false ? 'Ligar motor (simulação)' : 'Desligar motor (simulação)';
   $('connInfo').textContent = S.source === 'sim' ? '' : `${src.state}${src.err ? ' · ' + src.err : ''}`;
 }
-setInterval(() => { if (!$('settings').hidden) { updateSettingsInfo(); renderNavSettings(); } }, 1000);
+setInterval(() => { if (!$('settings').hidden) { updateSettingsInfo(); renderNavSettings(); renderSpotifySettings(); } }, 1000);
 
 for (const [id, key] of Object.entries(FIELDS)) {
   $(id).addEventListener('change', e => {
@@ -927,6 +979,13 @@ const navSearch = () => {
 $('btnNavSearch').addEventListener('click', navSearch);
 $('navQuery').addEventListener('keydown', e => { if (e.key === 'Enter') navSearch(); });
 $('btnNavStop').addEventListener('click', () => { stopNav(); renderNavSettings(); });
+$('btnSpotify').addEventListener('click', () => {
+  if (spot.connected) { spot.logout(); renderSpotifySettings(); return; }
+  const id = $('sSpotifyId').value.trim();
+  if (!/^[0-9a-f]{32}$/i.test(id)) { spot.err = 'cole o Client ID (32 letras e números)'; renderSpotifySettings(); return; }
+  S.spotifyClient = id; saveSettings();
+  spot.login(id);
+});
 
 // ---------------------------------------------------------------------------
 // Tela cheia, tela sempre acesa, deslocamento anti-marcas e modo offline
