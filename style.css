@@ -130,6 +130,7 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 .incl.bad .car g { stroke: var(--bad); }
 .trail-mid { display: flex; flex-direction: column; gap: 3rem; text-align: center; }
 .trail-mid b { font-size: 5rem; display: block; line-height: 1; }
+.trail-mid .hint { color: var(--warn); font-size: 1.9rem; line-height: 1.2; }
 
 /* diagnóstico */
 .diag { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: .6rem 3rem; align-content: start; font-size: 2.6rem; }

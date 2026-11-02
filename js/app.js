@@ -350,7 +350,8 @@ function tick() {
   if (d.milOn && !milWasOn) raise('mil', 'warn', 'LUZ DE INJEÇÃO ACESA', `${d.dtcCount} falha(s) · veja Diagnóstico`, 0);
   milWasOn = d.milOn;
   const t = tilt();
-  if (Math.abs(t.roll) > S.rollLimit || Math.abs(t.pitch) > S.pitchLimit) {
+  // só alerta depois de zerado com o celular montado; antes disso a posição é desconhecida
+  if (S.level && (Math.abs(t.roll) > S.rollLimit || Math.abs(t.pitch) > S.pitchLimit)) {
     tiltSince ??= now;
     if (now - tiltSince > 1000) raise('tilt', 'bad', 'INCLINAÇÃO PERIGOSA', `lateral ${fmt(Math.abs(t.roll))}° · frontal ${fmt(Math.abs(t.pitch))}°`, 15000);
   } else tiltSince = null;
@@ -451,6 +452,7 @@ function render(d, fresh, speed, running, t) {
   set('heading', gpsOk && gps.speed > 5 && isNum(gps.heading)
     ? `${dirs[Math.round(gps.heading / 45) % 8]} ${fmt(gps.heading)}°` : '--');
   set('alt', gpsOk ? fmt(gps.alt) : '--');
+  set('levelHint', S.level ? '' : 'zere nas configurações com o carro no plano');
 
   // diagnóstico
   set('connState', S.source === 'sim' ? 'simulação' : src.state);
