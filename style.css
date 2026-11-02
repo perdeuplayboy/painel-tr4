@@ -34,7 +34,8 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 [hidden] { display: none !important; }
 
 /* ---- tela e janela ---- */
-#screen { position: absolute; overflow: hidden; background: #000; }
+/* sem touch-action o Chrome trata o arrastar como rolagem e cancela o gesto */
+#screen { position: absolute; overflow: hidden; background: #000; touch-action: none; }
 #stage { position: absolute; width: 140rem; height: 45rem; overflow: hidden; }
 #shift { position: absolute; inset: 0; transition: transform 2s ease; }
 #mask { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }

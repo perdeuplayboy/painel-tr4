@@ -71,6 +71,7 @@ let swipe = null;
 $('stage').addEventListener('pointerdown', e => {
   swipe = { x: e.clientX, y: e.clientY };
 });
+$('stage').addEventListener('pointercancel', () => { swipe = null; });
 $('stage').addEventListener('pointerup', e => {
   if (!swipe) return;
   const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
