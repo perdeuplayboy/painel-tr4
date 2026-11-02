@@ -279,6 +279,13 @@ function smileTex(g, w, h) {                                         // rosto am
 }
 const picImg = Object.assign(new Image(), { src: 'img/quadro.webp' });   // imagem que aparece em paredes sorteadas
 const startImg = Object.assign(new Image(), { src: 'img/start.png' });   // placa Start enviada pelo usuário
+const mazeImgs = ['img/maze-tijolo.png', 'img/maze-chao.png', 'img/maze-teto.png']   // texturas tiradas do original
+  .map(src => Object.assign(new Image(), { src }));
+function imageTex(gl, unit, img, draw, size) {                       // usa a imagem quando carregar; até lá, a desenhada
+  const put = () => texture(gl, unit, g => g.drawImage(img, 0, 0), [img.naturalWidth, img.naturalHeight]);   // tamanho original
+  texture(gl, unit, draw, size);
+  if (img.complete && img.naturalWidth) put(); else img.addEventListener('load', put, { once: true });
+}
 const STEP = [[1, 0], [0, 1], [-1, 0], [0, -1]];                      // direções: x+, z+, x-, z-
 let M = null;
 function mazeBuild() {                                               // labirinto perfeito sorteado (busca em profundidade)
@@ -388,7 +395,8 @@ export function maze(ctx, w, h, t) {
       const G = makeGL(MAZE_VS, MAZE_FS, [['pos', 3], ['uv', 2], ['tex', 1]]);
       if (!G) M = { failed: true }; else {
         M = { ...G, last: Infinity, buf: G.gl.createBuffer(), dyn: G.gl.createBuffer() };
-        texture(G.gl, 0, brickTex, [256, 256]); texture(G.gl, 1, floorTex); texture(G.gl, 2, ceilTex);
+        imageTex(G.gl, 0, mazeImgs[0], brickTex, [256, 256]); imageTex(G.gl, 1, mazeImgs[1], floorTex, [128, 128]);
+        imageTex(G.gl, 2, mazeImgs[2], ceilTex, [128, 128]);
         texture(G.gl, 3, signTex, [256, 128]); texture(G.gl, 4, smileTex, [256, 256]);
         const start = () => texture(G.gl, 3, g => { g.globalAlpha = 0.9; g.drawImage(startImg, 0, 0, 256, 128); }, [256, 128]);
         if (startImg.complete && startImg.naturalWidth) start(); else startImg.addEventListener('load', start, { once: true });
