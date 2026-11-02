@@ -278,6 +278,7 @@ function smileTex(g, w, h) {                                         // rosto am
   g.beginPath(); g.ellipse(cx, cy + r * 0.05, r * 0.6, r * 0.38, 0, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke();
 }
 const picImg = Object.assign(new Image(), { src: 'img/quadro.webp' });   // imagem que aparece em paredes sorteadas
+const startImg = Object.assign(new Image(), { src: 'img/start.png' });   // placa Start enviada pelo usuário
 const STEP = [[1, 0], [0, 1], [-1, 0], [0, -1]];                      // direções: x+, z+, x-, z-
 let M = null;
 function mazeBuild() {                                               // labirinto perfeito sorteado (busca em profundidade)
@@ -294,16 +295,20 @@ function mazeBuild() {                                               // labirint
   const v = [], q = (a, b, c, d, tex) => {
     for (const [p, uv] of [[a, [0, 1]], [b, [1, 1]], [c, [1, 0]], [a, [0, 1]], [c, [1, 0]], [d, [0, 0]]]) v.push(...p, ...uv, tex);
   };
-  const pics = 0.03 + R() * 0.03;                                    // quantas paredes viram quadro
+  const wallAt = [];                                                 // início de cada parede no buffer
   for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
     q([x, 0, z], [x + 1, 0, z], [x + 1, 0, z + 1], [x, 0, z + 1], 1);
     q([x, 1, z], [x + 1, 1, z], [x + 1, 1, z + 1], [x, 1, z + 1], 2);
-    const o = open[z * N + x], wt = () => R() < pics ? 6 : 0;
+    const o = open[z * N + x], wt = () => (wallAt.push(v.length / 6), 0);
     // cada parede com os cantos na ordem esquerda→direita de quem olha de dentro da casa (para o quadro não sair espelhado)
     if (!o[0]) q([x + 1, 0, z], [x + 1, 0, z + 1], [x + 1, 1, z + 1], [x + 1, 1, z], wt());
     if (!o[1]) q([x + 1, 0, z + 1], [x, 0, z + 1], [x, 1, z + 1], [x + 1, 1, z + 1], wt());
     if (!o[2]) q([x, 0, z + 1], [x, 0, z], [x, 1, z], [x, 1, z + 1], wt());
     if (!o[3]) q([x, 0, z], [x + 1, 0, z], [x + 1, 1, z], [x, 1, z], wt());
+  }
+  for (let k = N >= 7 ? 2 : 1; k--;) {                              // o quadro aparece em uma ou duas paredes só
+    const at = wallAt.splice(Math.floor(R() * wallAt.length), 1)[0];
+    for (let i = 0; i < 6; i++) v[(at + i) * 6 + 5] = 6;
   }
   const walls = v.length / 6;
   // começa num beco olhando para a parede com a placa Start
@@ -385,6 +390,8 @@ export function maze(ctx, w, h, t) {
         M = { ...G, last: Infinity, buf: G.gl.createBuffer(), dyn: G.gl.createBuffer() };
         texture(G.gl, 0, brickTex, [256, 256]); texture(G.gl, 1, floorTex); texture(G.gl, 2, ceilTex);
         texture(G.gl, 3, signTex, [256, 128]); texture(G.gl, 4, smileTex, [256, 256]);
+        const start = () => texture(G.gl, 3, g => { g.globalAlpha = 0.9; g.drawImage(startImg, 0, 0, 256, 128); }, [256, 128]);
+        if (startImg.complete && startImg.naturalWidth) start(); else startImg.addEventListener('load', start, { once: true });
         const pic = () => texture(G.gl, 5, g => g.drawImage(picImg, 0, 0, 512, 512), [512, 512]);
         if (picImg.complete && picImg.naturalWidth) pic(); else { texture(G.gl, 5, ceilTex); picImg.addEventListener('load', pic, { once: true }); }
         ['wall', 'floor', 'ceil', 'sign', 'smile', 'pic'].forEach((n, i) => G.gl.uniform1i(G.u(n), i));
