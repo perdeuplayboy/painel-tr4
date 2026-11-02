@@ -20,7 +20,31 @@ export const DEFAULTS = {
   mask: 'black',            // 'black' | 'dim' (para ajustar o encaixe)
   outline: false,
   level: null,              // calibração do inclinômetro { roll, pitch }
+  voice: 'all',             // 'all' | 'alerts' | 'off'
+  theme: 'auto',            // 'auto' (pelo pôr do sol) | 'day' | 'night'
+  nightDim: 45,             // % de escurecimento à noite
 };
+
+// Intervalos de partida para a TR4 2.0 flex em uso misto; confira no manual e ajuste.
+// everyKm/everyMonths = 0 desliga aquele critério.
+export const UPKEEP = [
+  { id: 'oleo', name: 'Óleo e filtro do motor', short: 'Óleo', everyKm: 5000, everyMonths: 6 },
+  { id: 'ar', name: 'Filtro de ar', short: 'Filtro de ar', everyKm: 10000, everyMonths: 12 },
+  { id: 'cabine', name: 'Filtro de cabine', short: 'Filtro de cabine', everyKm: 10000, everyMonths: 12 },
+  { id: 'comb', name: 'Filtro de combustível', short: 'Filtro de comb.', everyKm: 20000, everyMonths: 24 },
+  { id: 'velas', name: 'Velas', short: 'Velas', everyKm: 30000, everyMonths: 36 },
+  { id: 'freio', name: 'Fluido de freio', short: 'Fluido de freio', everyKm: 0, everyMonths: 24 },
+  { id: 'pastilha', name: 'Pastilhas de freio (revisar)', short: 'Pastilhas', everyKm: 20000, everyMonths: 0 },
+  { id: 'arref', name: 'Líquido de arrefecimento', short: 'Arrefecimento', everyKm: 40000, everyMonths: 24 },
+  { id: 'cambio', name: 'Óleo câmbio, diferenciais e reduzida', short: 'Óleo câmbio', everyKm: 40000, everyMonths: 36 },
+  { id: 'correia', name: 'Correia dentada', short: 'Correia dentada', everyKm: 60000, everyMonths: 48 },
+  { id: 'pneus', name: 'Rodízio e alinhamento', short: 'Rodízio', everyKm: 10000, everyMonths: 0 },
+].map(it => ({ ...it, lastKm: null, lastAt: 0 }));
+
+export function loadUpkeep() {
+  const saved = load('upkeep', []);
+  return UPKEEP.map(d => ({ ...d, ...saved.find(s => s.id === d.id) }));
+}
 
 export function load(key, fallback) {
   try {

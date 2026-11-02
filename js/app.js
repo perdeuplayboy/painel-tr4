@@ -1,7 +1,8 @@
 import {
   State, FUELS, emptyTrip, tripAvgKmL, tripAvgSpeed, deriveAndIntegrate, MockSource, ElmBleSource,
 } from './obd.js';
-import { loadSettings, load, save, addVideos, listVideos, clearVideos } from './store.js';
+import { loadSettings, loadUpkeep, load, save, addVideos, listVideos, clearVideos } from './store.js';
+import { MapView, Navigator, geocode, distM, fmtDist, arrowPath, arrowChar } from './nav.js';
 
 const $ = id => document.getElementById(id);
 const S = loadSettings();
@@ -10,6 +11,9 @@ const isNum = v => typeof v === 'number' && !Number.isNaN(v);
 const fmt = (v, dec = 0) => isNum(v) ? v.toFixed(dec).replace('.', ',') : '--';
 const fmtSigned = (v, dec = 1) => isNum(v) ? (v >= 0 ? '+' : '') + fmt(v, dec) : '--';
 const rand = (a, b) => a + Math.random() * (b - a);
+const fmtInt = v => Math.round(v).toLocaleString('pt-BR');
+const hhmm = t => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+const DAY = 864e5;
 
 const PAGES = ['drive', 'engine', 'trip', 'fuel', 'trail', 'diag', 'nav'];
 const STANDBY_ENGINE_OFF_MS = 10000;
@@ -138,6 +142,7 @@ async function pickAdapter() {
 }
 
 $('status').addEventListener('pointerdown', e => {
+  if ($('status').classList.contains('nav')) { e.stopPropagation(); showPage(PAGES.indexOf('nav')); return; }
   if (S.source === 'obd' && src.state !== State.CONNECTED && !src.device?.gatt.connected) {
     e.stopPropagation();
     pickAdapter();
@@ -153,8 +158,13 @@ let lastRunningAt = load('lastRunningAt', 0);
 let batt = load('batt', { restV: NaN, crankV: NaN, at: 0 });
 let chargeV = NaN;
 
+let odo = load('odo', null);               // hodômetro do carro; o app soma o que o OBD mede
+const upkeep = loadUpkeep();
+let trips = load('trips', []);
+
 function persist() {
   save('trip', trip); save('fuelStats', fuelStats); save('lastRunningAt', lastRunningAt); save('batt', batt);
+  save('odo', odo);
 }
 setInterval(persist, 5000);
 addEventListener('pagehide', persist);
@@ -167,15 +177,49 @@ function battVerdict() {
   return ['BOA', 'ok'];
 }
 
+// Manutenção: vence pelo que chegar primeiro, km ou meses desde a última vez
+function upkeepStatus(it) {
+  const kmLeft = it.everyKm && isNum(odo) && isNum(it.lastKm) ? it.lastKm + it.everyKm - odo : NaN;
+  const daysLeft = it.everyMonths && it.lastAt ? (it.lastAt + it.everyMonths * 30.44 * DAY - Date.now()) / DAY : NaN;
+  const due = kmLeft <= 0 || daysLeft <= 0;
+  const soon = !due && (kmLeft <= Math.max(500, it.everyKm * 0.1) || daysLeft <= 15);
+  return { kmLeft, daysLeft, due, soon, known: isNum(kmLeft) || isNum(daysLeft) };
+}
+
+function saveUpkeep() {
+  save('upkeep', upkeep.map(({ id, everyKm, everyMonths, lastKm, lastAt }) => ({ id, everyKm, everyMonths, lastKm, lastAt })));
+}
+
+// Viagem encerrada vai para o histórico (as da simulação ficam marcadas)
+function archiveTrip() {
+  if (trip.distanceKm >= 0.3) {
+    trips.unshift({
+      start: trip.startAt, end: lastRunningAt || Date.now(), km: trip.distanceKm, l: trip.fuelL, max: trip.maxSpeed,
+      movingMs: trip.movingMs, fuel: S.fuel, price: S.fuel === 'etanol' ? S.priceE : S.priceG, sim: S.source === 'sim',
+    });
+    trips.length = Math.min(trips.length, 200);
+    save('trips', trips);
+  }
+  trip = emptyTrip();
+}
+
 // ---------------------------------------------------------------------------
 // Sensores do celular: GPS (clima, altitude, rumo) e acelerômetro (inclinômetro)
 const gps = { lat: NaN, lon: NaN, alt: NaN, heading: NaN, speed: NaN, at: 0 };
+let lastPos = load('lastPos', null);       // última posição conhecida (tema e busca sem GPS)
+const DEMO = new URLSearchParams(location.search).has('demo');   // GPS falso para testar no PC
 navigator.geolocation?.watchPosition(p => {
+  if (DEMO) return;
   const c = p.coords;
   Object.assign(gps, {
     lat: c.latitude, lon: c.longitude, alt: c.altitude ?? NaN, heading: c.heading ?? NaN,
     speed: c.speed == null ? NaN : c.speed * 3.6, at: Date.now(),
   });
+  if (!lastPos || Date.now() - lastPos.at > 10 * 60000) {
+    lastPos = { lat: c.latitude, lon: c.longitude, at: Date.now() };
+    save('lastPos', lastPos);
+    applyTheme();
+  }
   maybeFetchWeather();
 }, err => log('GPS: ' + err.message), { enableHighAccuracy: true, maximumAge: 5000 });
 
@@ -235,8 +279,174 @@ function raise(key, level, title, sub, repeatMs = 60000) {
   $('alertSub').textContent = sub;
   $('alert').hidden = false;
   exitStandby();
+  speak(spoken(`${title}. ${sub}`));
 }
 $('alert').addEventListener('pointerdown', e => { e.stopPropagation(); alertState.until = 0; $('alert').hidden = true; });
+
+// ---------------------------------------------------------------------------
+// Voz. O Chrome só libera a fala depois do primeiro toque na tela.
+function speak(text, kind = 'alert') {
+  if (!('speechSynthesis' in window) || S.voice === 'off' || (kind === 'nav' && S.voice !== 'all')) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'pt-BR';
+  u.voice = speechSynthesis.getVoices().find(v => v.lang.replace('_', '-') === 'pt-BR') || null;
+  if (kind === 'alert') speechSynthesis.cancel();
+  speechSynthesis.speak(u);
+}
+// texto da tela para fala: sem caixa alta (algumas vozes soletram) e com unidades por extenso
+const spoken = s => s.toLowerCase().replace(/·/g, ',').replace(/\s*°c?/g, ' graus').replace(/(\d) v\b/g, '$1 volts');
+
+// ---------------------------------------------------------------------------
+// Tema noite: escurece a tela depois do pôr do sol (posição do GPS, ou a última conhecida)
+function sunElevation(lat, lon, t = Date.now()) {
+  const rad = Math.PI / 180;
+  const d = t / DAY - 10957.5;                               // dias desde 01/01/2000 12h UTC
+  const g = (357.529 + 0.98560028 * d) * rad;
+  const L = (280.459 + 0.98564736 * d + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * rad;
+  const e = (23.439 - 0.00000036 * d) * rad;
+  const ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L));
+  const dec = Math.asin(Math.sin(e) * Math.sin(L));
+  const ha = ((18.697374558 + 24.06570982441908 * d) % 24) * 15 * rad + lon * rad - ra;
+  return Math.asin(Math.sin(lat * rad) * Math.sin(dec) + Math.cos(lat * rad) * Math.cos(dec) * Math.cos(ha)) / rad;
+}
+
+function isNight() {
+  if (S.theme !== 'auto') return S.theme === 'night';
+  const p = isNum(gps.lat) ? gps : lastPos;
+  if (p) return sunElevation(p.lat, p.lon) < -3;
+  const h = new Date().getHours();
+  return h < 6 || h >= 18;
+}
+function applyTheme() { $('night').style.opacity = isNight() ? S.nightDim / 100 : 0; }
+setInterval(applyTheme, 60000);
+
+// ---------------------------------------------------------------------------
+// Navegação: mapa, rota e destinos (falados, buscados ou enviados do celular)
+const mapView = new MapView($('map'));
+const nav = new Navigator({ speak: t => speak(t, 'nav'), log });
+let navRecent = load('navRecent', []);
+let navInfo = null;
+
+const gpsFix = () => Date.now() - gps.at < 5000 && isNum(gps.lat)
+  ? { lat: gps.lat, lon: gps.lon, heading: gps.heading, speed: gps.speed } : null;
+
+// posição para o mapa: anda entre as leituras do GPS (1 por segundo) para não dar trancos
+function mapPos() {
+  if (Date.now() - gps.at > 15000 || !isNum(gps.lat)) return null;
+  let { lat, lon } = gps;
+  if (gps.speed > 5 && isNum(gps.heading)) {
+    const m = gps.speed / 3.6 * Math.min((Date.now() - gps.at) / 1000, 1.5), a = gps.heading * Math.PI / 180;
+    lat += m * Math.cos(a) / 110574;
+    lon += m * Math.sin(a) / (111320 * Math.cos(lat * Math.PI / 180));
+  }
+  return { lat, lon };
+}
+
+function goTo(dest) {
+  navRecent = [dest, ...navRecent.filter(r => distM(r, dest) > 30)].slice(0, 8);
+  save('navRecent', navRecent);
+  $('navPick').hidden = true;
+  save('navDest', { ...dest, at: Date.now() });
+  nav.go(dest, gpsFix());
+  showPage(PAGES.indexOf('nav'));
+}
+
+function stopNav() { nav.stop(); navInfo = null; save('navDest', null); }
+
+// rota em andamento continua se o Chrome for fechado e reaberto (até 6 h)
+const savedDest = load('navDest', null);
+if (savedDest && Date.now() - savedDest.at < 6 * 3600000) nav.go(savedDest, null);
+
+// ?demo: parado na Av. Paulista; com rota, anda por ela na velocidade da simulação
+if (DEMO) {
+  let demoRoute = null, demoS = 0;
+  Object.assign(gps, { lat: -23.5614, lon: -46.6559, alt: 820, heading: 0, speed: 0 });
+  setInterval(() => {
+    const rt = nav.route;
+    const v = Date.now() - src.d.updatedAt < 5000 && isNum(src.d.speedKmh) ? src.d.speedKmh : 0;
+    if (rt !== demoRoute) { demoRoute = rt; demoS = nav.along || 0; }
+    if (rt) {
+      demoS = Math.min(demoS + Math.max(v, 30) / 3.6, rt.total);
+      let i = rt.cum.findIndex(c => c > demoS);
+      if (i < 1) i = rt.cum.length - 1;
+      const a = rt.pts[i - 1], b = rt.pts[i], t = (demoS - rt.cum[i - 1]) / ((rt.cum[i] - rt.cum[i - 1]) || 1);
+      const [dx, dy] = [(b.lon - a.lon) * Math.cos(a.lat * Math.PI / 180), b.lat - a.lat];
+      Object.assign(gps, {
+        lat: a.lat + (b.lat - a.lat) * t, lon: a.lon + (b.lon - a.lon) * t,
+        heading: (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360, speed: Math.max(v, 30),
+      });
+    } else gps.speed = 0;
+    gps.at = Date.now();
+  }, 1000);
+}
+
+function destButton(it) {
+  const b = document.createElement('button');
+  b.className = 'dest';
+  const here = gpsFix() || lastPos;
+  const name = document.createElement('b'), sub = document.createElement('small');
+  name.textContent = it.name;
+  sub.textContent = [here ? fmtDist(distM(here, it)) : '', it.label].filter(Boolean).join(' · ');
+  b.append(name, sub);
+  b.addEventListener('click', () => goTo(it));
+  return b;
+}
+
+function showPick(title, items) {
+  set('navPickTitle', title);
+  $('navPickList').replaceChildren(...items.slice(0, 4).map(destButton));
+  $('navPick').hidden = false;
+}
+
+async function searchDest(q, show) {
+  try {
+    const list = await geocode(q, gpsFix() || lastPos);
+    show(list.length ? `"${q}"` : `nada encontrado para "${q}"`, list);
+  } catch (e) { show(e.name === 'TimeoutError' ? 'sem internet?' : e.message, []); }
+}
+
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+function listenDest() {
+  if (!Recognition) { set('navPickTitle', 'reconhecimento de voz indisponível'); return; }
+  const r = new Recognition();
+  r.lang = 'pt-BR';
+  r.onresult = e => {
+    const q = e.results[0][0].transcript;
+    set('navPickTitle', `buscando "${q}"…`);
+    searchDest(q, showPick);
+  };
+  r.onerror = e => set('navPickTitle', e.error === 'no-speech' ? 'não ouvi nada' : `voz: ${e.error}`);
+  set('navPickTitle', 'fale o destino…');
+  try { r.start(); } catch (e) { set('navPickTitle', e.message); }
+}
+
+$('btnNavDest').addEventListener('click', () => {
+  showPick(navRecent.length ? 'Para onde? (recentes)' : 'Para onde?', navRecent);
+});
+$('btnNavMic').addEventListener('click', listenDest);
+$('btnNavPickClose').addEventListener('click', () => { $('navPick').hidden = true; });
+armed($('btnNavCancel'), stopNav);
+
+// ---------------------------------------------------------------------------
+// Destino enviado pelo seu celular (página "Enviar ao carro"), pelo ntfy.sh.
+// O canal é um código aleatório gerado aqui; só quem sabe o código publica nele.
+if (!S.channel) { S.channel = 'tr4-' + crypto.randomUUID().replace(/-/g, '').slice(0, 20); saveSettings(); }
+let lastMsgId = load('lastMsgId', '');
+function listenPhone() {
+  const es = new EventSource(`https://ntfy.sh/${S.channel}/sse?since=${lastMsgId || '10m'}`);
+  es.onmessage = e => {
+    let m;
+    try { m = JSON.parse(e.data); } catch { return; }
+    if (m.event !== 'message' || m.id === lastMsgId) return;
+    lastMsgId = m.id; save('lastMsgId', lastMsgId);
+    let msg;
+    try { msg = JSON.parse(m.message); } catch { return; }
+    log(`do celular: ${msg.cmd || msg.name}`);
+    if (msg.cmd === 'stop') stopNav();
+    else if (isNum(msg.lat) && isNum(msg.lon)) goTo({ name: msg.name || 'Destino', label: msg.label || '', lat: msg.lat, lon: msg.lon });
+  };
+  es.onerror = () => {};                                  // o EventSource reconecta sozinho
+}
 
 // ---------------------------------------------------------------------------
 // Standby: vídeos com o carro parado ou desligado
@@ -313,6 +523,7 @@ function tick() {
     const { dKm, dL } = deriveAndIntegrate(d, trip, dt, fuel, S.displacement, S.ve);
     const fs = fuelStats[S.fuel] ||= { km: 0, l: 0 };
     fs.km += dKm; fs.l += dL;
+    if (S.source === 'obd' && isNum(odo)) odo += dKm;
   }
 
   let speed = fresh ? d.speedKmh : NaN;
@@ -326,7 +537,9 @@ function tick() {
   }
   while (volts.length && now - volts[0][0] > 10000) volts.shift();
   if (running && !wasRunning) {
-    if (Date.now() - lastRunningAt > TRIP_RESET_MS) { trip = emptyTrip(); log('nova viagem'); }
+    if (Date.now() - lastRunningAt > TRIP_RESET_MS) { archiveTrip(); log('nova viagem'); }
+    const due = upkeep.filter(it => upkeepStatus(it).due);
+    if (due.length) raise('upkeep', 'warn', 'MANUTENÇÃO VENCIDA', due.map(it => it.short).join(', '), 6 * 3600000);
     if (volts.length && isNum(restV)) {
       batt = { restV, crankV: Math.min(...volts.map(v => v[1])), at: Date.now() };
       log(`partida: repouso ${batt.restV.toFixed(2)} V, mínima ${batt.crankV.toFixed(2)} V`);
@@ -340,6 +553,18 @@ function tick() {
     if (isNum(d.batteryV)) chargeV = isNum(chargeV) ? chargeV + (d.batteryV - chargeV) * 0.05 : d.batteryV;
   }
   wasRunning = running;
+  if (!running && trip.distanceKm > 0 && Date.now() - lastRunningAt > TRIP_RESET_MS) archiveTrip();
+
+  // navegação e mapa
+  const hadRoute = nav.active;
+  navInfo = nav.update(gpsFix());
+  if (hadRoute && !nav.active) save('navDest', null);           // chegou
+  const onMap = PAGES[page] === 'nav' && $('settings').hidden && !sb.on;
+  if (onMap) {
+    const v = isNum(gps.speed) ? gps.speed : 0;
+    mapView.zoom = navInfo?.dist < 250 || v < 25 ? 17 : v < 70 ? 16 : 15;
+    mapView.draw(mapPos(), gps.speed > 5 ? gps.heading : NaN, nav.route, nav.seg || 0, navInfo ? 0.66 : 0.5);
+  }
 
   // alertas
   if (fresh && d.coolantC >= S.coolLimit) raise('cool', 'bad', 'MOTOR SUPERAQUECENDO', `${fmt(d.coolantC)} °C · pare em local seguro`);
@@ -364,7 +589,8 @@ function tick() {
   if (!moving) sb.stoppedSince ??= now; else sb.stoppedSince = null;
   if (moving && sb.on && !sb.forced) exitStandby();
   if (moving) sb.suppressUntil = 0;
-  const wantStandby = $('alert').hidden && $('settings').hidden && now >= sb.suppressUntil && (
+  const wantStandby = $('alert').hidden && $('settings').hidden && now >= sb.suppressUntil &&
+    !(nav.active && running) && (
     (sb.engineOffSince != null && now - sb.engineOffSince > STANDBY_ENGINE_OFF_MS) ||
     (sb.stoppedSince != null && now - sb.stoppedSince > S.standbyMin * 60000));
   if (wantStandby) enterStandby();
@@ -465,17 +691,44 @@ function render(d, fresh, speed, running, t) {
   set('battDetail', isNum(batt.restV) ? `${fmt(batt.restV, 1)} V → ${fmt(batt.crankV, 1)} V` : '--');
   set('protocol', src.protocol || '--');
   set('vin', d.vin || '--');
+  const uk = upkeep.map(it => [it, upkeepStatus(it)]);
+  const ukDue = uk.filter(([, s]) => s.due), ukSoon = uk.filter(([, s]) => s.soon);
+  const more = list => list.length > 1 ? ` +${list.length - 1}` : '';
+  set('upkeepState', ukDue.length ? `vencido: ${ukDue[0][0].short}${more(ukDue)}`
+    : ukSoon.length ? `em breve: ${ukSoon[0][0].short}${more(ukSoon)}`
+    : uk.some(([, s]) => s.known) ? 'em dia' : 'configurar');
+  binds.upkeepState[0].className = ukDue.length ? 'bad' : ukSoon.length ? 'warn' : uk.some(([, s]) => s.known) ? 'ok' : '';
+  set('odo', isNum(odo) ? `${fmtInt(odo)} km` : 'ajustar');
+
+  // navegação
+  const ni = navInfo;
+  $('navTurn').hidden = !ni;
+  $('navFoot').hidden = !ni;
+  if (ni) {
+    set('navDist', fmtDist(ni.dist));
+    set('navText', ni.text);
+    set('navStreet', ni.step.type === 'arrive' ? nav.dest?.name || '' : ni.step.name);
+    const p = arrowPath(ni.step);
+    if ($('navArrow').getAttribute('d') !== p) $('navArrow').setAttribute('d', p);
+    set('navRemain', `${fmtDist(ni.remain)} · ${Math.round(ni.remainS / 60)} min · chega ${hhmm(ni.eta)}`);
+  }
+  set('navMsg', nav.msg || (ni?.off ? 'fora da rota' : '') || (gpsFix() ? '' : 'aguardando GPS…'));
+  $('btnNavCancel').hidden = !nav.active;
+  $('btnNavDest').hidden = nav.active;
 
   // linha de status (conexão)
   const st = $('status');
   let msg = '', err = false;
-  if (S.source === 'sim') msg = 'SIMULAÇÃO';
+  const strip = ni && PAGES[page] !== 'nav';
+  if (strip) msg = `${arrowChar(ni.step)} ${fmtDist(ni.dist)} · ${ni.step.name || ni.text}`;
+  else if (S.source === 'sim') msg = 'SIMULAÇÃO';
   else if (src.state !== State.CONNECTED) {
     err = true;
     msg = src.device?.gatt.connected ? `OBD: ${src.state}` : `OBD: ${src.err || src.state} · toque aqui para conectar`;
   }
   if (st.textContent !== msg) st.textContent = msg;
   st.classList.toggle('err', err);
+  st.classList.toggle('nav', !!strip);
 }
 
 // ---------------------------------------------------------------------------
@@ -504,7 +757,101 @@ const FIELDS = {
   sStandbyMin: 'standbyMin', sCoolLimit: 'coolLimit', sBattLimit: 'battLimit',
   sRollLimit: 'rollLimit', sPitchLimit: 'pitchLimit',
   sScreenW: 'screenW', sOffX: 'offX', sOffY: 'offY', sMask: 'mask', sOutline: 'outline',
+  sVoice: 'voice', sTheme: 'theme', sNightDim: 'nightDim',
 };
+
+const phoneLink = () => new URL(`enviar.html#${S.channel}`, location.href).href;
+
+function renderNavSettings() {
+  if ($('phoneLink').textContent !== phoneLink()) {
+    $('phoneLink').textContent = phoneLink();
+    if (window.qrcode) {
+      const q = qrcode(0, 'M');
+      q.addData(phoneLink()); q.make();
+      $('phoneQr').innerHTML = q.createSvgTag({ cellSize: 4, margin: 3, scalable: true });
+    }
+  }
+  $('navState').textContent = nav.route
+    ? `rota para ${nav.dest?.name} · faltam ${navInfo ? fmtDist(navInfo.remain) : '--'}` : nav.msg || 'sem rota';
+  $('btnNavStop').hidden = !nav.active;
+}
+
+function showSettingsResults(title, items) {
+  const box = $('navResults');
+  const p = document.createElement('p');
+  p.className = 'muted';
+  p.textContent = title;
+  box.replaceChildren(p, ...items.map(it => {
+    const b = destButton(it);
+    b.addEventListener('click', closeSettings);
+    return b;
+  }));
+}
+
+function renderUpkeep() {
+  const box = $('upkeepList');
+  box.replaceChildren();
+  for (const h of ['Item', 'a cada km', 'a cada meses', 'última (km)', 'última (data)', 'situação', ''])
+    box.append(Object.assign(document.createElement('span'), { className: 'h', textContent: h }));
+  const ymd = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  for (const it of upkeep) {
+    const name = Object.assign(document.createElement('span'), { textContent: it.name });
+    const inputs = ['everyKm', 'everyMonths', 'lastKm', 'lastAt'].map(f => {
+      const el = document.createElement('input');
+      el.type = f === 'lastAt' ? 'date' : 'number';
+      el.inputMode = 'numeric';
+      el.value = f === 'lastAt' ? (it.lastAt ? ymd(it.lastAt) : '') : (it[f] ?? '') || '';
+      el.addEventListener('change', () => {
+        if (f === 'lastAt') {
+          const [y, m, dd] = el.value.split('-').map(Number);
+          it.lastAt = el.value ? new Date(y, m - 1, dd).getTime() : 0;
+        } else {
+          const n = parseFloat(el.value);
+          it[f] = Number.isNaN(n) ? (f === 'lastKm' ? null : 0) : n;
+        }
+        saveUpkeep(); status();
+      });
+      return el;
+    });
+    const st = document.createElement('span');
+    const status = () => {
+      const s = upkeepStatus(it), parts = [];
+      if (isNum(s.kmLeft)) parts.push(s.kmLeft <= 0 ? `passou ${fmtInt(-s.kmLeft)} km` : `faltam ${fmtInt(s.kmLeft)} km`);
+      if (isNum(s.daysLeft)) parts.push(s.daysLeft <= 0 ? `venceu há ${Math.round(-s.daysLeft)} dias` : `${Math.round(s.daysLeft)} dias`);
+      st.textContent = parts.join(' · ') || (isNum(odo) ? 'informe a última' : 'acerte o hodômetro');
+      st.className = s.due ? 'bad' : s.soon ? 'warn' : s.known ? 'ok' : '';
+    };
+    status();
+    const done = Object.assign(document.createElement('button'), { className: 'pill', textContent: 'Feito hoje' });
+    armed(done, () => {
+      it.lastAt = Date.now();
+      if (isNum(odo)) it.lastKm = Math.round(odo);
+      saveUpkeep(); renderUpkeep();
+    });
+    box.append(name, ...inputs, st, done);
+  }
+}
+
+function renderTrips() {
+  const real = trips.filter(t => !t.sim);
+  const m0 = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+  const month = real.filter(t => t.start >= m0);
+  const sum = f => month.reduce((s, t) => s + f(t), 0);
+  const km = sum(t => t.km), l = sum(t => t.l), cost = sum(t => t.l * t.price);
+  $('tripsSummary').textContent = month.length
+    ? `Este mês: ${month.length} viagens · ${fmt(km)} km · ${fmt(l, 1)} L · R$ ${fmt(cost, 2)}` + (l > 0.1 ? ` · média ${fmt(km / l, 1)} km/L` : '')
+    : 'Nenhuma viagem registrada neste mês.';
+  if (!trips.length) { $('tripsList').replaceChildren(); return; }
+  const rows = trips.slice(0, 40).map(t => {
+    const d = new Date(t.start), min = Math.round((t.end - t.start) / 60000);
+    const when = d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }) + ' ' + hhmm(t.start);
+    return `<tr><td>${when}${t.sim ? ' (simulação)' : ''}</td><td>${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}</td>` +
+      `<td>${fmt(t.km, 1)}</td><td>${fmt(t.l > 0.01 ? t.km / t.l : NaN, 1)}</td><td>${fmt(t.l * t.price, 2)}</td>` +
+      `<td>${fmt(t.max)}</td><td>${(FUELS[t.fuel] || FUELS.gasolina).name}</td></tr>`;
+  });
+  $('tripsList').innerHTML = '<table><tr><th>Início</th><th>Duração</th><th>km</th><th>km/L</th><th>R$</th><th>vel. máx</th><th>Combustível</th></tr>' +
+    rows.join('') + '</table>';
+}
 
 function openSettings() {
   for (const [id, key] of Object.entries(FIELDS)) {
@@ -512,6 +859,8 @@ function openSettings() {
     if (el.type === 'checkbox') el.checked = !!S[key]; else el.value = S[key];
   }
   $('log').textContent = logLines.join('\n');
+  $('sOdo').value = isNum(odo) ? Math.round(odo) : '';
+  renderNavSettings(); renderUpkeep(); renderTrips();
   updateSettingsInfo();
   $('settings').hidden = false;
   exitStandby();
@@ -523,7 +872,7 @@ function updateSettingsInfo() {
   $('btnEngine').textContent = src.engineOn === false ? 'Ligar motor (simulação)' : 'Desligar motor (simulação)';
   $('connInfo').textContent = S.source === 'sim' ? '' : `${src.state}${src.err ? ' · ' + src.err : ''}`;
 }
-setInterval(() => { if (!$('settings').hidden) updateSettingsInfo(); }, 1000);
+setInterval(() => { if (!$('settings').hidden) { updateSettingsInfo(); renderNavSettings(); } }, 1000);
 
 for (const [id, key] of Object.entries(FIELDS)) {
   $(id).addEventListener('change', e => {
@@ -535,6 +884,7 @@ for (const [id, key] of Object.entries(FIELDS)) {
     saveSettings();
     if (key === 'source' && before !== S[key]) startSource();
     layout();
+    applyTheme();
     updateSettingsInfo();
   });
 }
@@ -561,6 +911,22 @@ $('btnZeroLevel').addEventListener('click', () => {
   S.level = r; saveSettings(); log(`inclinômetro zerado (${r.roll.toFixed(1)}°, ${r.pitch.toFixed(1)}°)`);
 });
 $('btnFullscreen').addEventListener('click', goFullscreen);
+$('btnVoiceTest').addEventListener('click', () => speak('Teste de voz do painel da Pajero. Em 300 metros, vire à direita.'));
+$('sOdo').addEventListener('change', e => {
+  const n = parseFloat(e.target.value);
+  odo = Number.isNaN(n) ? null : n;
+  persist(); renderUpkeep();
+});
+armed($('btnClearTrips'), () => { trips = []; save('trips', trips); renderTrips(); });
+const navSearch = () => {
+  const q = $('navQuery').value.trim();
+  if (!q) return;
+  showSettingsResults('buscando…', []);
+  searchDest(q, showSettingsResults);
+};
+$('btnNavSearch').addEventListener('click', navSearch);
+$('navQuery').addEventListener('keydown', e => { if (e.key === 'Enter') navSearch(); });
+$('btnNavStop').addEventListener('click', () => { stopNav(); renderNavSettings(); });
 
 // ---------------------------------------------------------------------------
 // Tela cheia, tela sempre acesa, deslocamento anti-marcas e modo offline
@@ -590,5 +956,7 @@ layout();
 showPage(page);
 startSource();
 reloadVideos();
+applyTheme();
+listenPhone();
 keepAwake();
 setInterval(tick, 100);

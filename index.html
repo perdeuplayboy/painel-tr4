@@ -9,6 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="style.css">
+<script src="js/vendor/qrcode.js"></script>
 <script type="module" src="js/app.js"></script>
 </head>
 <body>
@@ -128,6 +129,8 @@
             <div class="drow"><span>Partida</span><b data-k="battDetail">--</b></div>
             <div class="drow"><span>Protocolo</span><b data-k="protocol">--</b></div>
             <div class="drow"><span>VIN</span><b data-k="vin">--</b></div>
+            <div class="drow"><span>Manutenção</span><b data-k="upkeepState">--</b></div>
+            <div class="drow"><span>Hodômetro</span><b data-k="odo">--</b></div>
             <div class="dbtns">
               <button class="pill" id="btnReadDtc">Ler códigos</button>
               <button class="pill warn" id="btnClearDtc">Apagar códigos</button>
@@ -136,9 +139,26 @@
         </section>
 
         <section class="page" data-page="nav">
-          <div class="soon">
-            <div class="soon-icon">↱</div>
-            <div><b>Navegação</b><small>em desenvolvimento</small></div>
+          <canvas id="map"></canvas>
+          <div class="nav-turn" id="navTurn" hidden>
+            <svg viewBox="-12 -12 24 24"><path id="navArrow"/></svg>
+            <b data-k="navDist">--</b>
+            <small data-k="navText"></small>
+            <small class="street" data-k="navStreet"></small>
+          </div>
+          <div class="nav-foot" id="navFoot" hidden data-k="navRemain"></div>
+          <div class="nav-msg" data-k="navMsg"></div>
+          <div class="nav-btns">
+            <button class="pill" id="btnNavDest">Destino</button>
+            <button class="pill warn" id="btnNavCancel" hidden>Encerrar</button>
+          </div>
+          <div class="nav-pick" id="navPick" hidden>
+            <div class="nav-pick-head">
+              <span data-k="navPickTitle">Para onde?</span>
+              <button class="pill" id="btnNavMic">🎤 Falar</button>
+              <button class="pill" id="btnNavPickClose">Cancelar</button>
+            </div>
+            <div class="nav-pick-list" id="navPickList"></div>
           </div>
         </section>
       </main>
@@ -156,6 +176,8 @@
       <video id="sbVideo" muted playsinline></video>
       <div class="sb-clock" id="sbClock"><b data-k="time">--:--</b><small data-k="sbLine">--</small></div>
     </div>
+
+    <div id="night"></div>
 
     <div id="alert" hidden>
       <div class="a-icon" id="alertIcon">!</div>
@@ -191,6 +213,23 @@
   </section>
 
   <section>
+    <h3>Navegação</h3>
+    <div class="row">
+      <input id="navQuery" type="search" placeholder="Endereço, lugar ou coordenadas" enterkeyhint="search">
+      <button id="btnNavSearch" class="pill">Buscar</button>
+    </div>
+    <div id="navResults" class="dest-list"></div>
+    <div class="row">
+      <span id="navState" class="muted"></span>
+      <button id="btnNavStop" class="pill warn" hidden>Encerrar rota</button>
+    </div>
+    <p class="muted">No carro: na página do mapa toque em "Destino" e fale o endereço.</p>
+    <p class="muted">Do seu celular (Google Maps → Compartilhar): aponte a câmera do seu celular para o código, abra o endereço e instale a página.</p>
+    <div class="row"><div id="phoneQr" class="qr"></div><b id="phoneLink" class="muted"></b></div>
+    <p class="muted">Mapa © colaboradores do OpenStreetMap, rotas OSRM, busca Nominatim, envio pelo ntfy.sh.</p>
+  </section>
+
+  <section>
     <h3>Combustível</h3>
     <label>Abastecido com
       <select id="sFuel"><option value="gasolina">Gasolina</option><option value="etanol">Etanol</option></select>
@@ -221,6 +260,33 @@
     <label>Inclinação lateral (°) <input id="sRollLimit" type="number" step="1" inputmode="numeric"></label>
     <label>Inclinação frontal (°) <input id="sPitchLimit" type="number" step="1" inputmode="numeric"></label>
     <div class="row"><button id="btnZeroLevel" class="pill">Zerar inclinômetro (carro no plano)</button></div>
+  </section>
+
+  <section>
+    <h3>Voz e tema</h3>
+    <label>Voz
+      <select id="sVoice"><option value="all">Alertas e navegação</option><option value="alerts">Só alertas</option><option value="off">Desligada</option></select>
+    </label>
+    <div class="row"><button id="btnVoiceTest" class="pill">Testar voz</button></div>
+    <label>Tema
+      <select id="sTheme"><option value="auto">Automático (pôr do sol)</option><option value="day">Sempre dia</option><option value="night">Sempre noite</option></select>
+    </label>
+    <label>Escurecer à noite (%) <input id="sNightDim" type="number" step="5" min="0" max="90" inputmode="numeric"></label>
+    <p class="muted">O Chrome só libera a voz depois do primeiro toque na tela. Deixe o brilho do celular fixo (sem brilho automático): o sensor de luz fica escondido atrás do painel.</p>
+  </section>
+
+  <section>
+    <h3>Manutenção</h3>
+    <label>Hodômetro atual (km) <input id="sOdo" type="number" step="1" inputmode="numeric"></label>
+    <p class="muted">Acerte uma vez pelo painel do carro; depois o app soma os km medidos pelo OBD. Os intervalos são sugestões: confira no manual.</p>
+    <div id="upkeepList" class="uk"></div>
+  </section>
+
+  <section>
+    <h3>Histórico de viagens</h3>
+    <p id="tripsSummary" class="muted"></p>
+    <div id="tripsList"></div>
+    <div class="row"><button id="btnClearTrips" class="pill warn">Apagar histórico</button></div>
   </section>
 
   <section>
