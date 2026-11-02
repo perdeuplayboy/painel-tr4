@@ -1,5 +1,5 @@
 // Cenas 3D em WebGL puro para as animações: malhas "low poly" com farol, neblina, luz de poste,
-// asfalto molhado, água e um modo câmera térmica. Uma tela WebGL só, compartilhada pelas cenas;
+// asfalto molhado e um modo câmera térmica. Uma tela WebGL só, compartilhada pelas cenas;
 // cada cena sorteia um mundo novo quando começa e é copiada para o canvas 2D do player.
 
 const TAU = Math.PI * 2;
@@ -17,35 +17,18 @@ const hash = n => { const s = Math.sin(n * 127.1) * 43758.5453; return s - Math.
 
 const VS = `
 attribute vec3 pos, nrm, col; attribute float emit, heat, mat; attribute vec2 uv;
-uniform vec3 cam, off; uniform float yaw, pitch, roll, fy, aspect, wrapL, objYaw, time, attach, bow;
+uniform vec3 cam, off; uniform float yaw, pitch, roll, fy, aspect, wrapL, objYaw;
 varying vec3 vCol, vN, vRel; varying float vEmit, vHeat, vMat; varying vec2 vUv;
-float wave(vec2 p) {
-  return 0.05 * sin(p.x * 1.3 + p.y * 0.7 + time * 1.6) + 0.04 * sin(-p.x * 0.6 + p.y * 1.9 + time * 2.1)
-    + 0.025 * sin(p.x * 3.1 - p.y * 2.3 + time * 3.3);
-}
 void main() {
   float c0 = cos(objYaw), s0 = sin(objYaw), cy = cos(yaw), sy = sin(yaw);
   vec3 p = vec3(pos.x * c0 + pos.z * s0, pos.y, -pos.x * s0 + pos.z * c0);
   vec3 n = vec3(nrm.x * c0 + nrm.z * s0, nrm.y, -nrm.x * s0 + nrm.z * c0);
-  vec3 r; float X, Z;
-  if (attach > 0.5) {                                              // preso à câmera (capô)
-    X = p.x; Z = p.z;
-    r = vec3(p.x * cy + p.z * sy, p.y, -p.x * sy + p.z * cy);
-    n = vec3(n.x * cy + n.z * sy, n.y, -n.x * sy + n.z * cy);
-  } else {
-    r = p + off - cam;
-    if (wrapL > 0.0) r.z = mod(r.z + 30.0, wrapL) - 30.0;           // o mundo se repete sem emenda
-    X = r.x * cy - r.z * sy; Z = r.x * sy + r.z * cy;
-    if (mat > 4.5) {                                               // água: ondas + onda de proa do carro
-      r.y += wave(r.xz + cam.xz);
-      float q = length(vec2(X, (Z - 2.6) * 1.4));
-      r.y += bow * (0.3 * exp(-q * q / 1.4) + 0.05 * sin(q * 4.0 - time * 7.0) * exp(-q * 0.35));
-    }
-  }
-  float pt = attach > 0.5 ? 0.1 : pitch, rl = attach > 0.5 ? 0.0 : roll;
-  float cp = cos(pt), sp = sin(pt);
+  vec3 r = p + off - cam;
+  if (wrapL > 0.0) r.z = mod(r.z + 30.0, wrapL) - 30.0;             // o mundo se repete sem emenda
+  float X = r.x * cy - r.z * sy, Z = r.x * sy + r.z * cy;
+  float cp = cos(pitch), sp = sin(pitch);
   float zc = -r.y * sp + Z * cp, yc = r.y * cp + Z * sp;
-  vec2 s = vec2(X * cos(rl) - yc * sin(rl), X * sin(rl) + yc * cos(rl));
+  vec2 s = vec2(X * cos(roll) - yc * sin(roll), X * sin(roll) + yc * cos(roll));
   vCol = col; vN = n; vRel = r; vEmit = emit; vHeat = heat; vMat = mat; vUv = uv;
   gl_Position = vec4(s.x * fy / aspect, s.y * fy, zc * 1.000286 - 0.2000286, zc);
 }`;
@@ -67,7 +50,7 @@ void main() {
   if (dot(n, V) > 0.0) n = -n;                                     // faces sempre viradas para a câmera
   vec3 W = vRel + cam, base = vCol;
   float e = vEmit;
-  bool water = vMat > 4.5, wet = vMat > 2.5 && vMat < 3.5;
+  bool wet = vMat > 2.5 && vMat < 3.5;
   if (vMat > 0.5 && vMat < 1.5) {                                  // fachada: janelas acesas ao acaso
     vec2 g = vUv / vec2(1.8, 3.2), cell = floor(g), f = fract(g);
     float win = step(0.22, f.x) * step(f.x, 0.78) * step(0.32, f.y) * step(f.y, 0.76);
@@ -75,15 +58,6 @@ void main() {
     vec3 wc = mix(vec3(1.0, 0.75, 0.42), vec3(0.6, 0.82, 1.0), step(0.78, hash(cell + 7.0)));
     base = mix(base, mix(vec3(0.03, 0.035, 0.05), wc, lit), win);
     e = max(e, win * lit * (0.25 + 0.5 * hash(cell + 3.0)));
-  }
-  if (water) {                                                     // normal das ondas (mesmas do vértice + detalhe)
-    vec2 p = W.xz; float t = time;
-    float c1 = cos(p.x * 1.3 + p.y * 0.7 + t * 1.6), c2 = cos(-p.x * 0.6 + p.y * 1.9 + t * 2.1), c3 = cos(p.x * 3.1 - p.y * 2.3 + t * 3.3);
-    float c4 = cos(p.x * 5.7 + p.y * 4.1 + t * 5.0), c5 = cos(-p.x * 4.3 + p.y * 6.7 + t * 4.4);
-    float c6 = cos(p.x * 11.0 + p.y * 7.0 + t * 7.0), c7 = cos(-p.x * 8.0 + p.y * 13.0 + t * 6.0);
-    vec2 g = vec2(0.065 * c1 - 0.024 * c2 + 0.0775 * c3 + 0.11 * c4 - 0.086 * c5 + 0.55 * c6 - 0.4 * c7,
-                  0.035 * c1 + 0.076 * c2 - 0.0575 * c3 + 0.082 * c4 + 0.134 * c5 + 0.35 * c6 + 0.65 * c7) * 0.6;
-    n = normalize(vec3(-g.x, 1.0, -g.y));
   }
   vec3 L = amb * (0.5 + 0.5 * max(n.y, 0.0)) + moonCol * max(dot(n, moonDir), 0.0);
   float ax = dot(V, right), ay = V.y - fwd.y;                      // farol: largo e com corte em cima
@@ -104,9 +78,8 @@ void main() {
       }
     }
   }
-  if (wet || water) {
-    spec += moonCol * (water ? 40.0 : 14.0) * pow(max(dot(R, moonDir), 0.0), water ? 500.0 : 200.0);
-    if (water) spec += vec3(1.0, 0.95, 0.85) * head * cone * pow(max(dot(R, -V), 0.0), 60.0) * 1.2 / (d * d * 0.3 + 4.0);
+  if (wet) {
+    spec += moonCol * 14.0 * pow(max(dot(R, moonDir), 0.0), 200.0);
     spec += fogCol * 0.6 * pow(1.0 - max(dot(n, -V), 0.0), 3.0);    // céu refletido
   }
   float fg = exp(-d * fogDen), fe = exp(-d * fogDen * 0.35);
@@ -189,14 +162,14 @@ function upload(m) {
   gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
   return { b, n: data.length / 14 };
 }
-function draw(m, { off = [0, 0, 0], yaw = 0, wrap = 0, attach = 0, bow = 0 } = {}) {
+function draw(m, { off = [0, 0, 0], yaw = 0, wrap = 0 } = {}) {
   gl.bindBuffer(gl.ARRAY_BUFFER, m.b);
   let o = 0;
   for (const [, n, l] of ATTR) {
     if (l >= 0) { gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, n, gl.FLOAT, false, 56, o * 4); }
     o += n;
   }
-  set('off', ...off); set('objYaw', yaw); set('wrapL', wrap); set('attach', attach); set('bow', bow);
+  set('off', ...off); set('objYaw', yaw); set('wrapL', wrap);
   gl.drawArrays(gl.TRIANGLES, 0, m.n);
 }
 
@@ -321,25 +294,24 @@ function sedan(col) {
 
 function forestWorld(seed, kind) {
   const r = rng(seed), pick = (a, b) => a + r() * (b - a), ph = () => r() * TAU, int = (a, b) => a + Math.floor(r() * (b - a + 1));
-  const L = 480, F = TAU / L, river = kind === 'river';
+  const L = 480, F = TAU / L;
   const wv = (list, z, x = 0) => list.reduce((s, [a, f, p, k = 0]) => s + a * Math.sin(f * F * z + k * x + p), 0);
   const curvy = pick(0.5, 1.3);
   const road = [[pick(10, 24) * curvy, 1, ph()], [pick(3, 8) * curvy, int(2, 4), ph()], [pick(1, 3) * curvy, int(5, 8), ph()]];
-  const swl = river ? [] : [[pick(1, 5), 2, ph()], [pick(0.4, 1.6), int(5, 9), ph()]];
+  const swl = [[pick(1, 5), 2, ph()], [pick(0.4, 1.6), int(5, 9), ph()]];
   const hill = [[pick(1, 3.5), 2, ph(), pick(-0.06, 0.06)], [pick(0.6, 1.6), int(4, 6), ph(), pick(-0.12, 0.12)],
     [pick(0.3, 0.8), int(10, 16), ph(), pick(-0.25, 0.25)]];
-  const lift = pick(0.3, 2), half = river ? pick(7, 11) : pick(3.4, 4.4);
+  const lift = pick(0.3, 2), half = pick(3.4, 4.4);
   const roadX = z => wv(road, z), swell = z => wv(swl, z);
   function groundU(u, z) {                                          // altura a u metros do meio da estrada/rio
     const d = Math.abs(u), x = roadX(z) + u, s = Math.min(1, Math.max(0, (d - half) / 28));
     const hills = (wv(hill, z, x) + lift) * s * s;
-    if (river) return d < half ? -0.75 + 0.55 * (d / half) ** 2 : -0.2 + 0.9 * Math.min(1, (d - half) / 2.5) + hills;
     if (d < half) return swell(z) + 0.06 * (1 - (d / half) ** 2);
     return swell(z) - 0.35 * Math.exp(-((d - half - 0.9) ** 2) / 0.25) + hills;
   }
 
   const m = new Mesh();
-  const inner = river ? [0, half * 0.5, half] : [0, 1.4, half - 0.5, half];
+  const inner = [0, 1.4, half - 0.5, half];
   const outer = [0.6, 1.2, 2.5, 4.5, 8, 13, 20, 29, 41, 56].map(v => half + v).filter(v => v < 70).concat(70);
   const side = [...inner, ...outer], us = [...side.slice(1).map(v => -v).reverse(), ...side];
   const P = (u, z) => [roadX(z) + u, groundU(u, z), z];
@@ -347,7 +319,7 @@ function forestWorld(seed, kind) {
     for (let i = 0; i < us.length - 1; i++) {
       const u0 = us[i], u1 = us[i + 1], um = Math.abs((u0 + u1) / 2), v = 0.75 + r() * 0.5;
       let col, h;
-      if (um < half) { const q = 0.92 + v * 0.1; col = river ? [0.12 * q, 0.11 * q, 0.09 * q] : [0.3 * q, 0.23 * q, 0.16 * q]; h = river ? 0.1 : 0.24; }
+      if (um < half) { const q = 0.92 + v * 0.1; col = [0.3 * q, 0.23 * q, 0.16 * q]; h = 0.24; }
       else if (um < half + 1.2) { col = [0.16 * v, 0.14 * v, 0.1 * v]; h = 0.26; }
       else { col = r() < 0.15 ? [0.16 * v, 0.15 * v, 0.08 * v] : [0.07 * v, 0.1 * v, 0.055 * v]; h = 0.18 + r() * 0.04; }
       m.quad(P(u0, z), P(u1, z), P(u1, z + 3), P(u0, z + 3), col, { h });
@@ -372,12 +344,10 @@ function forestWorld(seed, kind) {
     }
   }
   for (let i = int(20, 80); i--;) {                                 // pedras
-    const z = r() * L, inBed = river && r() < 0.5;
-    const u = inBed ? (r() - 0.5) * half * 1.6 : (r() < 0.5 ? -1 : 1) * (half + 1.5 + r() * 30);
-    const R = inBed ? 0.4 + r() * 0.8 : 0.4 + r() * 1.4, g = 0.15 + r() * 0.1;
+    const z = r() * L, u = (r() < 0.5 ? -1 : 1) * (half + 1.5 + r() * 30), R = 0.4 + r() * 1.4, g = 0.15 + r() * 0.1;
     m.blob(roadX(z) + u, groundU(u, z) + R * 0.2, z, R * 1.3, R * 0.7, R, [g, g, g * 1.05], { h: 0.22 }, r);
   }
-  if (!river) for (let z = 0; z < L; z += 24) for (const sd of [-1, 1]) {   // balizas com olho-de-gato
+  for (let z = 0; z < L; z += 24) for (const sd of [-1, 1]) {   // balizas com olho-de-gato
     const u = sd * (half + 0.7), x = roadX(z) + u, y = groundU(u, z);
     m.box(x, y, z, 0.12, 1.0, 0.12, [0.5, 0.5, 0.48], { h: 0.2 });
     m.box(x, y + 0.78, z, 0.13, 0.12, 0.13, sd > 0 ? [1, 0.5, 0.1] : [1, 0.15, 0.1], { m: 2, h: 0.2 });
@@ -394,30 +364,9 @@ function forestWorld(seed, kind) {
   }
   const world = { L, roadX, groundU, half, animals, terrain: upload(m) };
   world.meshes = [world.terrain];
-  if (river) {
-    const wm = new Mesh();
-    for (let z = 0; z < L - 0.01; z += 1.5) for (let u = -half - 2; u < half + 2 - 0.01; u += 1.5) {
-      const Q = (uu, zz) => [roadX(zz) + uu, 0, zz];
-      wm.quad(Q(u, z), Q(u + 1.5, z), Q(u + 1.5, z + 1.5), Q(u, z + 1.5), [0.02, 0.045, 0.055], { m: 5, h: 0.12 });
-    }
-    world.water = upload(wm);
-    world.hood = upload(hood());
-    world.meshes.push(world.water, world.hood);
-  } else {
-    world.car = upload(jeep([0.2, 0.21, 0.22]));
-    world.meshes.push(world.car);
-  }
+  world.car = upload(jeep([0.2, 0.21, 0.22]));
+  world.meshes.push(world.car);
   return world;
-}
-
-// capô do 4x4 visto do banco do motorista (coordenadas da câmera: olho na origem, frente +z)
-function hood() {
-  const m = new Mesh(), c = [0.045, 0.075, 0.055], o = { h: 0.5 };
-  const P = (x, z) => [x, -0.5 - 0.06 * Math.abs(x) - 0.07 * (z - 0.95), z];
-  const xs = [-1, -0.6, 0, 0.6, 1];
-  for (let i = 0; i < 4; i++) m.quad(P(xs[i], 0.95), P(xs[i + 1], 0.95), P(xs[i + 1], 2.25), P(xs[i], 2.25), c, o);
-  m.quad(P(-1, 2.25), P(1, 2.25), [1, -0.85, 2.32], [-1, -0.85, 2.32], [0.015, 0.02, 0.018], o);
-  return m;
 }
 
 function cityWorld(seed, tint) {
@@ -576,31 +525,4 @@ export const city = scene((seed, color) => cityWorld(seed, rgb(color)), (W, ctx,
     draw(W.cars[(i + 2) % W.cars.length], { off: [-[1.9, 5.6, 9.2][i % 3], 0, z + dz], yaw: Math.PI });
   });
   finish(ctx, w, h, 0.5);
-});
-
-// Pelo rio: o 4x4 subindo um rio raso à noite, onda na frente do capô, lua refletida e respingos
-export const river = scene(seed => forestWorld(seed, 'river'), (W, ctx, w, h, t) => {
-  const z = t * 3.2;
-  const cam = { x: W.roadX(z) + 0.6 * Math.sin(t * 0.2), y: 1.25 + 0.05 * Math.sin(t * 2.1), z,
-    yaw: Math.atan2(W.roadX(z + 10) - W.roadX(z), 10), pitch: 0.1 + 0.025 * Math.sin(t * 1.9), roll: 0.03 * Math.sin(t * 1.3) };
-  sky(ctx, w, h, cam, '#01030b', '#0b1526', '#050911');
-  begin(ctx, cam, t, { fogCol: [0.045, 0.08, 0.14], fogDen: 0.01, moonCol: [0.12, 0.13, 0.18], head: 1.2 });
-  draw(W.terrain, { wrap: W.L });
-  draw(W.water, { wrap: W.L, bow: 1 });
-  draw(W.hood, { attach: 1 });
-  finish(ctx, w, h, 0.4);
-  const sp = Math.sin(0.1), cp = Math.cos(0.1);                     // respingos saindo do para-choque
-  for (let i = 0; i < 120; i++) {
-    const ph = t * 1.4 + i / 120, a = ph % 1, cyc = Math.floor(ph), sd = i % 2 ? 1 : -1, tt = a * 0.9;
-    const X = sd * (0.7 + hash(i + cyc * 13) * 0.35) + sd * (1.1 + hash(i * 3 + cyc) * 1.6) * tt;
-    const Y = -1.1 + (1.1 + hash(i * 7 + cyc) * 1.4) * tt - 4.9 * tt * tt;
-    const Z = 2.45 + (0.5 + hash(i * 11 + cyc) * 1.2) * tt - 3.2 * tt;
-    if (Y < -1.15) continue;
-    const zc = -Y * sp + Z * cp, yc = Y * cp + Z * sp;
-    if (zc < 0.5) continue;
-    const x = w / 2 + X * FY / (w / h) / zc * w / 2, y = h / 2 - yc * FY / zc * h / 2, s = Math.max(2, h * 0.035 / zc);
-    ctx.fillStyle = i % 4 ? '#cfe6ff' : '#ffffff'; ctx.globalAlpha = (1 - a) * 0.75;
-    ctx.fillRect(x - s / 2, y - s / 2, s, s);
-  }
-  ctx.globalAlpha = 1;
 });
