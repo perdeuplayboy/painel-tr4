@@ -404,7 +404,7 @@ function wire(ctx, w, h, t, color) {
 }
 
 // Chuva de dados: código verde caindo, no estilo do filme. A cada ciclo a chuva vai desenhando o logo
-// da CAD360 (mapa, alfinete e letras): cada caractere fica mais claro onde o logo é mais forte.
+// da CAD360 (mapa, alfinete e CAD360): cada caractere fica mais claro onde o logo é mais forte.
 const GLYPHS = '0123456789ABCDEFZアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホ';
 const RAIN_CYCLE = 20;
 const logoImg = Object.assign(new Image(), { src: 'img/cad360.webp' });
@@ -420,15 +420,15 @@ function glyphAtlas(cw, fs, color, glow) {                          // caractere
   return c;
 }
 function rainSetup(w, h) {
-  const fs = Math.max(6, h / 38), cw = fs * 0.62, cols = Math.ceil(w / cw), rows = Math.ceil(h / fs);
+  const fs = Math.max(5, h / 52), cw = fs * 0.62, cols = Math.ceil(w / cw), rows = Math.ceil(h / fs);
   const logo = new Float32Array(cols * rows);
   if (logoImg.complete && logoImg.naturalWidth) {                   // logo deitado: ícone à esquerda, letras à direita
     const m = Object.assign(document.createElement('canvas'), { width: cols, height: rows }), g = m.getContext('2d');
-    const sx = 1 / cw, sy = 1 / fs, H = h * 0.84, iconW = H * 575 / 520, textH = H * 0.6, textW = textH * 1125 / 309;
+    const sx = 1 / cw, sy = 1 / fs, H = h * 0.84, iconW = H * 575 / 520, textH = H * 0.46, textW = textH * 1125 / 200;
     const k = Math.min(1, w * 0.9 / (iconW + H * 0.12 + textW)), x0 = (w - (iconW + H * 0.12 + textW) * k) / 2;
     g.scale(sx, sy);
     g.drawImage(logoImg, 275, 5, 575, 520, x0, (h - H * k) / 2, iconW * k, H * k);
-    g.drawImage(logoImg, 0, 614, 1125, 309, x0 + (iconW + H * 0.12) * k, (h - textH * k) / 2, textW * k, textH * k);
+    g.drawImage(logoImg, 0, 614, 1125, 200, x0 + (iconW + H * 0.12) * k, (h - textH * k) / 2, textW * k, textH * k);   // só CAD360
     const px = g.getImageData(0, 0, cols, rows).data;
     for (let i = 0; i < cols * rows; i++) {
       const lum = (px[i * 4] * 0.3 + px[i * 4 + 1] * 0.59 + px[i * 4 + 2] * 0.11) / 255;
