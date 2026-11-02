@@ -190,21 +190,28 @@ export function pipes(ctx, w, h, t) {
 }
 
 // ---------- Labirinto de tijolos ----------
+// materiais (atributo tex): 0 tijolo, 1 chão, 2 teto, 3 placa Start, 4 pedra (cinza, brilho em uv.x), 5 rosto, 6 quadro
 const MAZE_VS = `
 attribute vec3 pos; attribute vec2 uv; attribute float tex;
 uniform mat4 mvp; uniform float rise;
 varying vec2 vUv; varying float vTex;
 void main() {
   vec3 p = pos;
-  if (tex < 0.5 || tex > 2.5) p.y *= rise;                          // paredes (e a placa) sobem do chão no começo
+  if (tex < 0.5 || (tex > 2.5 && tex < 3.5) || tex > 5.5) p.y *= rise;   // paredes sobem do chão no começo
   vUv = uv; vTex = tex; gl_Position = mvp * vec4(p, 1.0);
 }`;
 const MAZE_FS = `
 precision mediump float;
-uniform sampler2D wall, floor, ceil, sign;
+uniform sampler2D wall, floor, ceil, sign, smile, pic;
 varying vec2 vUv; varying float vTex;
 void main() {
-  gl_FragColor = vTex < 0.5 ? texture2D(wall, vUv) : vTex < 1.5 ? texture2D(floor, vUv) : vTex < 2.5 ? texture2D(ceil, vUv) : texture2D(sign, vUv);
+  if (vTex < 0.5) gl_FragColor = texture2D(wall, vUv);
+  else if (vTex < 1.5) gl_FragColor = texture2D(floor, vUv);
+  else if (vTex < 2.5) gl_FragColor = texture2D(ceil, vUv);
+  else if (vTex < 3.5) gl_FragColor = texture2D(sign, vUv);
+  else if (vTex < 4.5) gl_FragColor = vec4(vec3(vUv.x), 1.0);
+  else if (vTex < 5.5) gl_FragColor = texture2D(smile, vUv);
+  else gl_FragColor = texture2D(pic, vUv);
 }`;
 function texture(gl, unit, draw, size = [128, 128]) {
   const c = Object.assign(document.createElement('canvas'), { width: size[0], height: size[1] });
@@ -260,10 +267,21 @@ function signTex(g, w, h) {                                          // placa tr
   g.fillStyle = 'rgba(20, 20, 20, .9)'; g.font = `bold ${h * 0.5}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillText('Start', w / 2, h / 2 + 4);
 }
+function smileTex(g, w, h) {                                         // rosto amarelo translúcido da saída
+  g.clearRect(0, 0, w, h);
+  const r = w * 0.47, cx = w / 2, cy = h / 2, grad = g.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r);
+  grad.addColorStop(0, 'rgba(255, 250, 150, .85)'); grad.addColorStop(1, 'rgba(235, 190, 20, .75)');
+  g.fillStyle = grad; g.beginPath(); g.ellipse(cx, cy, r, r * 0.8, 0, 0, TAU); g.fill();
+  g.fillStyle = 'rgba(40, 40, 210, .9)';
+  for (const sx of [-1, 1]) { g.beginPath(); g.ellipse(cx + sx * r * 0.42, cy - r * 0.2, r * 0.13, r * 0.08, 0, 0, TAU); g.fill(); }
+  g.strokeStyle = 'rgba(40, 40, 210, .9)'; g.lineWidth = r * 0.12; g.lineCap = 'round';
+  g.beginPath(); g.ellipse(cx, cy + r * 0.05, r * 0.6, r * 0.38, 0, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke();
+}
+const picImg = Object.assign(new Image(), { src: 'img/quadro.webp' });   // imagem que aparece em paredes sorteadas
 const STEP = [[1, 0], [0, 1], [-1, 0], [0, -1]];                      // direções: x+, z+, x-, z-
 let M = null;
 function mazeBuild() {                                               // labirinto perfeito sorteado (busca em profundidade)
-  const R = Math.random, N = 7 + Math.floor(R() * 6), open = Array.from({ length: N * N }, () => [false, false, false, false]);
+  const R = Math.random, N = 5 + Math.floor(R() * 4), open = Array.from({ length: N * N }, () => [false, false, false, false]);
   const seen = new Uint8Array(N * N), stack = [Math.floor(R() * N * N)];
   seen[stack[0]] = 1;
   while (stack.length) {
@@ -276,14 +294,16 @@ function mazeBuild() {                                               // labirint
   const v = [], q = (a, b, c, d, tex) => {
     for (const [p, uv] of [[a, [0, 1]], [b, [1, 1]], [c, [1, 0]], [a, [0, 1]], [c, [1, 0]], [d, [0, 0]]]) v.push(...p, ...uv, tex);
   };
+  const pics = 0.03 + R() * 0.03;                                    // quantas paredes viram quadro
   for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
     q([x, 0, z], [x + 1, 0, z], [x + 1, 0, z + 1], [x, 0, z + 1], 1);
     q([x, 1, z], [x + 1, 1, z], [x + 1, 1, z + 1], [x, 1, z + 1], 2);
-    const o = open[z * N + x];
-    if (!o[0]) q([x + 1, 0, z], [x + 1, 0, z + 1], [x + 1, 1, z + 1], [x + 1, 1, z], 0);
-    if (!o[1]) q([x, 0, z + 1], [x + 1, 0, z + 1], [x + 1, 1, z + 1], [x, 1, z + 1], 0);
-    if (!o[2]) q([x, 0, z], [x, 0, z + 1], [x, 1, z + 1], [x, 1, z], 0);
-    if (!o[3]) q([x, 0, z], [x + 1, 0, z], [x + 1, 1, z], [x, 1, z], 0);
+    const o = open[z * N + x], wt = () => R() < pics ? 6 : 0;
+    // cada parede com os cantos na ordem esquerda→direita de quem olha de dentro da casa (para o quadro não sair espelhado)
+    if (!o[0]) q([x + 1, 0, z], [x + 1, 0, z + 1], [x + 1, 1, z + 1], [x + 1, 1, z], wt());
+    if (!o[1]) q([x + 1, 0, z + 1], [x, 0, z + 1], [x, 1, z + 1], [x + 1, 1, z + 1], wt());
+    if (!o[2]) q([x, 0, z + 1], [x, 0, z], [x, 1, z], [x, 1, z + 1], wt());
+    if (!o[3]) q([x, 0, z], [x + 1, 0, z], [x + 1, 1, z], [x, 1, z], wt());
   }
   const walls = v.length / 6;
   // começa num beco olhando para a parede com a placa Start
@@ -297,7 +317,7 @@ function mazeBuild() {                                               // labirint
   const gl = M.gl;
   gl.bindBuffer(gl.ARRAY_BUFFER, M.buf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
-  let far = sc, best = -1;                                           // a saída é a casa mais longe do começo
+  let far = sc, best = -1;                                           // a saída (o rosto) é a casa mais longe do começo
   const dist = new Int16Array(N * N).fill(-1), queue = [sc];
   dist[sc] = 0;
   while (queue.length) {
@@ -308,27 +328,66 @@ function mazeBuild() {                                               // labirint
       if (dist[n] < 0) { dist[n] = dist[c] + 1; queue.push(n); }
     }
   }
+  const rocks = new Set();                                           // pedras que viram o mundo de ponta-cabeça
+  for (let i = 0, k = 1 + Math.floor(R() * 3); i < k; i++) {
+    const c = Math.floor(R() * N * N);
+    if (c !== sc && c !== far) rocks.add(c);
+  }
   Object.assign(M, { N, open, walls, n: v.length / 6, x: sx, z: sz, dir, move: null, steps: 0, walkNext: false,
-    ex: far % N, ez: Math.floor(far / N), intro: 0 });
+    ex: far % N, ez: Math.floor(far / N), intro: 0, rocks, roll: 0, rollTo: 0 });
 }
 function mazeNext() {                                                // sempre com a mão direita na parede
-  if (M.walkNext) { M.walkNext = false; return { kind: 'walk', dur: 0.7, t: 0 }; }   // acabou de virar: anda
+  if (M.walkNext) { M.walkNext = false; return { kind: 'walk', dur: 0.55, t: 0 }; }   // acabou de virar: anda
   const o = M.open[M.z * M.N + M.x];
   for (const turn of [1, 0, -1, 2]) {                               // direita, frente, esquerda, volta (+1 = direita)
     if (!o[(M.dir + turn + 4) % 4]) continue;
-    if (!turn) return { kind: 'walk', dur: 0.7, t: 0 };
+    if (!turn) return { kind: 'walk', dur: 0.55, t: 0 };
     M.walkNext = true;
-    return { kind: 'turn', from: M.dir, to: M.dir + turn, dur: turn === 2 ? 0.9 : 0.45, t: 0 };
+    return { kind: 'turn', from: M.dir, to: M.dir + turn, dur: turn === 2 ? 0.8 : 0.4, t: 0 };
   }
+}
+const ICO = (() => {                                                 // icosaedro (a pedra)
+  const p = (1 + Math.sqrt(5)) / 2, V = [[-1, p, 0], [1, p, 0], [-1, -p, 0], [1, -p, 0], [0, -1, p], [0, 1, p], [0, -1, -p], [0, 1, -p], [p, 0, -1], [p, 0, 1], [-p, 0, -1], [-p, 0, 1]]
+    .map(v => { const l = Math.hypot(...v); return v.map(c => c / l); });
+  return [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
+    [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]].map(f => f.map(i => V[i]));
+})();
+function dynamic(t, eyeAng) {                                        // pedras girando e o rosto, montados a cada quadro
+  const v = [], rot = (p, a, b) => {
+    const x = p[0] * Math.cos(a) - p[2] * Math.sin(a), z = p[0] * Math.sin(a) + p[2] * Math.cos(a);
+    return [x, p[1] * Math.cos(b) - z * Math.sin(b), p[1] * Math.sin(b) + z * Math.cos(b)];
+  };
+  for (const c of M.rocks) {
+    const ox = c % M.N + 0.5, oz = Math.floor(c / M.N) + 0.5, a = t * 1.7 + c, b = t * 1.1 + c * 0.3;
+    for (const f of ICO) {
+      const pts = f.map(p => rot(p, a, b));
+      const n = (() => { const u = pts[1].map((x, i) => x - pts[0][i]), w = pts[2].map((x, i) => x - pts[0][i]);
+        const c3 = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]], l = Math.hypot(...c3); return c3.map(x => x / l); })();
+      const shade = 0.35 + 0.55 * Math.max(0, n[0] * -0.4 + n[1] * 0.7 + n[2] * 0.6);   // faces chapadas, como antigamente
+      for (const p of pts) v.push(ox + p[0] * 0.16, 0.5 + p[1] * 0.16, oz + p[2] * 0.16, shade, 0, 4);
+    }
+  }
+  const rocksEnd = v.length / 6;
+  const fx = M.ex + 0.5, fz = M.ez + 0.5, a = t * 1.3, s = 0.36;     // rosto girando devagar na saída
+  const dx = Math.cos(a) * s, dz = Math.sin(a) * s;
+  const P = [[fx - dx, 0.14, fz - dz], [fx + dx, 0.14, fz + dz], [fx + dx, 0.86, fz + dz], [fx - dx, 0.86, fz - dz]];
+  for (const [i, uv] of [[0, [0, 1]], [1, [1, 1]], [2, [1, 0]], [0, [0, 1]], [2, [1, 0]], [3, [0, 0]]]) v.push(...P[i], ...uv, 5);
+  const gl = M.gl;
+  gl.bindBuffer(gl.ARRAY_BUFFER, M.dyn);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.DYNAMIC_DRAW);
+  return [rocksEnd, v.length / 6];
 }
 export function maze(ctx, w, h, t) {
   if (!M) {
     try {
       const G = makeGL(MAZE_VS, MAZE_FS, [['pos', 3], ['uv', 2], ['tex', 1]]);
       if (!G) M = { failed: true }; else {
-        M = { ...G, last: Infinity, buf: G.gl.createBuffer() };
-        texture(G.gl, 0, brickTex, [256, 256]); texture(G.gl, 1, floorTex); texture(G.gl, 2, ceilTex); texture(G.gl, 3, signTex, [256, 128]);
-        ['wall', 'floor', 'ceil', 'sign'].forEach((n, i) => G.gl.uniform1i(G.u(n), i));
+        M = { ...G, last: Infinity, buf: G.gl.createBuffer(), dyn: G.gl.createBuffer() };
+        texture(G.gl, 0, brickTex, [256, 256]); texture(G.gl, 1, floorTex); texture(G.gl, 2, ceilTex);
+        texture(G.gl, 3, signTex, [256, 128]); texture(G.gl, 4, smileTex, [256, 256]);
+        const pic = () => texture(G.gl, 5, g => g.drawImage(picImg, 0, 0, 512, 512), [512, 512]);
+        if (picImg.complete && picImg.naturalWidth) pic(); else { texture(G.gl, 5, ceilTex); picImg.addEventListener('load', pic, { once: true }); }
+        ['wall', 'floor', 'ceil', 'sign', 'smile', 'pic'].forEach((n, i) => G.gl.uniform1i(G.u(n), i));
       }
     } catch (e) { console.warn('labirinto', e); M = { failed: true }; }
   }
@@ -346,7 +405,7 @@ export function maze(ctx, w, h, t) {
       const rest = (M.move.t - 1) * M.move.dur;                      // sobra de tempo passa para o próximo passo
       if (M.move.kind === 'walk') { M.x += STEP[M.dir][0]; M.z += STEP[M.dir][1]; M.steps++; }
       else M.dir = ((M.move.to % 4) + 4) % 4;
-      if (M.x === M.ex && M.z === M.ez || M.steps > 220) { mazeBuild(); break; }   // achou a saída: outro labirinto
+      if (M.x === M.ex && M.z === M.ez || M.steps > 260) { mazeBuild(); break; }   // chegou no rosto: outro labirinto
       M.move = mazeNext();
       M.move.t = rest / M.move.dur;
     }
@@ -355,16 +414,24 @@ export function maze(ctx, w, h, t) {
   let ang = M.dir * Math.PI / 2, px = M.x + 0.5, pz = M.z + 0.5;
   if (mv?.kind === 'turn') ang = (mv.from + (mv.to - mv.from) * e) * Math.PI / 2;
   else if (mv) { px += STEP[M.dir][0] * e; pz += STEP[M.dir][1] * e; }
-  const ex = px - Math.cos(ang) * 0.3, ez = pz - Math.sin(ang) * 0.3;   // olho no fundo da casa: vê a parede inteira
+  const cell = Math.floor(pz) * M.N + Math.floor(px);               // passou pela pedra: o mundo vira
+  if (M.rocks.has(cell) && Math.hypot(px - Math.floor(px) - 0.5, pz - Math.floor(pz) - 0.5) < 0.2) { M.rocks.delete(cell); M.rollTo += Math.PI; }
+  M.roll += Math.sign(M.rollTo - M.roll) * Math.min(Math.abs(M.rollTo - M.roll), dt * Math.PI / 1.2);
+  const fx = Math.cos(ang), fz = Math.sin(ang), cr = Math.cos(M.roll), sr = Math.sin(M.roll);
+  const ex = px - fx * 0.3, ez = pz - fz * 0.3;                      // olho no fundo da casa: vê a parede inteira
   gl.uniformMatrix4fv(M.u('mvp'), false, mul(perspective(1.0, aspect, 0.02, 40),
-    lookAt([ex, 0.5, ez], [ex + Math.cos(ang), 0.5, ez + Math.sin(ang)], [0, 1, 0])));
+    lookAt([ex, 0.5, ez], [ex + fx, 0.5, ez + fz], [-fz * sr, cr, fx * sr])));
   gl.uniform1f(M.u('rise'), Math.min(1, Math.max(0.001, (M.intro - 0.6) / 2.2)));
+  const [rocksEnd, dynN] = dynamic(t, ang);
   gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.DEPTH_TEST); gl.disable(gl.BLEND);
   gl.bindBuffer(gl.ARRAY_BUFFER, M.buf); M.bind();
-  gl.disable(gl.BLEND);
   gl.drawArrays(gl.TRIANGLES, 0, M.walls);
-  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-  gl.drawArrays(gl.TRIANGLES, M.walls, M.n - M.walls);               // placa translúcida por cima
+  gl.bindBuffer(gl.ARRAY_BUFFER, M.dyn); M.bind();
+  gl.drawArrays(gl.TRIANGLES, 0, rocksEnd);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);   // translúcidos por cima: rosto e placa
+  gl.drawArrays(gl.TRIANGLES, rocksEnd, dynN - rocksEnd);
+  gl.bindBuffer(gl.ARRAY_BUFFER, M.buf); M.bind();
+  gl.drawArrays(gl.TRIANGLES, M.walls, M.n - M.walls);
   ctx.drawImage(M.canvas, 0, 0, w, h);
 }
