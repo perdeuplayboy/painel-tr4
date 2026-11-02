@@ -2,6 +2,8 @@
 // Cada uma recebe (ctx, largura, altura, segundos, cor) e desenha um quadro inteiro.
 // A cor é a da música tocando ou o laranja do painel.
 
+import { drone } from './lidar.js';
+
 const TAU = Math.PI * 2;
 
 // Equalizador de LEDs: barras "dançando" com picos que caem devagar
@@ -475,62 +477,6 @@ function ocean(ctx, w, h, t, color) {
     }
   }
   ctx.globalAlpha = 1;
-}
-
-// Escaneamento por drone: o feixe pulsante vai desenhando a malha 3D do terreno
-function drone(ctx, w, h, t, color) {
-  ctx.fillStyle = '#03050a'; ctx.fillRect(0, 0, w, h);
-  const k = h / 220, off = t * 60 * k, dx = w * 0.42;
-  const ground = X => h * 0.8 - k * (22 * Math.sin(X / k * 0.012) + 12 * Math.sin(X / k * 0.031 + 1) + 6 * Math.sin(X / k * 0.07 + 2));
-  const sh = w * 0.018, lift = h * 0.04, L = 6;
-  ctx.strokeStyle = color; ctx.lineWidth = 1;
-  for (let d = 0; d < L; d++) {                                     // camadas de profundidade (atrás do drone)
-    ctx.globalAlpha = 0.85 - d * 0.12;
-    ctx.beginPath();
-    for (let x = 0; x <= dx; x += 5) {
-      const y = ground(x + off + d * sh) - d * lift;
-      x ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-    }
-    ctx.stroke();
-  }
-  const step = 26 * k;                                              // linhas transversais presas no terreno
-  for (let X = Math.ceil(off / step) * step; X - off <= dx + (L - 1) * sh; X += step) {
-    ctx.globalAlpha = 0.45;
-    ctx.beginPath();
-    for (let d = 0; d < L; d++) {
-      const x = X - off - d * sh;
-      if (x > dx) continue;
-      const y = ground(X) - d * lift;
-      d ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-    }
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = '#0b0e14';                                        // à frente: ainda sem escanear
-  ctx.beginPath(); ctx.moveTo(dx, h);
-  for (let x = dx; x <= w + 5; x += 5) ctx.lineTo(x, ground(x + off));
-  ctx.lineTo(w, h); ctx.fill();
-
-  const dy = h * 0.24 + Math.sin(t * 2) * h * 0.025, gy = ground(dx + off);
-  ctx.fillStyle = color; ctx.globalAlpha = 0.18 + 0.14 * Math.sin(t * 9);
-  ctx.beginPath(); ctx.moveTo(dx, dy + 5 * k); ctx.lineTo(dx - 16 * k, gy); ctx.lineTo(dx + 16 * k, gy); ctx.fill();
-  ctx.globalAlpha = 1;
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(dx - 16 * k, gy); ctx.lineTo(dx + 16 * k, gy); ctx.stroke();
-
-  ctx.fillStyle = '#1c2029'; ctx.strokeStyle = color; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.roundRect(dx - 14 * k, dy - 4 * k, 28 * k, 9 * k, 3 * k); ctx.fill(); ctx.stroke();
-  for (const sd of [-1, 1]) {
-    const rx = dx + sd * 22 * k, ry = dy - 7 * k;
-    ctx.beginPath(); ctx.moveTo(dx + sd * 12 * k, dy - 2 * k); ctx.lineTo(rx, ry); ctx.stroke();
-    ctx.globalAlpha = 0.5;
-    ctx.beginPath(); ctx.ellipse(rx, ry, 11 * k, 1.8 * k, 0, 0, TAU); ctx.stroke();
-    ctx.globalAlpha = 1;
-    const bl = 11 * k * Math.cos(t * 47 + sd);
-    ctx.beginPath(); ctx.moveTo(rx - bl, ry); ctx.lineTo(rx + bl, ry); ctx.stroke();
-  }
-  ctx.fillStyle = Math.sin(t * 6) > 0 ? '#ff3b30' : '#3a0d0b';
-  ctx.beginPath(); ctx.arc(dx + 10 * k, dy + 1 * k, 1.3 * k, 0, TAU); ctx.fill();
 }
 
 // Fita K7: rolos girando em velocidades diferentes, um enchendo e outro esvaziando
