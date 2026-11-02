@@ -1,7 +1,7 @@
 import {
   State, FUELS, emptyTrip, tripAvgKmL, tripAvgSpeed, deriveAndIntegrate, MockSource, ElmBleSource,
 } from './obd.js';
-import { loadSettings, loadUpkeep, load, save, addVideos, listVideos, clearVideos } from './store.js';
+import { loadSettings, loadUpkeep, load, save, addVideos, listVideos, clearVideos, removeVideo } from './store.js';
 import { MapView, Navigator, geocode, distM, fmtDist, arrowPath, arrowChar } from './nav.js';
 import { Spotify } from './spotify.js';
 import { Player } from './player.js';
@@ -537,11 +537,13 @@ async function reloadVideos() {
   videoUrls = videos.map(v => URL.createObjectURL(v.blob));
   const gifs = videos.filter(v => v.blob.type.startsWith('image/')).length;
   $('videoInfo').textContent = videos.length ? `${videos.length - gifs} vídeo(s) e ${gifs} GIF(s) salvos` : 'nenhum vídeo ou GIF';
+  renderMedia();
 }
 
 // lista para tocar: seus vídeos e GIFs, mais as animações retrô (se ligadas)
 const mediaItems = () => [
-  ...videos.map((v, i) => ({ kind: v.blob.type.startsWith('image/') ? 'image' : 'video', url: videoUrls[i] })),
+  ...videos.map((v, i) => ({ kind: v.blob.type.startsWith('image/') ? 'image' : 'video', url: videoUrls[i], id: v.id }))
+    .filter(it => !S.mediaOff.includes(it.id)),
   ...(S.anims ? Object.keys(ANIMS).filter(a => !S.animOff.includes(a)).map(anim => ({ kind: 'anim', anim })) : []),
 ];
 const playerOpts = {
@@ -901,6 +903,37 @@ function renderAnims() {
       enterStandby(true, { kind: 'anim', anim: id });
     });
     label.append(box, ` ${name}`, see);
+    return label;
+  }));
+}
+
+// seus vídeos e GIFs: ligar/desligar, ver agora e apagar um por um
+function renderMedia() {
+  $('mediaList').replaceChildren(...videos.map((v, i) => {
+    const gif = v.blob.type.startsWith('image/');
+    const label = document.createElement('label');
+    label.className = 'check';
+    const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !S.mediaOff.includes(v.id) });
+    box.addEventListener('change', () => {
+      S.mediaOff = box.checked ? S.mediaOff.filter(id => id !== v.id) : [...S.mediaOff, v.id];
+      saveSettings();
+    });
+    const name = Object.assign(document.createElement('span'), { className: 'media-name', textContent: `${gif ? 'GIF' : 'Vídeo'} · ${v.name}` });
+    name.title = v.name;
+    const see = Object.assign(document.createElement('button'), { className: 'pill', textContent: 'ver' });
+    see.addEventListener('click', e => {
+      e.preventDefault();
+      closeSettings();
+      enterStandby(true, { kind: gif ? 'image' : 'video', url: videoUrls[i], id: v.id });
+    });
+    const del = Object.assign(document.createElement('button'), { className: 'pill warn', textContent: 'apagar' });
+    del.addEventListener('click', e => e.preventDefault());
+    armed(del, async () => {
+      await removeVideo(v.id);
+      S.mediaOff = S.mediaOff.filter(id => id !== v.id); saveSettings();
+      await reloadVideos();
+    });
+    label.append(box, name, see, del);
     return label;
   }));
 }

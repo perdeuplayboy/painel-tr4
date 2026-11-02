@@ -27,6 +27,7 @@ export const DEFAULTS = {
   anims: true,              // animações retrô entram na lista do standby/página Vídeos
   clipSec: 25,              // segundos de cada GIF ou animação
   animOff: [],              // animações desligadas uma a uma
+  mediaOff: [],             // vídeos/GIFs desligados (ids do IndexedDB)
 };
 
 // Intervalos de partida para a TR4 2.0 flex em uso misto; confira no manual e ajuste.
@@ -94,6 +95,10 @@ export async function addVideos(files) {
 
 export async function listVideos() {
   try { return (await tx('readonly', s => s.getAll())) || []; } catch { return []; }
+}
+
+export async function removeVideo(id) {
+  try { await tx('readwrite', s => s.delete(id)); } catch {}
 }
 
 export async function clearVideos() {
