@@ -85,6 +85,7 @@ $('stage').addEventListener('pointerup', e => {
   swipe = null;
   const min = parseFloat(document.documentElement.style.fontSize) * 6;      // 6 mm
   if (Math.abs(dx) > min && Math.abs(dx) > Math.abs(dy)) showPage(page + (dx < 0 ? 1 : -1));
+  else if (Math.hypot(dx, dy) < min && PAGES[page] === 'video' && $('videoPage').contains(e.target)) pgPlayer.next();
 });
 
 // segurar o relógio abre as configurações
@@ -576,12 +577,21 @@ function exitStandby() {
   $('standby').hidden = true;
 }
 
-$('standby').addEventListener('pointerdown', e => {
+// No standby: toque passa para o próximo vídeo/GIF/animação; arrastar ou tocar no relógio sai
+let sbTouch = null;
+$('standby').addEventListener('pointerdown', e => { e.stopPropagation(); sbTouch = { x: e.clientX, y: e.clientY }; });
+$('standby').addEventListener('pointerup', e => {
   e.stopPropagation();
-  const engineOff = sb.engineOffSince != null;
-  sb.suppressUntil = performance.now() + (engineOff ? 60000 : S.standbyMin * 60000);
-  exitStandby();
+  if (!sbTouch) return;
+  const moved = Math.hypot(e.clientX - sbTouch.x, e.clientY - sbTouch.y) > parseFloat(document.documentElement.style.fontSize) * 6;
+  sbTouch = null;
+  if (moved || $('sbClock').contains(e.target) || sbPlayer.empty) {
+    const engineOff = sb.engineOffSince != null;
+    sb.suppressUntil = performance.now() + (engineOff ? 60000 : S.standbyMin * 60000);
+    exitStandby();
+  } else sbPlayer.next();
 });
+$('standby').addEventListener('pointercancel', () => { sbTouch = null; });
 
 // Página Vídeos: a mesma lista do standby, no centro, com o carro andando
 const pgPlayer = new Player($('videoPage'), mediaItems, playerOpts);
