@@ -3,6 +3,7 @@
 // A cor é a da música tocando ou o laranja do painel.
 
 import { drone } from './lidar.js';
+import { pipes, maze } from './retro3d.js';
 
 const TAU = Math.PI * 2;
 
@@ -375,34 +376,6 @@ function scope(ctx, w, h, t, color) {
   ctx.shadowBlur = 0; ctx.globalAlpha = 1;
 }
 
-// Wireframe 3D: um toro de arame girando em perspectiva
-function wire(ctx, w, h, t, color) {
-  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
-  const U = 30, V = 14, ax = t * 0.5, ay = t * 0.33, az = t * 0.21;
-  const pts = [];
-  for (let i = 0; i < U; i++) {
-    for (let j = 0; j < V; j++) {
-      const u = i / U * TAU, v = j / V * TAU;
-      const x = (1 + 0.42 * Math.cos(v)) * Math.cos(u), y = (1 + 0.42 * Math.cos(v)) * Math.sin(u), z = 0.42 * Math.sin(v);
-      const y1 = y * Math.cos(ax) - z * Math.sin(ax), z1 = y * Math.sin(ax) + z * Math.cos(ax);
-      const x2 = x * Math.cos(ay) + z1 * Math.sin(ay), z2 = -x * Math.sin(ay) + z1 * Math.cos(ay);
-      const x3 = x2 * Math.cos(az) - y1 * Math.sin(az), y3 = x2 * Math.sin(az) + y1 * Math.cos(az);
-      const d = 3.2 / (z2 + 4);
-      pts.push([w / 2 + x3 * d * h * 0.27, h / 2 + y3 * d * h * 0.27, z2]);
-    }
-  }
-  const P = (i, j) => pts[(i % U) * V + (j % V)];
-  ctx.strokeStyle = color; ctx.lineWidth = 1;
-  for (let i = 0; i < U; i++) {
-    for (let j = 0; j < V; j++) {
-      const a = P(i, j), b = P(i + 1, j), c = P(i, j + 1);
-      ctx.globalAlpha = Math.max(0.15, Math.min(1, 0.25 + 0.75 * (1 - (a[2] + 1.5) / 3)));   // perto mais forte
-      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.moveTo(a[0], a[1]); ctx.lineTo(c[0], c[1]); ctx.stroke();
-    }
-  }
-  ctx.globalAlpha = 1;
-}
-
 // Chuva de dados: código verde caindo, no estilo do filme. A cada ciclo a chuva vai desenhando o logo
 // da CAD360 (mapa, alfinete e CAD360): cada caractere fica mais claro onde o logo é mais forte.
 const GLYPHS = '0123456789ABCDEFZアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホ';
@@ -474,7 +447,7 @@ function rain(ctx, w, h, t) {
 }
 
 // Oceano digital: mar de pontos visto da praia. O mar de fundo e as ondas são sorteados; as ondas
-// chegam e crescem perto da praia, algumas pequenas e outras gigantes.
+// chegam de frente ou na diagonal, de um lado ou do outro, e crescem perto da praia; algumas são gigantes.
 let sea = null, seaLast = Infinity;
 function ocean(ctx, w, h, t, color) {
   const R = Math.random;
@@ -485,19 +458,22 @@ function ocean(ctx, w, h, t, color) {
   seaLast = t;
   while (sea.next <= t) {                                           // próxima onda da série
     const giant = R() < sea.giants;
-    sea.waves.push({ t0: sea.next, A: giant ? 1 + R() * 0.6 : 0.2 + R() * 0.45, ph: R() * TAU, c: 1.4 + R() * 0.6 });
-    sea.next += 2.5 + R() * 3.5 + (giant ? 2.5 : 0);
+    const th = (R() - 0.5) * 2.2, sn = Math.abs(Math.sin(th));       // direção sorteada: até ~60° para cada lado
+    sea.waves.push({ t0: sea.next, A: giant ? 1 + R() * 0.6 : 0.2 + R() * 0.45, ph: R() * TAU, c: 1.4 + R() * 0.6,
+      cos: Math.cos(th), sin: Math.sin(th), s0: 16 * Math.cos(th) + 44 * sn + 2, end: -44 * sn - 3 });
+    sea.next += 2 + R() * 3.5 + (giant ? 2.5 : 0);
   }
-  sea.waves = sea.waves.filter(v => 15 - v.c * (t - v.t0) > -2);
+  sea.waves = sea.waves.filter(v => v.s0 - v.c * (t - v.t0) > v.end);
 
   const wave = (X, z) => {
     let y = 0;
     for (const s of sea.swell) y += s.a * Math.sin(s.k * (z + X * s.dir) + s.sp * t + s.ph);
     for (const v of sea.waves) {
-      const zc = 15 - v.c * (t - v.t0) + 0.35 * Math.sin(X * 0.18 + v.ph), d = z - zc;
+      // distância até a crista, medida na direção em que a onda anda (X é ~4x mais estreito que z na tela)
+      const d = z * v.cos + X * 0.24 * v.sin - (v.s0 - v.c * (t - v.t0)) - 0.35 * Math.sin(X * 0.18 + v.ph);
       if (d < -3 || d > 4) continue;
-      const grow = Math.min(1, Math.max(0, (15 - zc) / 11));         // cresce chegando perto e some na areia
-      const H = v.A * (1 + 0.8 * grow) * Math.min(1, Math.max(0, zc / 1.5));
+      const grow = Math.min(1, Math.max(0, (15 - z) / 11));          // cresce chegando perto e some na areia
+      const H = v.A * (1 + 0.8 * grow) * Math.min(1, Math.max(0, z / 1.5));
       y += H * (d < 0 ? Math.exp(-((d / 0.6) ** 2)) : Math.exp(-((d / 1.3) ** 2)));
     }
     return y;
@@ -766,12 +742,12 @@ function camp(ctx, w, h, t, color) {
 
 export const ANIMS = {
   equalizer, road, trail, night, dunes, warp, topo, scope,
-  wire, rain, ocean, drone, cassette, dolphins, compass, camp,
+  pipes, maze, rain, ocean, drone, cassette, dolphins, compass, camp,
 };
 export const ANIM_NAMES = {
   equalizer: 'Equalizador', road: 'Estrada retrô', trail: 'Trilha', night: 'Estrada à noite',
   dunes: 'Dunas', warp: 'Hiperespaço', topo: 'Mapa topográfico', scope: 'Osciloscópio',
-  wire: 'Wireframe 3D', rain: 'Chuva de dados', ocean: 'Oceano digital', drone: 'Escaneamento por drone',
+  pipes: 'Canos 3D', maze: 'Labirinto de tijolos', rain: 'Chuva de dados', ocean: 'Oceano digital', drone: 'Escaneamento por drone',
   cassette: 'Fita K7', dolphins: 'Golfinhos',
   compass: 'Bússola giroscópica', camp: 'Acampamento',
 };
