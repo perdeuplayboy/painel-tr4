@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#000000">
+<meta name="description" content="Painel central da Pajero TR4: dados do OBD2 no formato da moldura do relógio.">
+<title>Painel TR4</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<div id="screen">
+  <div id="stage">
+    <div id="shift">
+
+      <aside id="wing-left" class="wing" title="Segure para abrir as configurações">
+        <div class="clock" data-k="time">--:--</div>
+        <div class="date" data-k="date">--</div>
+        <div class="weekday" data-k="weekday">--</div>
+      </aside>
+
+      <main id="center">
+        <section class="page" data-page="drive">
+          <div class="rpmbar"><div class="rpmfill" id="rpmfill"></div><div class="rpmred"></div></div>
+          <div class="drive">
+            <div class="side">
+              <div class="stat"><b data-k="kmlInst">--</b><small>km/L agora</small></div>
+              <div class="stat"><b data-k="kmlTrip">--</b><small>km/L média</small></div>
+            </div>
+            <div class="speed"><span data-k="speed">--</span><small>km/h</small></div>
+            <div class="side right">
+              <div class="stat"><b data-k="rpm">--</b><small>rpm</small></div>
+              <div class="stat"><b data-k="battV">--</b><small>bateria V</small></div>
+            </div>
+          </div>
+          <div class="notice" id="coldNotice" hidden>MOTOR FRIO · pega leve</div>
+        </section>
+
+        <section class="page" data-page="engine">
+          <h2>Motor</h2>
+          <div class="grid g4">
+            <div class="tile"><b data-k="load">--</b><small>carga %</small></div>
+            <div class="tile"><b data-k="throttle">--</b><small>acelerador %</small></div>
+            <div class="tile"><b data-k="map">--</b><small>MAP kPa</small></div>
+            <div class="tile"><b data-k="iat">--</b><small>admissão °C</small></div>
+            <div class="tile"><b data-k="timing">--</b><small>avanço °</small></div>
+            <div class="tile"><b data-k="stft">--</b><small>corr. curta %</small></div>
+            <div class="tile"><b data-k="ltft">--</b><small>corr. longa %</small></div>
+            <div class="tile"><b data-k="o2" class="sm">--</b><small>sondas 1/2 V</small></div>
+          </div>
+        </section>
+
+        <section class="page" data-page="trip">
+          <h2>Viagem <span class="badge" data-k="fuelName">--</span></h2>
+          <div class="grid g4">
+            <div class="tile"><b data-k="tripKm">--</b><small>km</small></div>
+            <div class="tile"><b data-k="tripTime">--</b><small>tempo</small></div>
+            <div class="tile"><b data-k="tripL">--</b><small>litros</small></div>
+            <div class="tile"><b data-k="tripAvg">--</b><small>km/L média</small></div>
+            <div class="tile"><b data-k="tripCost">--</b><small>custo R$</small></div>
+            <div class="tile"><b data-k="tripCostKm">--</b><small>R$/km</small></div>
+            <div class="tile"><b data-k="tripMax">--</b><small>vel. máx</small></div>
+            <div class="tile"><b data-k="tripAvgSpd">--</b><small>vel. média</small></div>
+          </div>
+        </section>
+
+        <section class="page" data-page="fuel">
+          <h2>Álcool ou gasolina?</h2>
+          <div class="fuel">
+            <div class="fcol" id="fcolE">
+              <div class="fname">Etanol</div>
+              <div><b data-k="kmlE">--</b><small>km/L</small></div>
+              <div><b data-k="priceE">--</b><small>R$/L</small></div>
+              <div><b data-k="rkmE">--</b><small>R$/km</small></div>
+            </div>
+            <div class="verdict">
+              <div class="vtitle" data-k="verdict">--</div>
+              <div class="vsub" data-k="verdictSub"></div>
+              <button class="pill" id="btnFuelSwap">Abastecido com <span data-k="fuelName">--</span></button>
+            </div>
+            <div class="fcol" id="fcolG">
+              <div class="fname">Gasolina</div>
+              <div><b data-k="kmlG">--</b><small>km/L</small></div>
+              <div><b data-k="priceG">--</b><small>R$/L</small></div>
+              <div><b data-k="rkmG">--</b><small>R$/km</small></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" data-page="trail">
+          <div class="trail">
+            <div class="incl" id="inclRoll">
+              <svg viewBox="-20 -20 40 40" class="car"><g id="carRear">
+                <rect x="-11" y="-6" width="22" height="9" rx="2"/>
+                <path d="M-8 -6 L-6 -13 L6 -13 L8 -6 Z" class="glass"/>
+                <rect x="-12" y="3" width="6" height="6" rx="1.5" class="tyre"/>
+                <rect x="6" y="3" width="6" height="6" rx="1.5" class="tyre"/>
+              </g><line x1="-19" y1="9" x2="19" y2="9" class="ground"/></svg>
+              <div><b data-k="roll">--</b><small>lateral</small></div>
+            </div>
+            <div class="trail-mid">
+              <div><b data-k="heading">--</b><small>rumo</small></div>
+              <div><b data-k="alt">--</b><small>altitude m</small></div>
+            </div>
+            <div class="incl" id="inclPitch">
+              <svg viewBox="-20 -20 40 40" class="car"><g id="carSide">
+                <path d="M-17 2 L-17 -5 L-9 -6 L-5 -13 L9 -13 L11 -6 L17 -5 L17 2 Z"/>
+                <path d="M-4 -11 L-3 -7 L9 -7 L8 -11 Z" class="glass"/>
+                <circle cx="-10" cy="4" r="4.5" class="tyre"/>
+                <circle cx="10" cy="4" r="4.5" class="tyre"/>
+              </g><line x1="-19" y1="9" x2="19" y2="9" class="ground"/></svg>
+              <div><b data-k="pitch">--</b><small>frontal</small></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" data-page="diag">
+          <h2>Diagnóstico <span class="badge" data-k="connState">--</span></h2>
+          <div class="diag">
+            <div class="drow"><span>Injeção</span><b data-k="mil">--</b></div>
+            <div class="drow"><span>Falhas</span><b data-k="dtcs">--</b></div>
+            <div class="drow"><span>Bateria</span><b data-k="battHealth">--</b></div>
+            <div class="drow"><span>Partida</span><b data-k="battDetail">--</b></div>
+            <div class="drow"><span>Protocolo</span><b data-k="protocol">--</b></div>
+            <div class="drow"><span>VIN</span><b data-k="vin">--</b></div>
+            <div class="dbtns">
+              <button class="pill" id="btnReadDtc">Ler códigos</button>
+              <button class="pill warn" id="btnClearDtc">Apagar códigos</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="page" data-page="nav">
+          <div class="soon">
+            <div class="soon-icon">↱</div>
+            <div><b>Navegação</b><small>em desenvolvimento</small></div>
+          </div>
+        </section>
+      </main>
+
+      <aside id="wing-right" class="wing">
+        <div class="wtemp"><b data-k="outTemp">--°</b><small data-k="outLabel">fora</small></div>
+        <div class="wtemp engine" id="engTemp"><b data-k="coolant">--°</b><small>motor</small></div>
+      </aside>
+
+      <div id="dots"></div>
+      <div id="status" class="status"></div>
+    </div>
+
+    <div id="standby" hidden>
+      <video id="sbVideo" muted playsinline></video>
+      <div class="sb-clock" id="sbClock"><b data-k="time">--:--</b><small data-k="sbLine">--</small></div>
+    </div>
+
+    <div id="alert" hidden>
+      <div class="a-icon" id="alertIcon">!</div>
+      <div><div class="a-title" id="alertTitle"></div><div class="a-sub" id="alertSub"></div></div>
+    </div>
+  </div>
+
+  <svg id="mask" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+    <path id="maskPath" fill-rule="evenodd"/>
+    <path id="outlinePath" fill="none"/>
+  </svg>
+</div>
+
+<div id="settings" hidden>
+  <header>
+    <h1>Configurações</h1>
+    <button id="btnClose" class="pill">Fechar</button>
+  </header>
+
+  <section>
+    <h3>Conexão com o carro</h3>
+    <label>Fonte de dados
+      <select id="sSource"><option value="sim">Simulação</option><option value="obd">Adaptador OBD (Bluetooth)</option></select>
+    </label>
+    <div class="row">
+      <button id="btnConnect" class="pill">Conectar adaptador</button>
+      <span id="connInfo" class="muted"></span>
+    </div>
+    <div class="row sim-only">
+      <button id="btnEngine" class="pill">Desligar motor (simulação)</button>
+    </div>
+    <pre id="log"></pre>
+  </section>
+
+  <section>
+    <h3>Combustível</h3>
+    <label>Abastecido com
+      <select id="sFuel"><option value="gasolina">Gasolina</option><option value="etanol">Etanol</option></select>
+    </label>
+    <label>Preço gasolina (R$/L) <input id="sPriceG" type="number" step="0.01" inputmode="decimal"></label>
+    <label>Preço etanol (R$/L) <input id="sPriceE" type="number" step="0.01" inputmode="decimal"></label>
+    <div class="row"><button id="btnResetFuel" class="pill warn">Zerar médias de consumo</button></div>
+    <p class="muted">O consumo é estimado pela pressão do coletor (a TR4 não informa fluxo de ar). Se a média ficar diferente da bomba, ajuste a eficiência volumétrica abaixo.</p>
+    <label>Eficiência volumétrica <input id="sVe" type="number" step="0.01" inputmode="decimal"></label>
+  </section>
+
+  <section>
+    <h3>Standby com vídeos</h3>
+    <label>Minutos parado com motor ligado <input id="sStandbyMin" type="number" step="1" min="1" inputmode="numeric"></label>
+    <p class="muted">Com o motor desligado o standby entra em 10 segundos. Toque na tela para sair.</p>
+    <div class="row">
+      <label class="pill file">Adicionar vídeos<input id="sVideos" type="file" accept="video/*" multiple hidden></label>
+      <button id="btnClearVideos" class="pill warn">Apagar vídeos</button>
+      <span id="videoInfo" class="muted"></span>
+    </div>
+    <div class="row"><button id="btnStandbyNow" class="pill">Ver standby agora</button></div>
+  </section>
+
+  <section>
+    <h3>Alertas</h3>
+    <label>Temperatura do motor (°C) <input id="sCoolLimit" type="number" step="1" inputmode="numeric"></label>
+    <label>Bateria baixa com motor ligado (V) <input id="sBattLimit" type="number" step="0.1" inputmode="decimal"></label>
+    <label>Inclinação lateral (°) <input id="sRollLimit" type="number" step="1" inputmode="numeric"></label>
+    <label>Inclinação frontal (°) <input id="sPitchLimit" type="number" step="1" inputmode="numeric"></label>
+    <div class="row"><button id="btnZeroLevel" class="pill">Zerar inclinômetro (carro no plano)</button></div>
+  </section>
+
+  <section>
+    <h3>Encaixe na moldura</h3>
+    <label>Largura da área acesa da tela (mm) <input id="sScreenW" type="number" step="0.1" inputmode="decimal"></label>
+    <label>Deslocar janela horizontal (mm) <input id="sOffX" type="number" step="0.5" inputmode="decimal"></label>
+    <label>Deslocar janela vertical (mm) <input id="sOffY" type="number" step="0.5" inputmode="decimal"></label>
+    <label>Fora da janela
+      <select id="sMask"><option value="black">Preto (uso normal)</option><option value="dim">Translúcido (ajuste)</option></select>
+    </label>
+    <label class="check"><input id="sOutline" type="checkbox"> Mostrar contorno do furo</label>
+  </section>
+
+  <section>
+    <div class="row">
+      <button id="btnFullscreen" class="pill">Tela cheia</button>
+      <span class="muted">Painel TR4 · v0.1 · segure o relógio para abrir esta tela</span>
+    </div>
+  </section>
+</div>
+
+</body>
+</html>
