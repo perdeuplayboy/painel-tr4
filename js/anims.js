@@ -3,6 +3,7 @@
 // A cor é a da música tocando ou o laranja do painel.
 
 import { drone } from './lidar.js';
+import { rally, thermal, city, river } from './scene3d.js';
 
 const TAU = Math.PI * 2;
 
@@ -223,49 +224,6 @@ function night(ctx, w, h, t, color) {
     const tl = ctx.createRadialGradient(x + sx * cw, y - cw * 0.35, 0, x + sx * cw, y - cw * 0.35, cw * 0.3);
     tl.addColorStop(0, 'rgba(255, 40, 40, 1)'); tl.addColorStop(1, 'rgba(255, 0, 0, 0)');
     ctx.fillStyle = tl; ctx.fillRect(x + sx * cw - cw * 0.3, y - cw * 0.65, cw * 0.6, cw * 0.6);
-  }
-}
-
-// Rali na terra: estrada com curvas em perspectiva (pseudo-3D) e pinheiros passando
-function rally(ctx, w, h, t, color) {
-  const hz = h * 0.42, speed = 12;
-  const curve = 0.8 * Math.sin(t * 0.33) + 0.45 * Math.sin(t * 0.11 + 1);
-  const bend = z => w / 2 + curve * w * 0.45 * Math.min(z / 40, 1) ** 2;
-  const halfW = z => w * 0.75 / z;
-  const g = ctx.createLinearGradient(0, 0, 0, hz);
-  g.addColorStop(0, '#060912'); g.addColorStop(1, '#1e2536');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, w, hz);
-  ctx.fillStyle = color; ctx.globalAlpha = 0.25; ctx.fillRect(0, hz - h * 0.03, w, h * 0.03); ctx.globalAlpha = 1;
-  ctx.fillStyle = '#0d111a';                                        // serra ao fundo, desliza com a curva
-  ctx.beginPath(); ctx.moveTo(0, hz);
-  for (let x = 0; x <= w; x += 6) {
-    const X = x / w * 9 - curve * 1.5;
-    ctx.lineTo(x, hz - h * (0.07 + 0.05 * Math.abs(Math.sin(X * 1.7)) + 0.03 * Math.sin(X * 4.1)));
-  }
-  ctx.lineTo(w, hz); ctx.fill();
-
-  for (let y = h; y > hz + 1; y -= 2) {                            // chão linha a linha, de perto para longe
-    const z = (h - hz) * 1.6 / (y - hz), c = bend(z), r = halfW(z);
-    const band = Math.floor((z + t * speed) / 3) % 2;
-    ctx.fillStyle = band ? '#16210f' : '#1b2813'; ctx.fillRect(0, y - 2, w, 2);
-    ctx.fillStyle = band ? '#5b4631' : '#523f2c'; ctx.fillRect(c - r, y - 2, 2 * r, 2);
-    ctx.fillStyle = band ? '#8a7357' : '#3b2e20'; ctx.fillRect(c - r - r * 0.08, y - 2, r * 0.08, 2); ctx.fillRect(c + r, y - 2, r * 0.08, 2);
-  }
-
-  const trees = [];
-  for (let k = 0; k < 14; k++) {
-    const z = k * 3 - ((t * speed) % 3) + 1.7;
-    if (z > 1.6) for (const side of [-1, 1]) trees.push([z, side * (1.6 + (k * 7 % 5) * 0.25)]);
-  }
-  trees.sort((a, b) => b[0] - a[0]);
-  for (const [z, off] of trees) {
-    const y = hz + (h - hz) * 1.6 / z, x = bend(z) + off * halfW(z), th = h * 1.3 / z;
-    if (y > h + th) continue;
-    ctx.fillStyle = '#07100a'; ctx.strokeStyle = color; ctx.globalAlpha = 1; ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x, y - th); ctx.lineTo(x + th * 0.28, y - th * 0.15); ctx.lineTo(x - th * 0.28, y - th * 0.15); ctx.closePath();
-    ctx.fill(); ctx.globalAlpha = 0.25; ctx.stroke(); ctx.globalAlpha = 1;
-    ctx.fillRect(x - th * 0.03, y - th * 0.16, th * 0.06, th * 0.16);
   }
 }
 
@@ -544,72 +502,6 @@ function cassette(ctx, w, h, t, color) {
   for (const gx of [0.27, 0.5, 0.73]) ctx.fillRect(x0 + W * gx - 4, ty - 2, 8, 6);
 }
 
-// Rodovia espelhada: capô brilhante numa avenida de prédios iluminados à noite
-const towers = Array.from({ length: 40 }, (_, i) => ({ w: 0.04 + (i * 37 % 7) / 100, hgt: 0.06 + (i * 53 % 11) / 70 }));
-function mirror(ctx, w, h, t, color) {
-  const hz = h * 0.42, cx = w / 2, run = t * 14;
-  let g = ctx.createLinearGradient(0, 0, 0, hz);
-  g.addColorStop(0, '#04030a'); g.addColorStop(1, '#1b1130');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, w, hz);
-  let x = 0;
-  for (const tw of towers) {                                        // skyline ao fundo
-    const bw = tw.w * w, bh = tw.hgt * h;
-    ctx.fillStyle = '#0b0915'; ctx.fillRect(x, hz - bh, bw, bh);
-    ctx.fillStyle = color; ctx.globalAlpha = 0.5;
-    for (let wy = hz - bh + 3; wy < hz - 2; wy += 5) for (let wx = x + 2; wx < x + bw - 2; wx += 4) if ((wx * 7 + wy * 13) % 5 < 1) ctx.fillRect(wx, wy, 1.5, 2);
-    ctx.globalAlpha = 1;
-    x += bw + 2;
-    if (x > w) break;
-  }
-  ctx.fillStyle = '#050508'; ctx.fillRect(0, hz, w, h - hz);
-  const Y = z => hz + (h - hz) / z;
-  ctx.fillStyle = '#0d0e12';
-  ctx.beginPath(); ctx.moveTo(cx - 3, hz); ctx.lineTo(cx + 3, hz); ctx.lineTo(cx + w * 0.9, h); ctx.lineTo(cx - w * 0.9, h); ctx.fill();
-  ctx.fillStyle = '#cfcfcf';
-  for (let kk = 0; kk < 14; kk++) {
-    const a = kk * 2.5 - (run % 2.5) + 1, b = a + 1;
-    if (a < 0.9) continue;
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.008 * w / a, Y(a)); ctx.lineTo(cx + 0.008 * w / a, Y(a)); ctx.lineTo(cx + 0.008 * w / b, Y(b)); ctx.lineTo(cx - 0.008 * w / b, Y(b));
-    ctx.fill();
-  }
-  const side = [];
-  for (let kk = 0; kk < 10; kk++) {
-    const z = kk * 3 - (run % 3) + 1;
-    if (z > 0.7) for (const sd of [-1, 1]) side.push([z, sd, kk]);
-  }
-  side.sort((a, b) => b[0] - a[0]);
-  const refl = [];
-  for (const [z, sd, kk] of side) {                                 // prédios e postes passando
-    const xa = cx + sd * w * 0.62 / z, xb = cx + sd * w * 1.7 / z, top = Y(z) - h * 1.5 / z;
-    ctx.fillStyle = '#0d0b17'; ctx.fillRect(Math.min(xa, xb), top, Math.abs(xb - xa), Y(z) - top);
-    ctx.fillStyle = kk % 2 ? color : '#ffcf7a'; ctx.globalAlpha = 0.7;
-    const cell = Math.max(2, 9 / z);
-    for (let wy = top + cell; wy < Y(z) - cell; wy += cell * 1.8) for (let q = 1; q < 5; q++) if ((q + kk + Math.floor(wy)) % 3) ctx.fillRect(xa + sd * q * cell * 1.8, wy, cell * 0.8 * sd, cell * 0.9);
-    ctx.globalAlpha = 1;
-    const lx = cx + sd * w * 0.55 / z, ly = Y(z) - h * 0.9 / z, r = h * 0.3 / z;
-    const glow = ctx.createRadialGradient(lx, ly, 0, lx, ly, r);
-    glow.addColorStop(0, 'rgba(255, 220, 160, .9)'); glow.addColorStop(1, 'rgba(255, 180, 90, 0)');
-    ctx.fillStyle = glow; ctx.fillRect(lx - r, ly - r, 2 * r, 2 * r);
-    if (z < 3.5) refl.push([z, sd, kk]);
-  }
-  ctx.save();                                                        // capô com reflexos correndo
-  ctx.beginPath(); ctx.moveTo(w * 0.04, h); ctx.lineTo(w * 0.2, h * 0.8); ctx.quadraticCurveTo(cx, h * 0.74, w * 0.8, h * 0.8); ctx.lineTo(w * 0.96, h); ctx.closePath();
-  g = ctx.createLinearGradient(0, h * 0.75, 0, h);
-  g.addColorStop(0, '#20232c'); g.addColorStop(1, '#07080b');
-  ctx.fillStyle = g; ctx.fill();
-  ctx.clip();
-  for (const [z, sd, kk] of refl) {
-    const q = 1 - z / 3.5, ry = h * 0.76 + q * h * 0.26, rx = cx - sd * w * (0.08 + q * 0.3);
-    ctx.fillStyle = kk % 2 ? color : '#ffd9a0'; ctx.globalAlpha = 0.45 * q;
-    ctx.beginPath(); ctx.ellipse(rx, ry, w * 0.09 * (1 + q), h * 0.012 * (1 + q * 2), sd * 0.25, 0, TAU); ctx.fill();
-  }
-  ctx.globalAlpha = 0.5; ctx.strokeStyle = '#8890a8'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(w * 0.2, h * 0.8); ctx.quadraticCurveTo(cx, h * 0.74, w * 0.8, h * 0.8); ctx.stroke();
-  ctx.restore();
-  ctx.globalAlpha = 1;
-}
-
 // Golfinhos: dois golfinhos pixelados saltando sincronizados num mar de ondas vetoriais
 const DOLPHIN = [
   '...........##.......',
@@ -675,52 +567,6 @@ function dolphins(ctx, w, h, t, color) {
       for (let q = 0; q < 8; q++) ctx.fillRect(x + (q - 4) * px * 1.5, sea + dy - Math.abs(Math.sin(q * 1.7 + t * 9)) * h * 0.08, px, px);
     }
   }
-}
-
-// Travessia no rio: capô do 4x4 rasgando a água, com "asas" de água e o reflexo dos faróis
-function river(ctx, w, h, t, color) {
-  const hz = h * 0.36, cx = w / 2;
-  ctx.fillStyle = '#03050a'; ctx.fillRect(0, 0, w, hz);
-  ctx.fillStyle = '#05080a';                                         // mata da outra margem
-  ctx.beginPath(); ctx.moveTo(0, hz);
-  for (let x = 0; x <= w; x += 8) ctx.lineTo(x, hz - h * (0.06 + 0.05 * Math.abs(Math.sin(x * 0.05)) + 0.03 * Math.sin(x * 0.17)));
-  ctx.lineTo(w, hz); ctx.fill();
-  const g = ctx.createLinearGradient(0, hz, 0, h);
-  g.addColorStop(0, '#051018'); g.addColorStop(1, '#0b2533');
-  ctx.fillStyle = g; ctx.fillRect(0, hz, w, h - hz);
-  for (let r = 1; r < 22; r++) {                                     // marolas em perspectiva
-    const z = r * 0.5 + 0.3 - ((t * 0.8) % 0.5), y = hz + (h * 0.95 - hz) * 0.5 / z;
-    ctx.strokeStyle = '#4f97b8'; ctx.globalAlpha = Math.min(0.5, 0.8 / z); ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let x = 0; x <= w; x += 8) { const yy = y + Math.sin(x * 0.04 / (1 + z * 0.2) + t * 3 + r) * 2 / z * 4; x ? ctx.lineTo(x, yy) : ctx.moveTo(x, yy); }
-    ctx.stroke();
-    for (const sd of [-1, 1]) {                                     // reflexo dos faróis tremendo
-      ctx.fillStyle = '#fff1c2'; ctx.globalAlpha = Math.min(0.9, 1.2 / z) * (0.5 + 0.5 * Math.sin(t * 7 + r * 1.3));
-      const rx = cx + sd * w * 0.09 / (z * 0.5 + 0.5) + Math.sin(t * 5 + r) * 4;
-      ctx.fillRect(rx - w * 0.03 / z, y - 1, w * 0.06 / z, 2);
-    }
-  }
-  ctx.globalAlpha = 1;
-  for (const sd of [-1, 1]) {                                        // luz dos faróis na correnteza
-    const lx = cx + sd * w * 0.1, ly = h * 0.56, r = h * 0.35;
-    const lg = ctx.createRadialGradient(lx, ly, 0, lx, ly, r);
-    lg.addColorStop(0, 'rgba(255, 240, 190, .35)'); lg.addColorStop(1, 'rgba(255, 240, 190, 0)');
-    ctx.fillStyle = lg; ctx.fillRect(lx - r, ly - r, 2 * r, 2 * r);
-  }
-  const bob = Math.sin(t * 3) * h * 0.015, top = h * 0.7 + bob;
-  ctx.fillStyle = '#07090c';                                         // capô
-  ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(w * 0.16, top); ctx.quadraticCurveTo(cx, top - h * 0.04, w * 0.84, top); ctx.lineTo(w, h); ctx.fill();
-  ctx.strokeStyle = color; ctx.globalAlpha = 0.7; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(w * 0.16, top); ctx.quadraticCurveTo(cx, top - h * 0.04, w * 0.84, top); ctx.stroke();
-  ctx.globalAlpha = 1;
-  for (let i = 0; i < 120; i++) {                                    // asas de água subindo pelos lados
-    const a = (t * 1.3 + i / 120) % 1, sd = i % 2 ? 1 : -1, sp = 0.6 + (i * 13 % 9) / 10;
-    const x = cx + sd * (w * 0.3 + a * w * 0.25 * sp), y = top + h * 0.02 - (a * 1.8 - a * a * 1.8) * h * 0.75 * sp;
-    ctx.fillStyle = i % 5 ? '#bfe3ff' : '#ffffff'; ctx.globalAlpha = (1 - a) * 0.8;
-    const s = 2 + (1 - a) * 5;
-    ctx.fillRect(x, y, s, s);
-  }
-  ctx.globalAlpha = 1;
 }
 
 // Bússola giroscópica: o mostrador balança procurando a direção e, ao travar no Norte, pulsa
@@ -829,72 +675,14 @@ function camp(ctx, w, h, t, color) {
   ctx.globalAlpha = 1;
 }
 
-// Visão térmica: estrada à noite com as cores de uma câmera térmica; o carro à frente esquenta
-const HEAT = ['#07031a', '#24095a', '#5a168f', '#b0196a', '#ef4b22', '#ffb300', '#fff7d6'];
-function heat(v) {
-  v = Math.max(0, Math.min(0.999, v)) * (HEAT.length - 1);
-  return HEAT[Math.round(v)];
-}
-function thermal(ctx, w, h, t) {
-  const hz = h * 0.45, cx = w / 2, run = t * 6;
-  ctx.fillStyle = heat(0.04); ctx.fillRect(0, 0, w, hz);
-  ctx.fillStyle = heat(0.12); ctx.fillRect(0, hz, w, h - hz);
-  const Y = z => hz + (h - hz) / z;
-  ctx.fillStyle = heat(0.25);
-  ctx.beginPath(); ctx.moveTo(cx - 3, hz); ctx.lineTo(cx + 3, hz); ctx.lineTo(cx + w * 0.8, h); ctx.lineTo(cx - w * 0.8, h); ctx.fill();
-  ctx.fillStyle = heat(0.38);
-  for (let k = 0; k < 14; k++) {
-    const a = k * 3 - (run % 3) + 1, b = a + 1.3;
-    if (a < 0.9) continue;
-    ctx.beginPath();
-    ctx.moveTo(cx - 0.01 * w / a, Y(a)); ctx.lineTo(cx + 0.01 * w / a, Y(a)); ctx.lineTo(cx + 0.01 * w / b, Y(b)); ctx.lineTo(cx - 0.01 * w / b, Y(b));
-    ctx.fill();
-  }
-  const posts = [];
-  for (let k = 0; k < 9; k++) { const z = k * 4 - (run % 4) + 1; if (z > 0.8) for (const sd of [-1, 1]) posts.push([z, sd]); }
-  posts.sort((a, b) => b[0] - a[0]);
-  for (const [z, sd] of posts) {                                      // árvores frias passando
-    const x = cx + sd * w * 0.9 / z, y = Y(z), th = h * 1.1 / z;
-    ctx.fillStyle = heat(0.16);
-    ctx.beginPath(); ctx.ellipse(x, y - th * 0.7, th * 0.22, th * 0.35, 0, 0, TAU); ctx.fill();
-    ctx.fillRect(x - th * 0.03, y - th * 0.4, th * 0.06, th * 0.4);
-  }
-  const z = 2.3 + Math.sin(t * 0.4) * 0.25, x = cx + w * 0.11 / z, y = Y(z), cw = w * 0.36 / z;
-  const body = ctx.createLinearGradient(0, y - cw * 0.7, 0, y);
-  body.addColorStop(0, heat(0.35)); body.addColorStop(1, heat(0.55));
-  ctx.fillStyle = body;
-  ctx.beginPath(); ctx.roundRect(x - cw / 2, y - cw * 0.62, cw, cw * 0.55, cw * 0.06); ctx.fill();
-  ctx.fillStyle = heat(0.3); ctx.fillRect(x - cw * 0.38, y - cw * 0.58, cw * 0.76, cw * 0.18);   // vidro traseiro (frio)
-  ctx.fillStyle = heat(0.62);
-  ctx.fillRect(x - cw * 0.48, y - cw * 0.12, cw * 0.16, cw * 0.12); ctx.fillRect(x + cw * 0.32, y - cw * 0.12, cw * 0.16, cw * 0.12);
-  const ex = x + cw * 0.28, ey = y - cw * 0.1;                         // escapamento quente
-  const hot = ctx.createRadialGradient(ex, ey, 0, ex, ey, cw * 0.35);
-  hot.addColorStop(0, '#ffffff'); hot.addColorStop(0.25, '#ffd54f'); hot.addColorStop(0.6, 'rgba(239, 75, 34, .7)'); hot.addColorStop(1, 'rgba(176, 25, 106, 0)');
-  ctx.fillStyle = hot; ctx.fillRect(ex - cw * 0.35, ey - cw * 0.35, cw * 0.7, cw * 0.7);
-  for (let i = 0; i < 6; i++) {                                        // gás quente subindo
-    const a = (t * 0.9 + i / 6) % 1;
-    ctx.fillStyle = heat(0.55 - a * 0.4); ctx.globalAlpha = (1 - a) * 0.5;
-    ctx.beginPath(); ctx.arc(ex - a * cw * 0.5, ey - a * cw * 0.4, cw * (0.05 + a * 0.12), 0, TAU); ctx.fill();
-  }
-  ctx.globalAlpha = 0.18; ctx.fillStyle = '#000';                      // linhas de varredura
-  for (let sy = 0; sy < h; sy += 3) ctx.fillRect(0, sy, w, 1);
-  ctx.globalAlpha = 1;
-  ctx.strokeStyle = '#e6e9ef'; ctx.lineWidth = 1;                       // mira e leitura
-  ctx.beginPath(); ctx.moveTo(cx - 10, h * 0.5); ctx.lineTo(cx + 10, h * 0.5); ctx.moveTo(cx, h * 0.5 - 10); ctx.lineTo(cx, h * 0.5 + 10); ctx.stroke();
-  ctx.font = `${Math.max(10, h * 0.06)}px monospace`; ctx.fillStyle = '#fff7d6'; ctx.textAlign = 'left';
-  ctx.fillText(`${(84 + Math.sin(t * 2) * 3).toFixed(1).replace('.', ',')}°C`, ex + cw * 0.3, ey - cw * 0.3);
-  const bw = w * 0.012, bx = w - bw - 8;
-  HEAT.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(bx, h * 0.15 + (HEAT.length - 1 - i) * h * 0.1, bw, h * 0.1); });
-}
-
 export const ANIMS = {
   equalizer, road, trail, night, rally, dunes, warp, topo, scope,
-  wire, rain, ocean, drone, cassette, mirror, dolphins, river, compass, camp, thermal,
+  wire, rain, ocean, drone, cassette, mirror: city, dolphins, river, compass, camp, thermal,
 };
 export const ANIM_NAMES = {
   equalizer: 'Equalizador', road: 'Estrada retrô', trail: 'Trilha', night: 'Estrada à noite', rally: 'Rali na terra',
   dunes: 'Dunas', warp: 'Hiperespaço', topo: 'Mapa topográfico', scope: 'Osciloscópio',
   wire: 'Wireframe 3D', rain: 'Chuva de dados', ocean: 'Oceano digital', drone: 'Escaneamento por drone',
-  cassette: 'Fita K7', mirror: 'Rodovia espelhada', dolphins: 'Golfinhos', river: 'Travessia no rio',
+  cassette: 'Fita K7', mirror: 'Cidade à noite', dolphins: 'Golfinhos', river: 'Pelo rio',
   compass: 'Bússola giroscópica', camp: 'Acampamento', thermal: 'Visão térmica',
 };
