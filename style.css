@@ -180,8 +180,17 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 .dest small { font-size: 1.8rem; }
 .status.nav { font-size: 2.6rem; color: var(--accent); font-weight: 600; }
 
-/* música */
-.music { flex: 1; display: flex; align-items: center; gap: 3rem; min-height: 0; padding: 0 1rem; }
+/* música: capa desfocada no fundo, em zoom lento; cor da capa nos controles (--m-accent) */
+#musicPage { overflow: hidden; border-radius: 2rem; }
+.m-bg {
+  position: absolute; inset: -6rem; background: center / cover no-repeat; opacity: 0; transition: opacity 1.5s;
+  filter: blur(4rem) brightness(.3) saturate(1.5); will-change: transform;
+  animation: mzoom 20s ease-in-out infinite alternate;
+}
+.m-bg.on { opacity: 1; }
+.m-bg.paused { animation-play-state: paused; }
+@keyframes mzoom { from { transform: scale(1.05) translate(0, 0); } to { transform: scale(1.35) translate(3%, -3%); } }
+.music { position: relative; flex: 1; display: flex; align-items: center; gap: 3rem; min-height: 0; padding: 0 1rem; }
 .m-art {
   flex: none; width: 30rem; height: 30rem; border-radius: 2rem; overflow: hidden; background: var(--panel);
   display: flex; align-items: center; justify-content: center; font-size: 12rem; color: var(--line);
@@ -191,14 +200,23 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 .m-info > b { font-size: 4.4rem; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .m-info > small { font-size: 2.6rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .m-bar { height: .8rem; border-radius: 1rem; background: var(--line); overflow: hidden; margin-top: 1rem; }
-.m-bar i { display: block; height: 100%; width: 0; background: var(--accent); }
+.m-bar i { display: block; height: 100%; width: 0; background: var(--m-accent, var(--accent)); transition: background 1s; }
 .m-time { display: flex; justify-content: space-between; font-size: 1.9rem; color: var(--muted); }
 .m-btns { display: flex; align-items: center; gap: 2.5rem; margin-top: .4rem; }
-.mbtn { width: 8rem; height: 8rem; border-radius: 50%; background: #1c2027; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-.mbtn.big { width: 9.5rem; height: 9.5rem; background: var(--accent); }
+.mbtn { width: 8rem; height: 8rem; border-radius: 50%; background: rgba(28, 32, 39, .8); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.mbtn.big { width: 9.5rem; height: 9.5rem; background: var(--m-accent, var(--accent)); transition: background 1s; }
 .mbtn svg { width: 4rem; height: 4rem; fill: var(--txt); stroke: var(--txt); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
 .mbtn.big svg { fill: #111; stroke: #111; }
 .m-dev { flex: 1; text-align: right; font-size: 1.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* vídeos com o carro andando: só no centro, laterais continuam */
+.page[data-page="video"] { overflow: hidden; border-radius: 2rem; background: #000; }
+#pgVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.v-empty { margin: auto; font-size: 2.4rem; color: var(--muted); text-align: center; padding: 0 4rem; }
+.v-song {
+  position: absolute; left: 1.5rem; bottom: 1.2rem; max-width: 80%; font-size: 2.2rem; color: #ddd;
+  text-shadow: 0 0 1.5rem #000, 0 0 .5rem #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 /* tema noite: escurece tudo, menos os alertas */
 #night { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 3s; }

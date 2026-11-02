@@ -161,7 +161,8 @@
             <div class="nav-pick-list" id="navPickList"></div>
           </div>
         </section>
-        <section class="page" data-page="music">
+        <section class="page" data-page="music" id="musicPage">
+          <div class="m-bg" id="mBg"></div>
           <div class="music">
             <div class="m-art"><img id="mArt" alt="" hidden><span id="mNoArt">♪</span></div>
             <div class="m-info">
@@ -177,6 +178,11 @@
               </div>
             </div>
           </div>
+        </section>
+        <section class="page" data-page="video">
+          <video id="pgVideo" muted playsinline></video>
+          <div class="v-empty" id="pgVideoEmpty">Nenhum vídeo salvo · adicione nas configurações (Standby)</div>
+          <div class="v-song" data-k="vSong"></div>
         </section>
       </main>
 

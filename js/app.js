@@ -16,7 +16,7 @@ const fmtInt = v => Math.round(v).toLocaleString('pt-BR');
 const hhmm = t => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 const DAY = 864e5;
 
-const PAGES = ['drive', 'engine', 'trip', 'fuel', 'trail', 'diag', 'nav', 'music'];
+const PAGES = ['drive', 'engine', 'trip', 'fuel', 'trail', 'diag', 'nav', 'music', 'video'];
 const STANDBY_ENGINE_OFF_MS = 10000;
 const TRIP_RESET_MS = 15 * 60000;       // motor desligado por mais que isso = nova viagem
 
@@ -433,7 +433,7 @@ armed($('btnNavCancel'), stopNav);
 const spot = new Spotify({ load, save });
 if (DEMO && !spot.connected) {                                  // música de mentira para testar a tela
   Object.defineProperty(spot, 'connected', { value: true });
-  spot.now = { title: 'Highway Star', artist: 'Deep Purple', art: '', playing: true, progress: 62000, duration: 368000, device: 'Moto G (demo)', at: Date.now() };
+  spot.now = { title: 'Highway Star', artist: 'Deep Purple', art: 'https://i.scdn.co/image/ab67616d00001e02ff9ca10b55ce82ae553c8228', playing: true, progress: 62000, duration: 368000, device: 'Moto G (demo)', at: Date.now() };
   spot.poll = async () => {};
   spot.control = async cmd => {
     const m = spot.now;
@@ -452,6 +452,53 @@ setInterval(() => {
 }, 1000);
 
 const mmss = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+
+// Cor mais marcante da capa: agrupa os pixels por tom, pesando os vivos e de brilho médio,
+// e devolve o tom vencedor clareado para ler bem sobre o fundo escuro ('' = capa sem cor).
+function coverColor(url) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onerror = () => resolve('');
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 24;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(img, 0, 0, 24, 24);
+      const px = g.getImageData(0, 0, 24, 24).data;
+      const bins = Array.from({ length: 12 }, () => ({ w: 0, x: 0, y: 0, s: 0 }));
+      for (let i = 0; i < px.length; i += 4) {
+        const r = px[i] / 255, gg = px[i + 1] / 255, b = px[i + 2] / 255;
+        const max = Math.max(r, gg, b), min = Math.min(r, gg, b), l = (max + min) / 2, d = max - min;
+        if (d < 0.08) continue;                                  // cinzas não contam
+        const s = d / (1 - Math.abs(2 * l - 1));
+        const h = (max === r ? ((gg - b) / d + 6) % 6 : max === gg ? (b - r) / d + 2 : (r - gg) / d + 4) * 60;
+        const w = s * (1 - Math.abs(l - 0.5) * 1.6);
+        const bin = bins[Math.floor(h / 30) % 12];
+        bin.w += w; bin.s += s * w;
+        bin.x += Math.cos(h * Math.PI / 180) * w; bin.y += Math.sin(h * Math.PI / 180) * w;
+      }
+      const best = bins.reduce((a, b) => (b.w > a.w ? b : a));
+      if (best.w < 8) { resolve(''); return; }
+      const hue = (Math.atan2(best.y, best.x) * 180 / Math.PI + 360) % 360;
+      resolve(`hsl(${Math.round(hue)} ${Math.round(Math.min(Math.max(best.s / best.w, 0.45), 0.85) * 100)}% 62%)`);
+    };
+    img.src = url;
+  });
+}
+
+function showCover(art) {
+  $('mArt').dataset.src = art;
+  $('mArt').src = art;
+  $('mBg').style.backgroundImage = art ? `url("${art}")` : '';
+  $('mBg').classList.toggle('on', !!art);
+  const st = $('musicPage').style;
+  if (!art) { st.removeProperty('--m-accent'); return; }
+  coverColor(art).then(c => {
+    if ($('mArt').dataset.src !== art) return;                   // a música já mudou
+    if (c) st.setProperty('--m-accent', c); else st.removeProperty('--m-accent');
+  });
+}
 $('mPrev').addEventListener('click', () => spot.control('prev'));
 $('mNext').addEventListener('click', () => spot.control('next'));
 $('mPlay').addEventListener('click', () => spot.control(spot.now?.playing ? 'pause' : 'play'));
@@ -530,6 +577,23 @@ $('standby').addEventListener('pointerdown', e => {
   sb.suppressUntil = performance.now() + (engineOff ? 60000 : S.standbyMin * 60000);
   exitStandby();
 });
+
+// Página Vídeos: os mesmos vídeos do standby, no centro, com o carro andando
+const pgVideo = $('pgVideo');
+function nextPageVideo() {
+  if (!videoUrls.length) return;
+  pgVideo.src = videoUrls[Math.floor(Math.random() * videoUrls.length)];
+  pgVideo.play().catch(() => {});
+}
+pgVideo.addEventListener('ended', nextPageVideo);
+pgVideo.addEventListener('error', () => setTimeout(nextPageVideo, 500));
+function pageVideo() {
+  $('pgVideoEmpty').hidden = videoUrls.length > 0;
+  const want = PAGES[page] === 'video' && !sb.on && $('settings').hidden && videoUrls.length > 0;
+  if (!want) { if (!pgVideo.paused) pgVideo.pause(); return; }
+  if (!pgVideo.getAttribute('src')) nextPageVideo();
+  else if (pgVideo.paused) pgVideo.play().catch(() => {});
+}
 
 // ---------------------------------------------------------------------------
 // Laço principal: integra dados, avalia alertas e standby, atualiza a tela
@@ -624,6 +688,7 @@ function tick() {
     (sb.stoppedSince != null && now - sb.stoppedSince > S.standbyMin * 60000));
   if (wantStandby) enterStandby();
 
+  pageVideo();
   render(d, fresh, speed, running, t);
 }
 
@@ -646,6 +711,8 @@ function render(d, fresh, speed, running, t) {
     `${date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}` +
     (wOk ? ` · ${fmt(weather.temp)}°` : '') + (isNum(v.coolantC) ? ` · motor ${fmt(v.coolantC)}°` : ''));
 
+  set('vSong', song?.playing ? `♪ ${song.title} · ${song.artist}` : '');
+
   // música
   set('mTitle', !spot.connected ? 'Spotify não conectado' : song ? song.title : 'nada tocando');
   set('mArtist', !spot.connected ? 'segure o relógio → Configurações → Spotify' : song ? song.artist : 'abra o Spotify no celular');
@@ -655,8 +722,9 @@ function render(d, fresh, speed, running, t) {
   set('mDur', song ? mmss(song.duration) : '');
   $('mProg').style.width = song?.duration ? `${pos / song.duration * 100}%` : '0';
   const art = song?.art || '';
-  if ($('mArt').dataset.src !== art) { $('mArt').dataset.src = art; $('mArt').src = art; }
+  if ($('mArt').dataset.src !== art) showCover(art);
   $('mArt').hidden = !art; $('mNoArt').hidden = !!art;
+  $('mBg').classList.toggle('paused', !song?.playing || PAGES[page] !== 'music');
   const icon = song?.playing ? 'M7 4h4v16H7zM14 4h4v16h-4z' : 'M7 4l13 8-13 8z';
   if ($('mPlayIcon').getAttribute('d') !== icon) $('mPlayIcon').setAttribute('d', icon);
 
