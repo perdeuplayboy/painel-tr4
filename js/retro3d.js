@@ -274,16 +274,17 @@ function mazeBuild() {                                               // labirint
   gl.bindBuffer(gl.ARRAY_BUFFER, M.buf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
   const sx = Math.floor(R() * N), sz = Math.floor(R() * N), o = open[sz * N + sx];
-  Object.assign(M, { N, open, n: v.length / 6, x: sx, z: sz, dir: [0, 1, 2, 3].find(d => o[d]) ?? 0, move: null, steps: 0,
+  Object.assign(M, { N, open, n: v.length / 6, x: sx, z: sz, dir: [0, 1, 2, 3].find(d => o[d]) ?? 0, move: null, steps: 0, walkNext: false,
     ex: N - 1 - sx, ez: N - 1 - sz });                               // começa num canto qualquer, sai do lado oposto
 }
 function mazeNext() {                                                // sempre com a mão direita na parede
+  if (M.walkNext) { M.walkNext = false; return { kind: 'walk', dur: 0.85, t: 0 }; }   // acabou de virar: anda
   const o = M.open[M.z * M.N + M.x];
-  for (const turn of [-1, 0, 1, 2]) {
-    const d = (M.dir + turn + 4) % 4;
-    if (!o[d]) continue;
-    if (turn) return { kind: 'turn', from: M.dir, to: M.dir + (turn === 2 ? 2 : turn), dur: turn === 2 ? 1 : 0.55, t: 0 };
-    return { kind: 'walk', dur: 0.85, t: 0 };
+  for (const turn of [1, 0, -1, 2]) {                               // direita, frente, esquerda, volta (+1 = direita)
+    if (!o[(M.dir + turn + 4) % 4]) continue;
+    if (!turn) return { kind: 'walk', dur: 0.85, t: 0 };
+    M.walkNext = true;
+    return { kind: 'turn', from: M.dir, to: M.dir + turn, dur: turn === 2 ? 1 : 0.55, t: 0 };
   }
 }
 export function maze(ctx, w, h, t) {
