@@ -258,12 +258,13 @@ function dunes(ctx, w, h, t, color) {
   for (let x = 0; x <= w + 4; x += 4) x ? ctx.lineTo(x, ground(x)) : ctx.moveTo(x, ground(x));
   ctx.stroke(); ctx.globalAlpha = 1;
 
-  const s = h / 200, cx = w * 0.36, half = 34 * s;
-  const yA = ground(cx - half), yB = ground(cx + half);
-  const jump = Math.max(0, Math.sin(t * 1.3)) ** 6;                // de tempos em tempos sai do chão
+  const s = h / 200, cx = w * 0.36, xA = cx - 30 * s, xB = cx + 32 * s;
+  const yA = ground(xA), yB = ground(xB);
+  let lift = 0;                                                      // na crista, o carro passa por cima dela
+  for (let x = xA; x <= xB; x += 2) lift = Math.max(lift, yA + (yB - yA) * (x - xA) / (xB - xA) - ground(x));
   ctx.save();
-  ctx.translate(cx, (yA + yB) / 2 - jump * h * 0.16 + Math.sin(t * 19) * s);
-  ctx.rotate(Math.atan2(yB - yA, half * 2) * (1 - jump) - 0.18 * jump * Math.cos(t * 1.3));
+  ctx.translate(cx, yA + (yB - yA) * (cx - xA) / (xB - xA) - lift + Math.sin(t * 19) * s);
+  ctx.rotate(Math.atan2(yB - yA, xB - xA));
   truck(ctx, t, color, s, '#c9a26b', 0.45);
   ctx.restore();
 }
@@ -389,47 +390,118 @@ function wire(ctx, w, h, t, color) {
   ctx.globalAlpha = 1;
 }
 
-// Chuva de dados: colunas de caracteres caindo, cabeça branca e rastro na cor
+// Chuva de dados: colunas verdes caindo; a cada ciclo a chuva vai "gravando" a palavra CAD360
+// (cada letra se acende quando a cabeça de uma coluna passa por ela), segura e depois se desfaz.
 const GLYPHS = '0123456789ABCDEFアイウエオカキクケコサシスセソタチツテト';
-let rainCols = [], rainW = 0, rainLast = 0;
-function rain(ctx, w, h, t, color) {
-  const fs = Math.max(10, h / 15), n = Math.ceil(w / fs);
-  if (rainW !== w) {
-    rainW = w;
-    rainCols = Array.from({ length: n }, () => ({ y: Math.random() * h, v: 0.5 + Math.random(), seed: Math.floor(Math.random() * 99) }));
-  }
+const RAIN_WORD = 'CAD360', RAIN_CYCLE = 18;
+let rainCols = [], rainW = 0, rainLast = Infinity, rainMask = null, rainLock = null;
+function rainSetup(w, h, fs) {
+  const n = Math.ceil(w / fs), rows = Math.ceil(h / fs);
+  rainCols = Array.from({ length: n }, () => ({ y: Math.random() * h, v: 0.5 + Math.random(), seed: Math.floor(Math.random() * 99) }));
+  const m = document.createElement('canvas');                       // a palavra numa grade do tamanho das colunas
+  m.width = n; m.height = rows;
+  const g = m.getContext('2d');
+  let size = rows * 0.62;
+  g.font = `900 ${size}px sans-serif`;
+  size = Math.min(size, size * n * 0.82 / g.measureText(RAIN_WORD).width);
+  g.font = `900 ${size}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff';
+  g.fillText(RAIN_WORD, n / 2, rows / 2);
+  const px = g.getImageData(0, 0, n, rows).data;
+  rainMask = Array.from({ length: n }, (_, i) => Array.from({ length: rows }, (_, j) => px[(j * n + i) * 4 + 3] > 110));
+  rainLock = Array.from({ length: n }, () => new Float32Array(rows).fill(-1));
+}
+function rain(ctx, w, h, t) {
+  const fs = Math.max(8, h / 22);
+  if (rainW !== w || t < rainLast) { rainW = w; rainSetup(w, h, fs); }
   const dt = Math.min(0.1, Math.max(0, t - rainLast));
   rainLast = t;
+  const p = t % RAIN_CYCLE, forming = p > 3 && p < 11, hold = p >= 11 && p < 14.5, rows = rainLock[0].length;
+  if (p < 3) rainLock.forEach(col => col.fill(-1));
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
-  ctx.font = `${fs}px monospace`; ctx.textAlign = 'center';
+  ctx.font = `${fs}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
   rainCols.forEach((c, i) => {
     c.y += c.v * fs * 9 * dt;
     if (c.y - 12 * fs > h) Object.assign(c, { y: -Math.random() * h * 0.5, v: 0.5 + Math.random() });
+    const jh = Math.floor(c.y / fs);                                 // a cabeça grava a letra por onde passa
+    if (forming && jh >= 0 && jh < rows && rainMask[i][jh] && rainLock[i][jh] < 0) rainLock[i][jh] = t;
     for (let k = 0; k < 12; k++) {
       const y = c.y - k * fs;
       if (y < -fs || y > h + fs) continue;
-      ctx.fillStyle = k ? color : '#fff';
-      ctx.globalAlpha = k ? 1 - k / 12 : 1;
+      ctx.fillStyle = k ? '#22d65a' : '#d8ffe0';
+      ctx.globalAlpha = k ? (1 - k / 12) * 0.85 : 1;
       ctx.fillText(GLYPHS[(c.seed + k * 7 + Math.floor(t * (k ? 2 : 12))) % GLYPHS.length], i * fs + fs / 2, y);
     }
   });
-  ctx.globalAlpha = 1;
+  ctx.shadowColor = '#3dff6e'; ctx.shadowBlur = fs * 0.6;
+  for (let i = 0; i < rainLock.length; i++) {
+    for (let j = 0; j < rows; j++) {
+      if (!rainMask[i][j]) continue;
+      if (hold && rainLock[i][j] < 0) rainLock[i][j] = t;          // completa o que faltou
+      const at = rainLock[i][j];
+      if (at < 0) continue;
+      const fade = p >= 14.5 ? Math.max(0, 1 - (p - 14.5) / 1.5 - ((i * 7 + j * 13) % 10) / 20) : 1;   // desfaz aos poucos
+      if (fade <= 0) continue;
+      const x = i * fs + fs / 2, y = (j + 1) * fs;
+      ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.fillRect(x - fs / 2, y - fs * 0.85, fs, fs);
+      ctx.globalAlpha = fade * Math.min(1, 0.4 + (t - at) * 3);
+      ctx.fillStyle = t - at < 0.25 ? '#ffffff' : '#9dffb4';
+      ctx.fillText(GLYPHS[(i * 3 + j * 5 + Math.floor(t * 1.5 + i)) % GLYPHS.length], x, y);
+    }
+  }
+  ctx.shadowBlur = 0; ctx.globalAlpha = 1;
 }
 
-// Oceano digital: um mar de pontos ondulando em perspectiva
+// Oceano digital: mar de pontos visto da praia. O mar de fundo e as ondas são sorteados; as ondas
+// chegam, crescem perto da praia e quebram (começando num ponto e correndo para o lado), algumas gigantes.
+let sea = null, seaLast = Infinity;
+const seaHash = n => { const s = Math.sin(n * 91.7) * 43758.5453; return s - Math.floor(s); };
 function ocean(ctx, w, h, t, color) {
+  const R = Math.random;
+  if (!sea || t < seaLast) {
+    sea = { swell: Array.from({ length: 3 }, () => ({ a: 0.05 + R() * 0.1, k: 0.6 + R() * 1.2, dir: (R() - 0.5) * 0.5, sp: 1 + R() * 1.5, ph: R() * TAU })),
+      waves: [], next: 0.3, giants: 0.1 + R() * 0.25 };
+  }
+  seaLast = t;
+  while (sea.next <= t) {                                           // próxima onda da série
+    const giant = R() < sea.giants;
+    sea.waves.push({ t0: sea.next, A: giant ? 1 + R() * 0.6 : 0.2 + R() * 0.45, x0: (R() - 0.5) * 24, ph: R() * TAU, c: 1.4 + R() * 0.6 });
+    sea.next += 2.5 + R() * 3.5 + (giant ? 2.5 : 0);
+  }
+  sea.waves = sea.waves.filter(v => 15 - v.c * (t - v.t0) > -2);
+
+  const wave = (X, z) => {
+    let y = 0, dz = 0, foam = 0;
+    for (const s of sea.swell) y += s.a * Math.sin(s.k * (z + X * s.dir) + s.sp * t + s.ph);
+    for (const v of sea.waves) {
+      const zc = 15 - v.c * (t - v.t0) + 0.35 * Math.sin(X * 0.18 + v.ph), d = z - zc;
+      if (d < -3 || d > 4) continue;
+      const zb = 1.6 + v.A * 2.2;                                   // as grandes quebram mais longe
+      const b = Math.min(1, Math.max(0, (zb - zc) * 0.9 - Math.abs(X - v.x0) * 0.06));
+      const grow = Math.min(1, Math.max(0, (15 - zc) / (15 - zb)));
+      const H = v.A * (1 + 0.8 * grow) * (1 - 0.7 * b);
+      const wf = Math.max(0.16, 0.7 - 0.52 * grow);                  // a frente fica em pé antes de quebrar
+      y += H * (d < 0 ? Math.exp(-((d / wf) ** 2)) : Math.exp(-((d / 1.3) ** 2)));
+      if (b > 0) {
+        const lip = Math.exp(-((d / 0.4) ** 2)) * Math.sin(Math.min(1, b * 1.4) * Math.PI);   // a crista é jogada para frente e cai
+        dz -= lip * H * 0.55 * b; y += lip * H * (0.35 - 0.9 * b);
+        foam = Math.max(foam, b * Math.exp(-(((d - 0.5) / 1.1) ** 2)));
+      }
+    }
+    return [y, dz, foam];
+  };
+
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
-  const hz = h * 0.2, run = (t * 1.2) % 0.35;
-  ctx.fillStyle = color;
-  for (let r = 40; r >= 1; r--) {
-    const z = r * 0.35 + 0.45 - run;
-    for (let c = -64; c <= 64; c++) {
-      const X = c * 0.5;
-      const wy = 0.35 * Math.sin(X * 0.6 + t * 1.5 + z * 0.9) + 0.25 * Math.sin(X * 0.23 - t * 0.9 + z * 1.6);
-      const x = w / 2 + X * w * 0.045 / z, y = hz + (1 - wy * 0.5) * (h - hz) * 0.7 / z;
-      if (x < -4 || x > w + 4 || y > h + 4) continue;
-      const s = Math.max(1.2, 4 / z);
-      ctx.globalAlpha = Math.min(1, 3.5 / z) * (0.6 + wy * 0.7);
+  const hz = h * 0.3, rows = 52, frame = Math.floor(t * 10);
+  for (let r = rows; r >= 1; r--) {
+    const z = 0.62 + r * 0.3, step = Math.max(0.42, z * 0.14), xmax = 11.5 * z;
+    for (let X = -xmax; X <= xmax; X += step) {
+      const [Y, dz, foam] = wave(X, z), zz = Math.max(0.3, z + dz);
+      const j = foam > 0.15 ? (seaHash(X * 7 + r * 13 + frame) - 0.5) * foam * 0.5 : 0;
+      const x = w / 2 + (X + j) * w * 0.045 / zz, y = hz + (1 - Y - Math.abs(j)) * (h - hz) * 0.85 / zz;
+      if (x < -4 || x > w + 4 || y > h + 4 || y < -4) continue;
+      const s = Math.max(1.2, h * 0.026 / zz);
+      ctx.fillStyle = foam > 0.25 ? '#f2f7ff' : color;
+      ctx.globalAlpha = Math.min(1, 3.5 / zz) * Math.min(1, 0.4 + Math.max(0, Y) * 0.6 + foam);
       ctx.fillRect(x - s / 2, y - s / 2, s, s);
     }
   }

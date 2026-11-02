@@ -134,7 +134,8 @@ void main() {
 }`;
 
 let gl = null, glCanvas = null, prog = null, count = 0, U = {}, failed = false;
-let built = 0, lastT = Infinity;                                   // até onde a nuvem já foi construída
+let built = 0, lastT = Infinity, lastSeg = -1;                     // até onde a nuvem já foi construída
+const SCAN = 24;                                                   // segundos de cada mundo escaneado
 function init() {
   glCanvas = document.createElement('canvas');
   gl = glCanvas.getContext('webgl', { antialias: false, alpha: false, preserveDrawingBuffer: true });
@@ -158,7 +159,7 @@ function init() {
   gl.disable(gl.DEPTH_TEST);
 }
 
-export function drone(ctx, w, h, t, color) {
+export function drone(ctx, w, h, tt, color) {
   if (!gl && !failed) { try { init(); } catch (e) { console.warn('lidar', e); failed = true; } }
   ctx.fillStyle = '#010307'; ctx.fillRect(0, 0, w, h);
   if (failed) return;
@@ -167,13 +168,15 @@ export function drone(ctx, w, h, t, color) {
   gl.viewport(0, 0, CW, CH);
   gl.clearColor(0.004, 0.012, 0.028, 1); gl.clear(gl.COLOR_BUFFER_BIT);
 
-  if (t < lastT) {                                                  // animação começou: mundo novo, nuvem vazia
+  const seg = Math.floor(tt / SCAN), t = tt - seg * SCAN;
+  if (tt < lastT || seg !== lastSeg) {                              // começou ou passou o tempo: mundo novo, nuvem vazia
+    lastSeg = seg;
     const data = buildCloud(Math.floor(Math.random() * 1e9));
     count = data.length / 5;
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
     built = 0;
   }
-  lastT = t;
+  lastT = tt;
   const z = t * 11, look = z + 25;
   const cx = roadX(z) * 0.85 + Math.sin(t * 0.13) * 4;               // segue a estrada, meio de lado
   const yaw = Math.atan2(roadX(look) - cx, look - z) * 0.8;
