@@ -121,8 +121,9 @@ function trail(ctx, w, h, t, color) {
   ctx.restore();
 }
 
-// 4x4 quadradão: 100 unidades de comprimento, frente para a direita, origem no chão entre as rodas
-function truck(ctx, t, color, s, dust, dustAlpha, beam = true) {
+// 4x4 quadradão: 100 unidades de comprimento, frente para a direita, origem no chão entre as rodas.
+// wheels: quanto cada roda (traseira, dianteira) desce ou sobe na suspensão, em unidades.
+function truck(ctx, t, color, s, dust, dustAlpha, beam = true, wheels = [0, 0]) {
   ctx.save();
   ctx.scale(s, s);
   ctx.translate(0, -12);
@@ -155,9 +156,10 @@ function truck(ctx, t, color, s, dust, dustAlpha, beam = true) {
   ctx.fillStyle = '#000';
   ctx.beginPath(); ctx.arc(-55, -18, 9, 0, TAU); ctx.fill(); ctx.stroke();      // estepe
 
-  for (const wx of [-30, 32]) {                                     // rodas girando
+  [-30, 32].forEach((wx, i) => {                                    // rodas girando, com amortecedor
+    ctx.beginPath(); ctx.moveTo(wx, -10); ctx.lineTo(wx, wheels[i]); ctx.stroke();
     ctx.save();
-    ctx.translate(wx, 0);
+    ctx.translate(wx, wheels[i]);
     ctx.rotate(t * 9);
     ctx.fillStyle = '#000';
     ctx.beginPath(); ctx.arc(0, 0, 13, 0, TAU); ctx.fill(); ctx.stroke();
@@ -165,7 +167,7 @@ function truck(ctx, t, color, s, dust, dustAlpha, beam = true) {
     for (let r = 0; r < 5; r++) { ctx.moveTo(0, 0); ctx.lineTo(Math.cos(r * TAU / 5) * 7, Math.sin(r * TAU / 5) * 7); }
     ctx.stroke();
     ctx.restore();
-  }
+  });
   ctx.restore();
 }
 
@@ -229,6 +231,8 @@ function night(ctx, w, h, t, color) {
 // Dunas: 4x4 saltando as cristas ao pôr do sol, levantando areia
 const dune = (x, seed, amp, base) =>
   base - amp * (0.75 * (1 - Math.abs(Math.sin(x * 0.0045 + seed))) ** 1.6 + 0.25 * Math.sin(x * 0.013 + seed * 2));
+const bumps = x => 9 * Math.sin(x * 0.035 + 1.3) + 6 * Math.sin(x * 0.07 + 0.4) + 1.5 * Math.sin(x * 0.15 + 2.1);   // costelas na areia
+let dunesCar = null;                                                  // carroceria balançando na suspensão
 function dunes(ctx, w, h, t, color) {
   const g = ctx.createLinearGradient(0, 0, 0, h);
   g.addColorStop(0, '#0c0610'); g.addColorStop(0.6, '#4a2214'); g.addColorStop(1, '#7a3a1c');
@@ -241,12 +245,12 @@ function dunes(ctx, w, h, t, color) {
   const layers = [
     { v: 10, seed: 0.5, amp: 40, base: 0.56, fill: '#3b200f' },
     { v: 30, seed: 2.5, amp: 46, base: 0.74, fill: '#26140a' },
-    { v: 90, seed: 5, amp: 40, base: 0.9, fill: '#120904' },
+    { v: 90, seed: 5, amp: 40, base: 0.88, fill: '#120904', rough: true },
   ];
   let ground = null;
   for (const L of layers) {
     const off = t * L.v * k * 3;
-    const y = x => dune((x + off) / k, L.seed, L.amp * k, h * L.base);
+    const y = x => dune((x + off) / k, L.seed, L.amp * k, h * L.base) - (L.rough ? bumps((x + off) / k) * k : 0);
     ctx.beginPath(); ctx.moveTo(0, h);
     for (let x = 0; x <= w + 4; x += 4) ctx.lineTo(x, y(x));
     ctx.lineTo(w, h); ctx.closePath();
@@ -262,10 +266,19 @@ function dunes(ctx, w, h, t, color) {
   const yA = ground(xA), yB = ground(xB);
   let lift = 0;                                                      // na crista, o carro passa por cima dela
   for (let x = xA; x <= xB; x += 2) lift = Math.max(lift, yA + (yB - yA) * (x - xA) / (xB - xA) - ground(x));
+  const ty = yA + (yB - yA) * (cx - xA) / (xB - xA) - lift, ta = Math.atan2(yB - yA, xB - xA);
+  if (!dunesCar || t < dunesCar.t) dunesCar = { t, y: ty, vy: 0, a: ta, va: 0 };
+  const c = dunesCar, dt = Math.min(0.05, t - c.t);                 // mola + amortecedor: a carroceria vai atrás das rodas
+  c.t = t;
+  for (let i = 0, d = dt / 4; i < 4; i++) {
+    c.vy += ((ty - c.y) * 320 - c.vy * 22) * d; c.y += c.vy * d;
+    c.va += ((ta - c.a) * 260 - c.va * 20) * d; c.a += c.va * d;
+  }
+  const wheel = (wx, gy) => Math.max(-12, Math.min(12, (gy - (c.y + Math.sin(c.a) * wx * s)) / s - 1));   // roda encosta no chão
   ctx.save();
-  ctx.translate(cx, yA + (yB - yA) * (cx - xA) / (xB - xA) - lift + Math.sin(t * 19) * s);
-  ctx.rotate(Math.atan2(yB - yA, xB - xA));
-  truck(ctx, t, color, s, '#c9a26b', 0.45);
+  ctx.translate(cx, c.y);
+  ctx.rotate(c.a);
+  truck(ctx, t, color, s, '#c9a26b', 0.45, true, [wheel(-30, yA), wheel(32, yB)]);
   ctx.restore();
 }
 
@@ -407,7 +420,8 @@ function rainSetup(w, h, fs) {
   g.font = `900 ${size}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff';
   g.fillText(RAIN_WORD, n / 2, rows / 2);
   const px = g.getImageData(0, 0, n, rows).data;
-  rainMask = Array.from({ length: n }, (_, i) => Array.from({ length: rows }, (_, j) => px[(j * n + i) * 4 + 3] > 110));
+  rainMask = Array.from({ length: n }, (_, i) => Array.from({ length: rows }, (_, j) => px[(j * n + i) * 4 + 3] > 20));
+  rainMask.size = size;
   rainLock = Array.from({ length: n }, () => new Float32Array(rows).fill(-1));
 }
 function rain(ctx, w, h, t) {
@@ -432,23 +446,35 @@ function rain(ctx, w, h, t) {
       ctx.fillText(GLYPHS[(c.seed + k * 7 + Math.floor(t * (k ? 2 : 12))) % GLYPHS.length], i * fs + fs / 2, y);
     }
   });
-  ctx.shadowColor = '#3dff6e'; ctx.shadowBlur = fs * 0.6;
+  ctx.save();                                                        // a palavra só aparece onde a chuva já gravou
+  ctx.beginPath();
+  let any = false;
   for (let i = 0; i < rainLock.length; i++) {
     for (let j = 0; j < rows; j++) {
       if (!rainMask[i][j]) continue;
       if (hold && rainLock[i][j] < 0) rainLock[i][j] = t;          // completa o que faltou
-      const at = rainLock[i][j];
-      if (at < 0) continue;
-      const fade = p >= 14.5 ? Math.max(0, 1 - (p - 14.5) / 1.5 - ((i * 7 + j * 13) % 10) / 20) : 1;   // desfaz aos poucos
-      if (fade <= 0) continue;
-      const x = i * fs + fs / 2, y = (j + 1) * fs;
-      ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.fillRect(x - fs / 2, y - fs * 0.85, fs, fs);
-      ctx.globalAlpha = fade * Math.min(1, 0.4 + (t - at) * 3);
-      ctx.fillStyle = t - at < 0.25 ? '#ffffff' : '#9dffb4';
-      ctx.fillText(GLYPHS[(i * 3 + j * 5 + Math.floor(t * 1.5 + i)) % GLYPHS.length], x, y);
+      if (rainLock[i][j] < 0) continue;
+      if (p >= 14.5 && (p - 14.5) / 1.5 > ((i * 7 + j * 13) % 10) / 10) continue;   // desfaz aos poucos
+      ctx.rect(i * fs, j * fs, fs, fs); any = true;
     }
   }
-  ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+  if (any) {
+    ctx.clip();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+    ctx.font = `900 ${rainMask.size * fs}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = '#3dff6e'; ctx.shadowBlur = fs * 1.2;
+    ctx.fillStyle = '#7dffa0';
+    ctx.fillText(RAIN_WORD, rainLock.length * fs / 2, rows * fs / 2);
+    ctx.shadowBlur = 0;
+    ctx.font = `${fs}px monospace`; ctx.textBaseline = 'alphabetic';     // textura de caracteres por dentro da letra
+    ctx.fillStyle = '#0a5a22'; ctx.globalAlpha = 0.45;
+    for (let i = 0; i < rainLock.length; i++) for (let j = 0; j < rows; j++) {
+      if (rainMask[i][j]) ctx.fillText(GLYPHS[(i * 3 + j * 5 + Math.floor(t * 1.5 + i)) % GLYPHS.length], i * fs + fs / 2, (j + 1) * fs - fs * 0.15);
+    }
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
 }
 
 // Oceano digital: mar de pontos visto da praia. O mar de fundo e as ondas são sorteados; as ondas
@@ -491,20 +517,27 @@ function ocean(ctx, w, h, t, color) {
   };
 
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
-  const hz = h * 0.3, rows = 52, frame = Math.floor(t * 10);
+  const hz = h * 0.3, rows = 90, frame = Math.floor(t * 10);
+  const buckets = Array.from({ length: 16 }, () => []);              // 8 brilhos x (água, espuma): desenha em lotes
   for (let r = rows; r >= 1; r--) {
-    const z = 0.62 + r * 0.3, step = Math.max(0.42, z * 0.14), xmax = 11.5 * z;
+    const z = 0.62 + r * 0.175, step = Math.max(0.26, z * 0.085), xmax = 11.5 * z;
     for (let X = -xmax; X <= xmax; X += step) {
       const [Y, dz, foam] = wave(X, z), zz = Math.max(0.3, z + dz);
       const j = foam > 0.15 ? (seaHash(X * 7 + r * 13 + frame) - 0.5) * foam * 0.5 : 0;
       const x = w / 2 + (X + j) * w * 0.045 / zz, y = hz + (1 - Y - Math.abs(j)) * (h - hz) * 0.85 / zz;
       if (x < -4 || x > w + 4 || y > h + 4 || y < -4) continue;
-      const s = Math.max(1.2, h * 0.026 / zz);
-      ctx.fillStyle = foam > 0.25 ? '#f2f7ff' : color;
-      ctx.globalAlpha = Math.min(1, 3.5 / zz) * Math.min(1, 0.4 + Math.max(0, Y) * 0.6 + foam);
-      ctx.fillRect(x - s / 2, y - s / 2, s, s);
+      const a = Math.min(1, 3.5 / zz) * Math.min(1, 0.4 + Math.max(0, Y) * 0.6 + foam);
+      const s = Math.max(1, h * 0.02 / zz);
+      buckets[(foam > 0.25 ? 8 : 0) + Math.min(7, Math.floor(a * 8))].push(x - s / 2, y - s / 2, s);
     }
   }
+  buckets.forEach((b, i) => {
+    if (!b.length) return;
+    ctx.fillStyle = i >= 8 ? '#f2f7ff' : color; ctx.globalAlpha = ((i % 8) + 0.5) / 8;
+    ctx.beginPath();
+    for (let k = 0; k < b.length; k += 3) ctx.rect(b[k], b[k + 1], b[k + 2], b[k + 2]);
+    ctx.fill();
+  });
   ctx.globalAlpha = 1;
 }
 
