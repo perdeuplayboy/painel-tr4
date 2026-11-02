@@ -1,10 +1,10 @@
 // Guarda o app no celular para funcionar sem internet (trilha, garagem).
 // Ao mudar qualquer arquivo do app, suba a versão para o celular baixar de novo.
-const VERSION = 'painel-tr4-v7';
+const VERSION = 'painel-tr4-v8';
 const TILES = 'painel-tr4-mapa';          // pedaços do mapa já vistos (sobrevive às versões)
 const FILES = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
-  'js/app.js', 'js/obd.js', 'js/store.js', 'js/nav.js', 'js/spotify.js', 'js/vendor/qrcode.js',
+  'js/app.js', 'js/obd.js', 'js/store.js', 'js/nav.js', 'js/spotify.js', 'js/player.js', 'js/anims.js', 'js/vendor/qrcode.js',
   'enviar.html', 'enviar.webmanifest', 'js/enviar.js',
   'icons/icon-192.png', 'icons/icon-512.png',
 ];

@@ -24,6 +24,8 @@ export const DEFAULTS = {
   theme: 'auto',            // 'auto' (pelo pôr do sol) | 'day' | 'night'
   nightDim: 45,             // % de escurecimento à noite
   spotifyClient: '',        // Client ID do app criado em developer.spotify.com
+  anims: true,              // animações retrô entram na lista do standby/página Vídeos
+  clipSec: 25,              // segundos de cada GIF ou animação
 };
 
 // Intervalos de partida para a TR4 2.0 flex em uso misto; confira no manual e ajuste.

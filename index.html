@@ -179,9 +179,8 @@
             </div>
           </div>
         </section>
-        <section class="page" data-page="video">
-          <video id="pgVideo" muted playsinline></video>
-          <div class="v-empty" id="pgVideoEmpty">Nenhum vídeo salvo · adicione nas configurações (Standby)</div>
+        <section class="page" data-page="video" id="videoPage">
+          <div class="v-empty" id="pgVideoEmpty">Nada para tocar · adicione vídeos ou GIFs, ou ligue as animações (Configurações → Standby)</div>
           <div class="v-song" data-k="vSong"></div>
         </section>
       </main>
@@ -196,7 +195,6 @@
     </div>
 
     <div id="standby" hidden>
-      <video id="sbVideo" muted playsinline></video>
       <div class="sb-clock" id="sbClock"><b data-k="time">--:--</b><small data-k="sbLine">--</small></div>
     </div>
 
@@ -272,14 +270,16 @@
   </section>
 
   <section>
-    <h3>Standby com vídeos</h3>
+    <h3>Standby e página Vídeos</h3>
     <label>Minutos parado com motor ligado <input id="sStandbyMin" type="number" step="1" min="1" inputmode="numeric"></label>
-    <p class="muted">Com o motor desligado o standby entra em 10 segundos. Toque na tela para sair.</p>
+    <p class="muted">Com o motor desligado o standby entra em 10 segundos. Toque na tela para sair. Os mesmos vídeos, GIFs e animações tocam na página Vídeos com o carro andando.</p>
     <div class="row">
-      <label class="pill file">Adicionar vídeos<input id="sVideos" type="file" accept="video/*" multiple hidden></label>
-      <button id="btnClearVideos" class="pill warn">Apagar vídeos</button>
+      <label class="pill file">Adicionar vídeos ou GIFs<input id="sVideos" type="file" accept="video/*,image/gif,image/webp" multiple hidden></label>
+      <button id="btnClearVideos" class="pill warn">Apagar vídeos e GIFs</button>
       <span id="videoInfo" class="muted"></span>
     </div>
+    <label class="check"><input id="sAnims" type="checkbox"> Incluir animações retrô (equalizador, estrada, trilha)</label>
+    <label>Tempo de cada GIF ou animação (s) <input id="sClipSec" type="number" step="5" min="5" inputmode="numeric"></label>
     <div class="row"><button id="btnStandbyNow" class="pill">Ver standby agora</button></div>
   </section>
 

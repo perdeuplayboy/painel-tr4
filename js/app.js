@@ -4,6 +4,8 @@ import {
 import { loadSettings, loadUpkeep, load, save, addVideos, listVideos, clearVideos } from './store.js';
 import { MapView, Navigator, geocode, distM, fmtDist, arrowPath, arrowChar } from './nav.js';
 import { Spotify } from './spotify.js';
+import { Player } from './player.js';
+import { ANIMS } from './anims.js';
 
 const $ = id => document.getElementById(id);
 const S = loadSettings();
@@ -532,23 +534,26 @@ async function reloadVideos() {
   videoUrls.forEach(u => URL.revokeObjectURL(u));
   videos = await listVideos();
   videoUrls = videos.map(v => URL.createObjectURL(v.blob));
-  $('videoInfo').textContent = videos.length ? `${videos.length} vídeo(s) salvos` : 'nenhum vídeo';
+  const gifs = videos.filter(v => v.blob.type.startsWith('image/')).length;
+  $('videoInfo').textContent = videos.length ? `${videos.length - gifs} vídeo(s) e ${gifs} GIF(s) salvos` : 'nenhum vídeo ou GIF';
 }
+
+// lista para tocar: seus vídeos e GIFs, mais as animações retrô (se ligadas)
+const mediaItems = () => [
+  ...videos.map((v, i) => ({ kind: v.blob.type.startsWith('image/') ? 'image' : 'video', url: videoUrls[i] })),
+  ...(S.anims ? Object.keys(ANIMS).map(anim => ({ kind: 'anim', anim })) : []),
+];
+const playerOpts = {
+  clipMs: () => Math.max(5, S.clipSec) * 1000,
+  color: () => $('musicPage').style.getPropertyValue('--m-accent') || '#ffb020',
+};
 
 const sb = { on: false, forced: false, engineOffSince: null, stoppedSince: null, suppressUntil: 0, moveTimer: 0 };
-const sbVideo = $('sbVideo');
-sbVideo.addEventListener('ended', playNextVideo);
-sbVideo.addEventListener('error', playNextVideo);
-
-function playNextVideo() {
-  if (!sb.on || !videoUrls.length) return;
-  sbVideo.src = videoUrls[Math.floor(Math.random() * videoUrls.length)];
-  sbVideo.play().catch(() => {});
-}
+const sbPlayer = new Player($('standby'), mediaItems, playerOpts);
 
 function moveStandbyClock() {
   const c = $('sbClock');
-  if (videoUrls.length) { c.style.left = c.style.top = ''; return; }
+  if (!sbPlayer.empty) { c.style.left = c.style.top = ''; return; }
   c.style.left = rand(28, 75) + 'rem';                       // relógio passeando: evita marcar a tela
   c.style.top = rand(8, 20) + 'rem';
 }
@@ -557,17 +562,17 @@ function enterStandby(forced = false) {
   if (sb.on) return;
   sb.on = true; sb.forced = forced;
   $('standby').hidden = false;
-  $('standby').classList.toggle('novideo', !videoUrls.length);
+  $('standby').classList.toggle('novideo', sbPlayer.empty);
   moveStandbyClock();
   sb.moveTimer = setInterval(moveStandbyClock, 20000);
-  playNextVideo();
+  sbPlayer.start();
 }
 
 function exitStandby() {
   if (!sb.on) return;
   sb.on = false; sb.forced = false;
   clearInterval(sb.moveTimer);
-  sbVideo.pause(); sbVideo.removeAttribute('src'); sbVideo.load();
+  sbPlayer.stop();
   $('standby').hidden = true;
 }
 
@@ -578,21 +583,12 @@ $('standby').addEventListener('pointerdown', e => {
   exitStandby();
 });
 
-// Página Vídeos: os mesmos vídeos do standby, no centro, com o carro andando
-const pgVideo = $('pgVideo');
-function nextPageVideo() {
-  if (!videoUrls.length) return;
-  pgVideo.src = videoUrls[Math.floor(Math.random() * videoUrls.length)];
-  pgVideo.play().catch(() => {});
-}
-pgVideo.addEventListener('ended', nextPageVideo);
-pgVideo.addEventListener('error', () => setTimeout(nextPageVideo, 500));
+// Página Vídeos: a mesma lista do standby, no centro, com o carro andando
+const pgPlayer = new Player($('videoPage'), mediaItems, playerOpts);
 function pageVideo() {
-  $('pgVideoEmpty').hidden = videoUrls.length > 0;
-  const want = PAGES[page] === 'video' && !sb.on && $('settings').hidden && videoUrls.length > 0;
-  if (!want) { if (!pgVideo.paused) pgVideo.pause(); return; }
-  if (!pgVideo.getAttribute('src')) nextPageVideo();
-  else if (pgVideo.paused) pgVideo.play().catch(() => {});
+  $('pgVideoEmpty').hidden = !pgPlayer.empty;
+  if (PAGES[page] === 'video' && !sb.on && $('settings').hidden) pgPlayer.start(); else pgPlayer.stop();
+  if (pgPlayer.on && !pgPlayer.cur && !pgPlayer.empty) pgPlayer.next();     // lista era vazia e ganhou itens
 }
 
 // ---------------------------------------------------------------------------
@@ -871,6 +867,7 @@ const FIELDS = {
   sRollLimit: 'rollLimit', sPitchLimit: 'pitchLimit',
   sScreenW: 'screenW', sOffX: 'offX', sOffY: 'offY', sMask: 'mask', sOutline: 'outline',
   sVoice: 'voice', sTheme: 'theme', sNightDim: 'nightDim', sSpotifyId: 'spotifyClient',
+  sAnims: 'anims', sClipSec: 'clipSec',
 };
 
 function renderSpotifySettings() {

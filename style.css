@@ -211,7 +211,6 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 
 /* vídeos com o carro andando: só no centro, laterais continuam */
 .page[data-page="video"] { overflow: hidden; border-radius: 2rem; background: #000; }
-#pgVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .v-empty { margin: auto; font-size: 2.4rem; color: var(--muted); text-align: center; padding: 0 4rem; }
 .v-song {
   position: absolute; left: 1.5rem; bottom: 1.2rem; max-width: 80%; font-size: 2.2rem; color: #ddd;
@@ -230,7 +229,7 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 
 /* ---- standby ---- */
 #standby { position: absolute; inset: 0; background: #000; }
-#standby video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+#standby .media, #videoPage .media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .sb-clock {
   position: absolute; right: 24rem; bottom: 4rem; text-align: right;
   text-shadow: 0 0 1.5rem #000, 0 0 .5rem #000; transition: left 3s ease, top 3s ease;
