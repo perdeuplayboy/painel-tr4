@@ -20,6 +20,9 @@ export class Player {
 
   start() { if (!this.on) { this.on = true; this.next(); } }
 
+  // começa por um item escolhido (ex.: "ver" uma animação nas configurações)
+  show(item) { this.on = true; this.next(item); }
+
   stop() {
     if (!this.on) return;
     this.on = false;
@@ -37,15 +40,15 @@ export class Player {
     this.video.hidden = this.img.hidden = this.canvas.hidden = true;
   }
 
-  next() {
+  next(chosen) {
     if (!this.on) return;
     this.clear();
     const list = this.items();
-    if (!list.length) { this.cur = null; return; }
+    if (!chosen && !list.length) { this.cur = null; return; }
     let i = Math.floor(Math.random() * list.length);
     if (list.length > 1 && i === this.last) i = (i + 1) % list.length;   // não repete o mesmo seguido
     this.last = i;
-    const it = this.cur = list[i];
+    const it = this.cur = chosen || list[i];
     if (it.kind === 'video') {
       this.video.hidden = false;
       this.video.src = it.url;
@@ -59,6 +62,8 @@ export class Player {
 
   animate(draw) {
     const c = this.canvas, ctx = c.getContext('2d'), t0 = performance.now();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, c.width, c.height);                               // sem sobra da animação anterior
     let lastFrame = 0;
     const frame = now => {
       this.raf = requestAnimationFrame(frame);

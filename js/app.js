@@ -5,7 +5,7 @@ import { loadSettings, loadUpkeep, load, save, addVideos, listVideos, clearVideo
 import { MapView, Navigator, geocode, distM, fmtDist, arrowPath, arrowChar } from './nav.js';
 import { Spotify } from './spotify.js';
 import { Player } from './player.js';
-import { ANIMS } from './anims.js';
+import { ANIMS, ANIM_NAMES } from './anims.js';
 
 const $ = id => document.getElementById(id);
 const S = loadSettings();
@@ -541,7 +541,7 @@ async function reloadVideos() {
 // lista para tocar: seus vídeos e GIFs, mais as animações retrô (se ligadas)
 const mediaItems = () => [
   ...videos.map((v, i) => ({ kind: v.blob.type.startsWith('image/') ? 'image' : 'video', url: videoUrls[i] })),
-  ...(S.anims ? Object.keys(ANIMS).map(anim => ({ kind: 'anim', anim })) : []),
+  ...(S.anims ? Object.keys(ANIMS).filter(a => !S.animOff.includes(a)).map(anim => ({ kind: 'anim', anim })) : []),
 ];
 const playerOpts = {
   clipMs: () => Math.max(5, S.clipSec) * 1000,
@@ -558,14 +558,14 @@ function moveStandbyClock() {
   c.style.top = rand(8, 20) + 'rem';
 }
 
-function enterStandby(forced = false) {
+function enterStandby(forced = false, first = null) {
   if (sb.on) return;
   sb.on = true; sb.forced = forced;
   $('standby').hidden = false;
-  $('standby').classList.toggle('novideo', sbPlayer.empty);
+  $('standby').classList.toggle('novideo', sbPlayer.empty && !first);
   moveStandbyClock();
   sb.moveTimer = setInterval(moveStandbyClock, 20000);
-  sbPlayer.start();
+  if (first) sbPlayer.show(first); else sbPlayer.start();
 }
 
 function exitStandby() {
@@ -870,6 +870,26 @@ const FIELDS = {
   sAnims: 'anims', sClipSec: 'clipSec',
 };
 
+function renderAnims() {
+  $('animList').replaceChildren(...Object.entries(ANIM_NAMES).map(([id, name]) => {
+    const label = document.createElement('label');
+    label.className = 'check';
+    const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !S.animOff.includes(id) });
+    box.addEventListener('change', () => {
+      S.animOff = box.checked ? S.animOff.filter(a => a !== id) : [...S.animOff, id];
+      saveSettings();
+    });
+    const see = Object.assign(document.createElement('button'), { className: 'pill', textContent: 'ver' });
+    see.addEventListener('click', e => {
+      e.preventDefault();
+      closeSettings();
+      enterStandby(true, { kind: 'anim', anim: id });
+    });
+    label.append(box, ` ${name}`, see);
+    return label;
+  }));
+}
+
 function renderSpotifySettings() {
   $('spotifyRedirect').textContent = spot.redirect;
   $('btnSpotify').textContent = spot.connected ? 'Desconectar Spotify' : 'Conectar Spotify';
@@ -977,7 +997,7 @@ function openSettings() {
   }
   $('log').textContent = logLines.join('\n');
   $('sOdo').value = isNum(odo) ? Math.round(odo) : '';
-  renderNavSettings(); renderUpkeep(); renderTrips(); renderSpotifySettings();
+  renderNavSettings(); renderUpkeep(); renderTrips(); renderSpotifySettings(); renderAnims();
   updateSettingsInfo();
   $('settings').hidden = false;
   exitStandby();

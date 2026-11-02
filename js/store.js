@@ -26,6 +26,7 @@ export const DEFAULTS = {
   spotifyClient: '',        // Client ID do app criado em developer.spotify.com
   anims: true,              // animações retrô entram na lista do standby/página Vídeos
   clipSec: 25,              // segundos de cada GIF ou animação
+  animOff: [],              // animações desligadas uma a uma
 };
 
 // Intervalos de partida para a TR4 2.0 flex em uso misto; confira no manual e ajuste.
