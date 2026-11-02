@@ -403,84 +403,79 @@ function wire(ctx, w, h, t, color) {
   ctx.globalAlpha = 1;
 }
 
-// Chuva de dados: colunas verdes caindo; a cada ciclo a chuva vai "gravando" a palavra CAD360
-// (cada letra se acende quando a cabeça de uma coluna passa por ela), segura e depois se desfaz.
-const GLYPHS = '0123456789ABCDEFアイウエオカキクケコサシスセソタチツテト';
-const RAIN_WORD = 'CAD360', RAIN_CYCLE = 18;
-let rainCols = [], rainW = 0, rainLast = Infinity, rainMask = null, rainLock = null;
-function rainSetup(w, h, fs) {
-  const n = Math.ceil(w / fs), rows = Math.ceil(h / fs);
-  rainCols = Array.from({ length: n }, () => ({ y: Math.random() * h, v: 0.5 + Math.random(), seed: Math.floor(Math.random() * 99) }));
-  const m = document.createElement('canvas');                       // a palavra numa grade do tamanho das colunas
-  m.width = n; m.height = rows;
-  const g = m.getContext('2d');
-  let size = rows * 0.62;
-  g.font = `900 ${size}px sans-serif`;
-  size = Math.min(size, size * n * 0.82 / g.measureText(RAIN_WORD).width);
-  g.font = `900 ${size}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff';
-  g.fillText(RAIN_WORD, n / 2, rows / 2);
-  const px = g.getImageData(0, 0, n, rows).data;
-  rainMask = Array.from({ length: n }, (_, i) => Array.from({ length: rows }, (_, j) => px[(j * n + i) * 4 + 3] > 20));
-  rainMask.size = size;
-  rainLock = Array.from({ length: n }, () => new Float32Array(rows).fill(-1));
+// Chuva de dados: código verde caindo, no estilo do filme. A cada ciclo a chuva vai desenhando o logo
+// da CAD360 (mapa, alfinete e letras): cada caractere fica mais claro onde o logo é mais forte.
+const GLYPHS = '0123456789ABCDEFZアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホ';
+const RAIN_CYCLE = 20;
+const logoImg = Object.assign(new Image(), { src: 'img/cad360.webp' });
+let rain$ = null, rainLast = Infinity;
+function glyphAtlas(cw, fs, color, glow) {                          // caracteres pré-desenhados (espelhados)
+  const c = Object.assign(document.createElement('canvas'), { width: Math.ceil(cw * GLYPHS.length), height: Math.ceil(fs * 1.25) });
+  const g = c.getContext('2d');
+  g.font = `${fs}px monospace`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = color; g.shadowColor = glow; g.shadowBlur = fs * 0.35;
+  [...GLYPHS].forEach((ch, i) => {
+    g.save(); g.translate(i * cw + cw / 2, c.height / 2); g.scale(-1, 1); g.fillText(ch, 0, 0); g.restore();
+  });
+  return c;
+}
+function rainSetup(w, h) {
+  const fs = Math.max(6, h / 38), cw = fs * 0.62, cols = Math.ceil(w / cw), rows = Math.ceil(h / fs);
+  const logo = new Float32Array(cols * rows);
+  if (logoImg.complete && logoImg.naturalWidth) {                   // logo deitado: ícone à esquerda, letras à direita
+    const m = Object.assign(document.createElement('canvas'), { width: cols, height: rows }), g = m.getContext('2d');
+    const sx = 1 / cw, sy = 1 / fs, H = h * 0.84, iconW = H * 575 / 520, textH = H * 0.6, textW = textH * 1125 / 309;
+    const k = Math.min(1, w * 0.9 / (iconW + H * 0.12 + textW)), x0 = (w - (iconW + H * 0.12 + textW) * k) / 2;
+    g.scale(sx, sy);
+    g.drawImage(logoImg, 275, 5, 575, 520, x0, (h - H * k) / 2, iconW * k, H * k);
+    g.drawImage(logoImg, 0, 614, 1125, 309, x0 + (iconW + H * 0.12) * k, (h - textH * k) / 2, textW * k, textH * k);
+    const px = g.getImageData(0, 0, cols, rows).data;
+    for (let i = 0; i < cols * rows; i++) {
+      const lum = (px[i * 4] * 0.3 + px[i * 4 + 1] * 0.59 + px[i * 4 + 2] * 0.11) / 255;
+      logo[i] = px[i * 4 + 3] / 255 * Math.min(1, Math.max(0, (1 - lum) * 1.4 - 0.1));
+    }
+  }
+  rain$ = { w, h, fs, cw, cols, rows, logo, ready: logo.some(v => v > 0), shown: new Float32Array(cols * rows).fill(-1),
+    heads: Array.from({ length: cols }, () => ({ y: Math.random() * rows, v: 6 + Math.random() * 10, len: 8 + Math.random() * 16 })),
+    green: glyphAtlas(cw, fs, '#4dff7c', '#00ff55'), white: glyphAtlas(cw, fs, '#eafff0', '#9dffb4') };
 }
 function rain(ctx, w, h, t) {
-  const fs = Math.max(8, h / 22);
-  if (rainW !== w || t < rainLast) { rainW = w; rainSetup(w, h, fs); }
-  const dt = Math.min(0.1, Math.max(0, t - rainLast));
+  if (!rain$ || rain$.w !== w || rain$.h !== h || t < rainLast || (!rain$.ready && logoImg.complete && logoImg.naturalWidth)) rainSetup(w, h);
+  const R = rain$, dt = Math.min(0.1, Math.max(0, t - rainLast));
   rainLast = t;
-  const p = t % RAIN_CYCLE, forming = p > 3 && p < 11, hold = p >= 11 && p < 14.5, rows = rainLock[0].length;
-  if (p < 3) rainLock.forEach(col => col.fill(-1));
+  const p = t % RAIN_CYCLE, forming = p > 2 && p < 10, melt = p > 17 ? (p - 17) / 2.5 : 0;
+  if (p < 2) R.shown.fill(-1);
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
-  ctx.font = `${fs}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-  rainCols.forEach((c, i) => {
-    c.y += c.v * fs * 9 * dt;
-    if (c.y - 12 * fs > h) Object.assign(c, { y: -Math.random() * h * 0.5, v: 0.5 + Math.random() });
-    const jh = Math.floor(c.y / fs);                                 // a cabeça grava a letra por onde passa
-    if (forming && jh >= 0 && jh < rows && rainMask[i][jh] && rainLock[i][jh] < 0) rainLock[i][jh] = t;
-    for (let k = 0; k < 12; k++) {
-      const y = c.y - k * fs;
-      if (y < -fs || y > h + fs) continue;
-      ctx.fillStyle = k ? '#22d65a' : '#d8ffe0';
-      ctx.globalAlpha = k ? (1 - k / 12) * 0.85 : 1;
-      ctx.fillText(GLYPHS[(c.seed + k * 7 + Math.floor(t * (k ? 2 : 12))) % GLYPHS.length], i * fs + fs / 2, y);
-    }
-  });
-  ctx.save();                                                        // a palavra só aparece onde a chuva já gravou
-  ctx.beginPath();
-  let any = false;
-  for (let i = 0; i < rainLock.length; i++) {
-    for (let j = 0; j < rows; j++) {
-      if (!rainMask[i][j]) continue;
-      if (hold && rainLock[i][j] < 0) rainLock[i][j] = t;          // completa o que faltou
-      if (rainLock[i][j] < 0) continue;
-      if (p >= 14.5 && (p - 14.5) / 1.5 > ((i * 7 + j * 13) % 10) / 10) continue;   // desfaz aos poucos
-      ctx.rect(i * fs, j * fs, fs, fs); any = true;
+  const gh = R.green.height, cw = R.cw;
+  for (let i = 0; i < R.cols; i++) {
+    const hd = R.heads[i];
+    hd.y += hd.v * dt;
+    if (hd.y - hd.len > R.rows) Object.assign(hd, { y: -Math.random() * 40, v: 6 + Math.random() * 10, len: 6 + Math.random() * 12 });
+    const head = Math.floor(hd.y);
+    for (let j = 0; j < R.rows; j++) {
+      const c = j * R.cols + i, d = head - j;
+      const trail = d >= 0 && d < hd.len ? 1 - d / hd.len : 0;
+      if (forming && d === 0 && R.logo[c] > 0.05 && R.shown[c] < 0) R.shown[c] = t;   // a cabeça da coluna grava o logo
+      if (p >= 10 && p < 17 && R.shown[c] < 0 && R.logo[c] > 0.05) R.shown[c] = t;      // completa o que faltou
+      let logo = 0;
+      if (R.shown[c] >= 0 && R.logo[c] > 0) {
+        const gone = melt > 0 && melt > ((i * 7 + j * 3) % 11) / 11 + (R.rows - j) / R.rows * 0.3;   // escorre de baixo para cima
+        if (!gone) logo = R.logo[c] * (0.75 + 0.25 * Math.sin(t * 2.3 + i * 0.7 + j * 1.3)) * Math.min(1, (t - R.shown[c]) * 4);
+      }
+      const b = Math.max(trail * trail * 0.38, logo);
+      if (b < 0.04) continue;
+      const atlas = d === 0 || (logo > 0 && t - R.shown[c] < 0.15) ? R.white : R.green;
+      const g = (i * 13 + j * 7 + Math.floor(t * (logo > 0 ? 1.2 : 6) + i * 0.37)) % GLYPHS.length;
+      ctx.globalAlpha = Math.min(1, b + trail * logo * 0.4);
+      ctx.drawImage(atlas, g * cw, 0, cw, gh, i * cw, j * R.fs - (gh - R.fs) / 2, cw, gh);
     }
   }
-  if (any) {
-    ctx.clip();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
-    ctx.font = `900 ${rainMask.size * fs}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.shadowColor = '#3dff6e'; ctx.shadowBlur = fs * 1.2;
-    ctx.fillStyle = '#7dffa0';
-    ctx.fillText(RAIN_WORD, rainLock.length * fs / 2, rows * fs / 2);
-    ctx.shadowBlur = 0;
-    ctx.font = `${fs}px monospace`; ctx.textBaseline = 'alphabetic';     // textura de caracteres por dentro da letra
-    ctx.fillStyle = '#0a5a22'; ctx.globalAlpha = 0.45;
-    for (let i = 0; i < rainLock.length; i++) for (let j = 0; j < rows; j++) {
-      if (rainMask[i][j]) ctx.fillText(GLYPHS[(i * 3 + j * 5 + Math.floor(t * 1.5 + i)) % GLYPHS.length], i * fs + fs / 2, (j + 1) * fs - fs * 0.15);
-    }
-  }
-  ctx.restore();
   ctx.globalAlpha = 1;
 }
 
 // Oceano digital: mar de pontos visto da praia. O mar de fundo e as ondas são sorteados; as ondas
-// chegam, crescem perto da praia e quebram (começando num ponto e correndo para o lado), algumas gigantes.
+// chegam e crescem perto da praia, algumas pequenas e outras gigantes.
 let sea = null, seaLast = Infinity;
-const seaHash = n => { const s = Math.sin(n * 91.7) * 43758.5453; return s - Math.floor(s); };
 function ocean(ctx, w, h, t, color) {
   const R = Math.random;
   if (!sea || t < seaLast) {
@@ -490,50 +485,40 @@ function ocean(ctx, w, h, t, color) {
   seaLast = t;
   while (sea.next <= t) {                                           // próxima onda da série
     const giant = R() < sea.giants;
-    sea.waves.push({ t0: sea.next, A: giant ? 1 + R() * 0.6 : 0.2 + R() * 0.45, x0: (R() - 0.5) * 24, ph: R() * TAU, c: 1.4 + R() * 0.6 });
+    sea.waves.push({ t0: sea.next, A: giant ? 1 + R() * 0.6 : 0.2 + R() * 0.45, ph: R() * TAU, c: 1.4 + R() * 0.6 });
     sea.next += 2.5 + R() * 3.5 + (giant ? 2.5 : 0);
   }
   sea.waves = sea.waves.filter(v => 15 - v.c * (t - v.t0) > -2);
 
   const wave = (X, z) => {
-    let y = 0, dz = 0, foam = 0;
+    let y = 0;
     for (const s of sea.swell) y += s.a * Math.sin(s.k * (z + X * s.dir) + s.sp * t + s.ph);
     for (const v of sea.waves) {
       const zc = 15 - v.c * (t - v.t0) + 0.35 * Math.sin(X * 0.18 + v.ph), d = z - zc;
       if (d < -3 || d > 4) continue;
-      const zb = 1.6 + v.A * 2.2;                                   // as grandes quebram mais longe
-      const b = Math.min(1, Math.max(0, (zb - zc) * 0.9 - Math.abs(X - v.x0) * 0.06));
-      const grow = Math.min(1, Math.max(0, (15 - zc) / (15 - zb)));
-      const H = v.A * (1 + 0.8 * grow) * (1 - 0.7 * b);
-      const wf = Math.max(0.16, 0.7 - 0.52 * grow);                  // a frente fica em pé antes de quebrar
-      y += H * (d < 0 ? Math.exp(-((d / wf) ** 2)) : Math.exp(-((d / 1.3) ** 2)));
-      if (b > 0) {
-        const lip = Math.exp(-((d / 0.4) ** 2)) * Math.sin(Math.min(1, b * 1.4) * Math.PI);   // a crista é jogada para frente e cai
-        dz -= lip * H * 0.55 * b; y += lip * H * (0.35 - 0.9 * b);
-        foam = Math.max(foam, b * Math.exp(-(((d - 0.5) / 1.1) ** 2)));
-      }
+      const grow = Math.min(1, Math.max(0, (15 - zc) / 11));         // cresce chegando perto e some na areia
+      const H = v.A * (1 + 0.8 * grow) * Math.min(1, Math.max(0, zc / 1.5));
+      y += H * (d < 0 ? Math.exp(-((d / 0.6) ** 2)) : Math.exp(-((d / 1.3) ** 2)));
     }
-    return [y, dz, foam];
+    return y;
   };
 
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
-  const hz = h * 0.3, rows = 90, frame = Math.floor(t * 10);
-  const buckets = Array.from({ length: 16 }, () => []);              // 8 brilhos x (água, espuma): desenha em lotes
+  const hz = h * 0.3, rows = 90;
+  const buckets = Array.from({ length: 8 }, () => []);               // 8 brilhos: desenha em lotes
   for (let r = rows; r >= 1; r--) {
     const z = 0.62 + r * 0.175, step = Math.max(0.26, z * 0.085), xmax = 11.5 * z;
     for (let X = -xmax; X <= xmax; X += step) {
-      const [Y, dz, foam] = wave(X, z), zz = Math.max(0.3, z + dz);
-      const j = foam > 0.15 ? (seaHash(X * 7 + r * 13 + frame) - 0.5) * foam * 0.5 : 0;
-      const x = w / 2 + (X + j) * w * 0.045 / zz, y = hz + (1 - Y - Math.abs(j)) * (h - hz) * 0.85 / zz;
+      const Y = wave(X, z), x = w / 2 + X * w * 0.045 / z, y = hz + (1 - Y) * (h - hz) * 0.85 / z;
       if (x < -4 || x > w + 4 || y > h + 4 || y < -4) continue;
-      const a = Math.min(1, 3.5 / zz) * Math.min(1, 0.4 + Math.max(0, Y) * 0.6 + foam);
-      const s = Math.max(1, h * 0.02 / zz);
-      buckets[(foam > 0.25 ? 8 : 0) + Math.min(7, Math.floor(a * 8))].push(x - s / 2, y - s / 2, s);
+      const a = Math.min(1, 3.5 / z) * Math.min(1, 0.4 + Math.max(0, Y) * 0.6);
+      const s = Math.max(1, h * 0.02 / z);
+      buckets[Math.min(7, Math.floor(a * 8))].push(x - s / 2, y - s / 2, s);
     }
   }
   buckets.forEach((b, i) => {
     if (!b.length) return;
-    ctx.fillStyle = i >= 8 ? '#f2f7ff' : color; ctx.globalAlpha = ((i % 8) + 0.5) / 8;
+    ctx.fillStyle = color; ctx.globalAlpha = (i + 0.5) / 8;
     ctx.beginPath();
     for (let k = 0; k < b.length; k += 3) ctx.rect(b[k], b[k + 1], b[k + 2], b[k + 2]);
     ctx.fill();

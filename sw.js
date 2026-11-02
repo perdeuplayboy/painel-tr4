@@ -6,7 +6,7 @@ const FILES = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
   'js/app.js', 'js/obd.js', 'js/store.js', 'js/nav.js', 'js/spotify.js', 'js/player.js', 'js/anims.js', 'js/lidar.js', 'js/vendor/qrcode.js',
   'enviar.html', 'enviar.webmanifest', 'js/enviar.js',
-  'icons/icon-192.png', 'icons/icon-512.png',
+  'img/cad360.webp', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 
 self.addEventListener('install', e => {
