@@ -1,6 +1,6 @@
 // Guarda o app no celular para funcionar sem internet (trilha, garagem).
 // Ao mudar qualquer arquivo do app, suba a versão para o celular baixar de novo.
-const VERSION = 'painel-tr4-v2';
+const VERSION = 'painel-tr4-v3';
 const FILES = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
   'js/app.js', 'js/obd.js', 'js/store.js',

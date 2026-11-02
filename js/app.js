@@ -147,6 +147,7 @@ $('status').addEventListener('pointerdown', e => {
 // ---------------------------------------------------------------------------
 // Estado da viagem, consumo por combustível e saúde da bateria (persistidos)
 let trip = load('trip', null) || emptyTrip();
+if (!(trip.maxSpeed < 250)) trip = emptyTrip();      // descarta viagem corrompida pela simulação antiga
 const fuelStats = load('fuelStats', { gasolina: { km: 0, l: 0 }, etanol: { km: 0, l: 0 } });
 let lastRunningAt = load('lastRunningAt', 0);
 let batt = load('batt', { restV: NaN, crankV: NaN, at: 0 });

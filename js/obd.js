@@ -50,7 +50,7 @@ export function deriveAndIntegrate(d, trip, dtMs, fuel, displacementL = 2.0, ve 
   }
   const dtH = dtMs / 3600000;
   let dKm = 0, dL = 0;
-  if (!Number.isNaN(d.speedKmh)) {
+  if (!Number.isNaN(d.speedKmh) && d.speedKmh < 250) {          // ignora leitura absurda
     dKm = d.speedKmh * dtH;
     trip.distanceKm += dKm;
     if (d.speedKmh > trip.maxSpeed) trip.maxSpeed = d.speedKmh;
@@ -106,7 +106,8 @@ export class MockSource {
 
   update() {
     const now = performance.now();
-    const dt = (now - this.last) / 1000;
+    // com a tela apagada o Chrome segura o timer; não deixa o salto de tempo virar física
+    const dt = Math.min((now - this.last) / 1000, 0.5);
     this.last = now;
     const d = this.d;
     d.obdStd = 'OBD-II (CARB)'; d.vin = '9BRTR4SIMULACAO01';
