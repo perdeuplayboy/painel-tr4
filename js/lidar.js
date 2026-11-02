@@ -10,7 +10,7 @@ function ground(x, z) {
   const hills = 5 * Math.sin(2 * F * z + x * 0.05) + 3.5 * Math.sin(5 * F * z - x * 0.09 + 1) +
     1.8 * Math.sin(11 * F * z + x * 0.21 + 2) + 0.6 * Math.sin(x * 0.7 + z * 0.4);
   const side = Math.min(1, Math.max(0, (d - 5) / 14));             // estrada plana, morros fora dela
-  const wall = Math.max(0, d - 38) ** 1.5 * 0.12;                   // serra nas pontas
+  const wall = Math.max(0, d - 40) ** 1.5 * 0.05;                   // serra nas pontas
   return swell(z) + (hills + 4) * side * side + wall;
 }
 
@@ -58,7 +58,7 @@ function buildCloud() {
 
 const VS = `
 attribute vec3 pos; attribute float kind; attribute float seed;
-uniform vec3 cam; uniform vec2 rot; uniform float pitch, fy, aspect, px, time;
+uniform vec3 cam; uniform vec2 rot; uniform float pitch, fy, aspect, px, time, front, beam;
 varying vec3 vCol; varying float vA;
 vec3 turbo(float x) {
   x = clamp(x, 0.0, 1.0);
@@ -70,23 +70,23 @@ vec3 turbo(float x) {
 }
 void main() {
   vec3 p = vec3(pos.x - cam.x, pos.y - cam.y, mod(pos.z - cam.z + 30.0, ${L}.0) - 30.0);
-  float horiz = length(p.xz);
   vec3 c = vec3(p.x * rot.x - p.z * rot.y, p.y, p.x * rot.y + p.z * rot.x);
   float cp = cos(pitch), sp = sin(pitch);
   float zc = -c.y * sp + c.z * cp, yc = c.y * cp + c.z * sp;
   gl_Position = vec4(c.x * fy / aspect, yc * fy, 0.0, zc);
-  float fog = 1.0 - smoothstep(70.0, 215.0, zc);
+  float fog = 1.0 - smoothstep(60.0, 150.0, zc);
   float near = smoothstep(1.5, 8.0, zc);
   float h = (pos.y + 2.0) / 26.0;
   vec3 col = turbo(0.08 + h * 0.85);
   if (kind == 1.0) col = vec3(0.32, 0.36, 0.42);
   if (kind == 2.0) col = vec3(1.0, 0.95, 0.8);
-  float ring = mod(time * 55.0, 240.0);                           // pulso do escaneamento
-  float band = exp(-pow((horiz - ring) / 2.5, 2.0)) * (1.0 - ring / 240.0);
+  float built = front - p.z;                                       // só existe o que o laser já varreu
+  float fresh = exp(-built / 1.2);                                 // recém-escaneado brilha e assenta
+  float laser = exp(-pow((p.z - beam) / 0.7, 2.0));                // a faixa do laser agora
   float flick = 0.85 + 0.15 * sin(seed * 91.0 + time * 4.0);
-  vCol = col * flick + vec3(0.7, 0.95, 1.0) * band * 1.4;
-  vA = fog * near * (kind == 3.0 ? 0.95 : 0.75);
-  gl_PointSize = zc > 0.5 ? clamp(px * 0.42 / zc, 1.0, 5.0) : 0.0;
+  vCol = mix(col * flick, vec3(0.8, 1.0, 1.0), fresh * 0.3) + vec3(1.0, 0.15, 0.2) * laser * 2.0;
+  vA = fog * near * (kind == 3.0 ? 0.95 : 0.75) * (0.7 + fresh * 0.4 + laser * 1.5);
+  gl_PointSize = zc > 0.5 && built > 0.0 ? clamp(px * 0.42 / zc * (1.0 + fresh * 0.6), 1.0, 6.0) : 0.0;
 }`;
 const FS = `
 precision mediump float;
@@ -98,6 +98,7 @@ void main() {
 }`;
 
 let gl = null, glCanvas = null, prog = null, count = 0, U = {}, failed = false;
+let built = 0, lastT = Infinity;                                   // até onde a nuvem já foi construída
 function init() {
   glCanvas = document.createElement('canvas');
   gl = glCanvas.getContext('webgl', { antialias: false, alpha: false, preserveDrawingBuffer: true });
@@ -119,7 +120,7 @@ function init() {
     gl.enableVertexAttribArray(loc);
     gl.vertexAttribPointer(loc, n, gl.FLOAT, false, 20, off * 4);
   });
-  for (const u of ['cam', 'rot', 'pitch', 'fy', 'aspect', 'px', 'time']) U[u] = gl.getUniformLocation(prog, u);
+  for (const u of ['cam', 'rot', 'pitch', 'fy', 'aspect', 'px', 'time', 'front', 'beam']) U[u] = gl.getUniformLocation(prog, u);
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE);         // pontos somam brilho
   gl.disable(gl.DEPTH_TEST);
 }
@@ -140,14 +141,46 @@ export function drone(ctx, w, h, t, color) {
   const cy = Math.max(ground(cx, z), swell(z)) + alt;
   gl.uniform3f(U.cam, cx, cy, z);
   gl.uniform2f(U.rot, Math.cos(yaw), Math.sin(yaw));
-  gl.uniform1f(U.pitch, 0.3 + Math.sin(t * 0.17) * 0.04);
+  const pitch = 0.3 + Math.sin(t * 0.17) * 0.04;
+  gl.uniform1f(U.pitch, pitch);
   gl.uniform1f(U.fy, 1 / Math.tan(0.36));
   gl.uniform1f(U.aspect, W / H);
   gl.uniform1f(U.px, H);
   gl.uniform1f(U.time, t);
+  // o laser vai e volta à frente do drone; quando passa além do já varrido, constrói mais nuvem
+  const reach = 4 + 116 * (0.5 - 0.5 * Math.cos(t * Math.PI * 2 / 9));
+  if (t < lastT) built = z;                                         // animação começou: nuvem vazia
+  lastT = t;
+  built = Math.max(built, z + reach);
+  gl.uniform1f(U.front, built - z);
+  gl.uniform1f(U.beam, reach);
   gl.drawArrays(gl.POINTS, 0, count);
   ctx.drawImage(glCanvas, 0, 0, w, h);
+  laserLine(ctx, w, h, { cx, cy, z, yaw, pitch }, z + reach);
   hud(ctx, w, h, t, color, alt, yaw);
+}
+
+// mesma projeção do shader, para desenhar a linha do laser no chão
+function laserLine(ctx, w, h, cam, zz) {
+  const cr = Math.cos(cam.yaw), sr = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  const fy = 1 / Math.tan(0.36), fx = fy * h / w;
+  const pts = [];
+  for (let x = -75; x <= 75; x += 1.5) {
+    const px = x - cam.cx, py = ground(x, zz) - cam.cy, pz = zz - cam.z;
+    const X = px * cr - pz * sr, Z = px * sr + pz * cr;
+    const zc = -py * sp + Z * cp, yc = py * cp + Z * sp;
+    if (zc > 0.5) pts.push([w / 2 + X * fx / zc * w / 2, h / 2 - yc * fy / zc * h / 2]);
+  }
+  if (pts.length < 2) return;
+  const fade = 1 - Math.min(1, Math.max(0, (zz - cam.z - 60) / 90));
+  const top = [w / 2, -h * 0.15];                                     // o drone fica logo acima da tela
+  ctx.fillStyle = '#ff2a3a'; ctx.globalAlpha = 0.07 * fade;           // leque do laser
+  ctx.beginPath(); ctx.moveTo(...top); pts.forEach(p => ctx.lineTo(...p)); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#ff3b48'; ctx.lineWidth = 2; ctx.globalAlpha = 0.9 * fade;
+  ctx.shadowColor = '#ff2a3a'; ctx.shadowBlur = 10;
+  ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(...p) : ctx.moveTo(...p)); ctx.stroke();
+  ctx.strokeStyle = '#ffd6da'; ctx.lineWidth = 0.8; ctx.shadowBlur = 0; ctx.stroke();
+  ctx.globalAlpha = 1;
 }
 
 function hud(ctx, w, h, t, color, alt, yaw) {
