@@ -435,3 +435,75 @@ export function maze(ctx, w, h, t) {
   gl.drawArrays(gl.TRIANGLES, M.walls, M.n - M.walls);
   ctx.drawImage(M.canvas, 0, 0, w, h);
 }
+
+// ---------- Caixa de flores 3D ----------
+// cubo de faces quadriculadas que se transforma numa "flor" pontuda e volta, girando e quicando pela tela
+let F = null;
+function flowerReset() {
+  const R = Math.random, pal = [...PIPE_COLORS].sort(() => R() - 0.5);
+  Object.assign(F, {
+    faces: Array.from({ length: 6 }, (_, i) => [pal[i % pal.length], pal[(i + 3) % pal.length]]),   // duas cores por face, em xadrez
+    petals: 3 + Math.floor(R() * 4), wav: 2 + Math.floor(R() * 3), morph: 0.25 + R() * 0.25,
+    spin: [0.6 + R() * 0.8, 0.4 + R() * 0.8, 0.2 + R() * 0.5], pos: [0, 0], vel: [(R() < 0.5 ? -1 : 1) * (1.2 + R()), (R() < 0.5 ? -1 : 1) * (0.6 + R() * 0.6)],
+  });
+}
+export function flowerbox(ctx, w, h, t) {
+  if (!F) {
+    try {
+      const G = makeGL(PIPE_VS, PIPE_FS, [['pos', 3], ['nrm', 3], ['col', 3]]);
+      F = G ? { ...G, last: Infinity, buf: G.gl.createBuffer() } : { failed: true };
+    } catch (e) { console.warn('caixa de flores', e); F = { failed: true }; }
+  }
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+  if (F.failed) return;
+  const gl = F.gl, aspect = fit(F, ctx);
+  if (t < F.last) flowerReset();
+  const dt = Math.min(0.2, Math.max(0, t - F.last));
+  F.last = t;
+  const D = 5.2, half = Math.tan(0.36) * D, lim = [half * aspect - 1.9, Math.max(0.1, half - 1.5)];   // quica nas bordas da tela
+  for (const i of [0, 1]) {
+    F.pos[i] += F.vel[i] * dt;
+    if (Math.abs(F.pos[i]) > lim[i]) { F.pos[i] = Math.sign(F.pos[i]) * lim[i]; F.vel[i] *= -1; }
+  }
+  const s = F.morph * (0.5 - 0.5 * Math.cos(t * 0.7)), N = 8;      // 0 = cubo, máximo = flor
+  const [ax, ay, az] = F.spin.map(v => v * t);
+  const rot = p => {
+    let [x, y, z] = p;
+    [y, z] = [y * Math.cos(ax) - z * Math.sin(ax), y * Math.sin(ax) + z * Math.cos(ax)];
+    [x, z] = [x * Math.cos(ay) + z * Math.sin(ay), -x * Math.sin(ay) + z * Math.cos(ay)];
+    [x, y] = [x * Math.cos(az) - y * Math.sin(az), x * Math.sin(az) + y * Math.cos(az)];
+    return [x + F.pos[0], y + F.pos[1], z];
+  };
+  const shape = (a, b, c) => {                                       // ponto da face do cubo → ponto da flor
+    const l = Math.hypot(a, b, c), th = Math.atan2(b, a), ph = Math.acos(c / l);
+    const r = 1.25 * (1 + s * 1.6 * Math.cos(F.petals * th) * Math.sin(F.wav * ph) ** 2);
+    const k = s / F.morph;
+    return rot([a + (a / l * r - a) * k, b + (b / l * r - b) * k, c + (c / l * r - c) * k]);
+  };
+  const axes = [[0, 1, 2, 1], [0, 1, 2, -1], [1, 2, 0, 1], [1, 2, 0, -1], [2, 0, 1, 1], [2, 0, 1, -1]];
+  const v = [];
+  axes.forEach(([iu, iv, iw, sg], f) => {
+    const P = (i, j) => { const p = [0, 0, 0]; p[iu] = (i / N * 2 - 1) * sg; p[iv] = j / N * 2 - 1; p[iw] = sg; return shape(...p); };
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      const col = F.faces[f][(i + j) % 2], a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1);
+      for (const tri of [[a, b, c], [a, c, d]]) {
+        const u = tri[1].map((x, k) => x - tri[0][k]), q = tri[2].map((x, k) => x - tri[0][k]);
+        let n = [u[1] * q[2] - u[2] * q[1], u[2] * q[0] - u[0] * q[2], u[0] * q[1] - u[1] * q[0]];
+        const l = Math.hypot(...n) || 1; n = n.map(x => x / l);
+        const cx = (tri[0][0] + tri[1][0] + tri[2][0]) / 3 - F.pos[0], cy = (tri[0][1] + tri[1][1] + tri[2][1]) / 3 - F.pos[1], cz = (tri[0][2] + tri[1][2] + tri[2][2]) / 3;
+        if (n[0] * cx + n[1] * cy + n[2] * cz < 0) n = n.map(x => -x);   // normal sempre para fora
+        for (const p of tri) v.push(...p, ...n, ...col);
+      }
+    }
+  });
+  gl.bindBuffer(gl.ARRAY_BUFFER, F.buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.DYNAMIC_DRAW);
+  F.bind();
+  const eye = [0, 0, D];
+  gl.uniformMatrix4fv(F.u('mvp'), false, mul(perspective(0.72, aspect, 0.5, 50), lookAt(eye, [0, 0, 0], [0, 1, 0])));
+  gl.uniform3f(F.u('eye'), ...eye);
+  gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+  gl.drawArrays(gl.TRIANGLES, 0, v.length / 9);
+  ctx.drawImage(F.canvas, 0, 0, w, h);
+}

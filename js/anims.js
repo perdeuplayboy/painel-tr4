@@ -3,7 +3,7 @@
 // A cor é a da música tocando ou o laranja do painel.
 
 import { drone } from './lidar.js';
-import { pipes, maze } from './retro3d.js';
+import { pipes, maze, flowerbox } from './retro3d.js';
 
 const TAU = Math.PI * 2;
 
@@ -742,12 +742,12 @@ function camp(ctx, w, h, t, color) {
 
 export const ANIMS = {
   equalizer, road, trail, night, dunes, warp, topo, scope,
-  pipes, maze, rain, ocean, drone, cassette, dolphins, compass, camp,
+  pipes, maze, flowerbox, rain, ocean, drone, cassette, dolphins, compass, camp,
 };
 export const ANIM_NAMES = {
   equalizer: 'Equalizador', road: 'Estrada retrô', trail: 'Trilha', night: 'Estrada à noite',
   dunes: 'Dunas', warp: 'Hiperespaço', topo: 'Mapa topográfico', scope: 'Osciloscópio',
-  pipes: 'Canos 3D', maze: 'Labirinto de tijolos', rain: 'Chuva de dados', ocean: 'Oceano digital', drone: 'Escaneamento por drone',
+  pipes: 'Canos 3D', maze: 'Labirinto de tijolos', flowerbox: 'Caixa de flores 3D', rain: 'Chuva de dados', ocean: 'Oceano digital', drone: 'Escaneamento por drone',
   cassette: 'Fita K7', dolphins: 'Golfinhos',
   compass: 'Bússola giroscópica', camp: 'Acampamento',
 };
