@@ -4,7 +4,7 @@ const VERSION = 'painel-tr4-v14';
 const TILES = 'painel-tr4-mapa';          // pedaços do mapa já vistos (sobrevive às versões)
 const FILES = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
-  'js/app.js', 'js/obd.js', 'js/store.js', 'js/nav.js', 'js/spotify.js', 'js/player.js', 'js/anims.js', 'js/lidar.js', 'js/scene3d.js', 'js/vendor/qrcode.js',
+  'js/app.js', 'js/obd.js', 'js/store.js', 'js/nav.js', 'js/spotify.js', 'js/player.js', 'js/anims.js', 'js/lidar.js', 'js/vendor/qrcode.js',
   'enviar.html', 'enviar.webmanifest', 'js/enviar.js',
   'icons/icon-192.png', 'icons/icon-512.png',
 ];

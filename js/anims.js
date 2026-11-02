@@ -3,7 +3,6 @@
 // A cor é a da música tocando ou o laranja do painel.
 
 import { drone } from './lidar.js';
-import { rally, thermal, city } from './scene3d.js';
 
 const TAU = Math.PI * 2;
 
@@ -676,13 +675,13 @@ function camp(ctx, w, h, t, color) {
 }
 
 export const ANIMS = {
-  equalizer, road, trail, night, rally, dunes, warp, topo, scope,
-  wire, rain, ocean, drone, cassette, mirror: city, dolphins, compass, camp, thermal,
+  equalizer, road, trail, night, dunes, warp, topo, scope,
+  wire, rain, ocean, drone, cassette, dolphins, compass, camp,
 };
 export const ANIM_NAMES = {
-  equalizer: 'Equalizador', road: 'Estrada retrô', trail: 'Trilha', night: 'Estrada à noite', rally: 'Rali na terra',
+  equalizer: 'Equalizador', road: 'Estrada retrô', trail: 'Trilha', night: 'Estrada à noite',
   dunes: 'Dunas', warp: 'Hiperespaço', topo: 'Mapa topográfico', scope: 'Osciloscópio',
   wire: 'Wireframe 3D', rain: 'Chuva de dados', ocean: 'Oceano digital', drone: 'Escaneamento por drone',
-  cassette: 'Fita K7', mirror: 'Cidade à noite', dolphins: 'Golfinhos',
-  compass: 'Bússola giroscópica', camp: 'Acampamento', thermal: 'Visão térmica',
+  cassette: 'Fita K7', dolphins: 'Golfinhos',
+  compass: 'Bússola giroscópica', camp: 'Acampamento',
 };
