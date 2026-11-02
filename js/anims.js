@@ -740,14 +740,28 @@ function camp(ctx, w, h, t, color) {
   ctx.globalAlpha = 1;
 }
 
+// Brilho ciano: vídeo retrô em loop (veio pronto), desenhado no canvas como as outras animações
+const glowVideo = Object.assign(document.createElement('video'), { src: 'videos/brilho-ciano.webm', muted: true, loop: true, playsInline: true });
+let glowStop = 0;
+function glow(ctx, w, h) {
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+  if (glowVideo.paused) glowVideo.play().catch(() => {});
+  clearTimeout(glowStop);
+  glowStop = setTimeout(() => glowVideo.pause(), 500);             // parou de desenhar: pausa o vídeo
+  const vw = glowVideo.videoWidth, vh = glowVideo.videoHeight;
+  if (!vw || glowVideo.readyState < 2) return;
+  const s = Math.max(w / vw, h / vh);                               // preenche a faixa, cortando o que sobrar
+  ctx.drawImage(glowVideo, (w - vw * s) / 2, (h - vh * s) / 2, vw * s, vh * s);
+}
+
 export const ANIMS = {
   equalizer, road, trail, night, dunes, warp, topo, scope,
-  pipes, maze, flowerbox, rain, ocean, drone, cassette, dolphins, compass, camp,
+  pipes, maze, flowerbox, rain, ocean, drone, cassette, dolphins, compass, camp, glow,
 };
 export const ANIM_NAMES = {
   equalizer: 'Equalizador', road: 'Estrada retrô', trail: 'Trilha', night: 'Estrada à noite',
   dunes: 'Dunas', warp: 'Hiperespaço', topo: 'Mapa topográfico', scope: 'Osciloscópio',
   pipes: 'Canos 3D', maze: 'Labirinto de tijolos', flowerbox: 'Caixa de flores 3D', rain: 'Chuva de dados', ocean: 'Oceano digital', drone: 'Escaneamento por drone',
   cassette: 'Fita K7', dolphins: 'Golfinhos',
-  compass: 'Bússola giroscópica', camp: 'Acampamento',
+  compass: 'Bússola giroscópica', camp: 'Acampamento', glow: 'Brilho ciano',
 };
