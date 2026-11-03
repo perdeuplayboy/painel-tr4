@@ -96,7 +96,8 @@ function pipeAdd(v) {
 }
 const cellPos = (c) => [c[0] - (P.NX - 1) / 2, c[1] - (P.NY - 1) / 2, c[2] - (P.NZ - 1) / 2];
 function cylinder(a, b, r, col) {                                    // tubo reto entre dois centros de célula
-  const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) || 1;   // direção unitária (trechos de qualquer tamanho)
+  const d = [(b[0] - a[0]) / len, (b[1] - a[1]) / len, (b[2] - a[2]) / len];
   const u = Math.abs(d[1]) > 0.5 ? [1, 0, 0] : [0, 1, 0];
   const p = [d[1] * u[2] - d[2] * u[1], d[2] * u[0] - d[0] * u[2], d[0] * u[1] - d[1] * u[0]];
   const q = [d[1] * p[2] - d[2] * p[1], d[2] * p[0] - d[0] * p[2], d[0] * p[1] - d[1] * p[0]];
@@ -118,31 +119,57 @@ function sphere(o, r, col) {                                         // bola da 
   }
   return v;
 }
+// cada cano entra por uma borda da tela e, quando termina, sai por outra: começo e fim ficam fora do quadro
+const FAR = 12;                                                      // quanto o cano se estende para fora da grade
+const outward = c => [c[0] === 0 && 1, c[0] === P.NX - 1 && 0, c[1] === 0 && 3, c[1] === P.NY - 1 && 2].filter(d => d !== false);
+const outside = (c, d) => { const p = cellPos(c); return [p[0] + DIRS[d][0] * FAR, p[1] + DIRS[d][1] * FAR, p[2] + DIRS[d][2] * FAR]; };
+const idx = c => c[0] + P.NX * (c[1] + P.NY * c[2]);
 function pipeStart() {
-  const free = [];
-  for (let i = 0; i < P.used.length; i++) if (!P.used[i]) free.push(i);
-  if (free.length < P.used.length * 0.45) return null;              // cheio: hora de limpar
-  const id = free[Math.floor(Math.random() * free.length)];
-  const c = [id % P.NX, Math.floor(id / P.NX) % P.NY, Math.floor(id / (P.NX * P.NY))];
-  P.used[id] = 1;
-  const pipe = { c, dir: -1, col: PIPE_COLORS[Math.floor(Math.random() * PIPE_COLORS.length)], left: 25 + Math.floor(Math.random() * 70) };
-  pipeAdd(sphere(cellPos(c), P.rad * 1.5, pipe.col));
+  let free = 0;
+  for (let i = 0; i < P.used.length; i++) if (!P.used[i]) free++;
+  if (free < P.used.length * 0.45) return null;                     // cheio: hora de limpar
+  const edge = [];                                                   // casas livres nas bordas da tela (não na frente/fundo)
+  for (let z = 0; z < P.NZ; z++) for (let y = 0; y < P.NY; y++) for (let x = 0; x < P.NX; x++) {
+    const c = [x, y, z];
+    if (!P.used[idx(c)] && outward(c).length) edge.push(c);
+  }
+  if (!edge.length) return null;
+  const c = edge[Math.floor(Math.random() * edge.length)], o = outward(c)[0];
+  P.used[idx(c)] = 1;
+  const pipe = { c, dir: o ^ 1, col: PIPE_COLORS[Math.floor(Math.random() * PIPE_COLORS.length)], left: 25 + Math.floor(Math.random() * 70) };
+  pipeAdd(cylinder(outside(c, o), cellPos(c), P.rad, pipe.col));     // vem de fora da tela
   P.started++;
   return pipe;
 }
 function pipeStep(pipe) {
-  if (--pipe.left < 0) return false;                                 // cano termina e outro começa
-  const idx = c => c[0] + P.NX * (c[1] + P.NY * c[2]);
+  const leaving = --pipe.left < 0;                                   // hora de terminar: procura a borda e sai
   const ok = d => {
     const n = [pipe.c[0] + DIRS[d][0], pipe.c[1] + DIRS[d][1], pipe.c[2] + DIRS[d][2]];
     return n[0] >= 0 && n[1] >= 0 && n[2] >= 0 && n[0] < P.NX && n[1] < P.NY && n[2] < P.NZ && !P.used[idx(n)];
   };
   let d = pipe.dir;
-  if (d < 0 || !ok(d) || Math.random() < P.turn) {                    // vira de vez em quando ou quando bate
+  if (leaving) {
+    const out = outward(pipe.c);
+    if (out.length) {                                                // está na borda: sai da tela e termina
+      const od = out.includes(d) ? d : out[0];
+      if (od !== d) pipeAdd(sphere(cellPos(pipe.c), P.rad * 1.5, pipe.col));
+      pipeAdd(cylinder(cellPos(pipe.c), outside(pipe.c, od), P.rad, pipe.col));
+      return false;
+    }
+    const opts = [0, 1, 2, 3, 4, 5].filter(ok);
+    if (!opts.length) return false;                                  // encurralado: termina ali mesmo
+    const edgeDist = k => {
+      const n = [pipe.c[0] + DIRS[k][0], pipe.c[1] + DIRS[k][1]];
+      return Math.min(n[0], P.NX - 1 - n[0], n[1], P.NY - 1 - n[1]) + (k === d ? -0.5 : 0);   // em linha reta se der
+    };
+    const nd = opts.reduce((a, k) => edgeDist(k) < edgeDist(a) ? k : a);
+    if (nd !== d) pipeAdd(sphere(cellPos(pipe.c), P.rad * 1.5, pipe.col));
+    d = nd;
+  } else if (!ok(d) || Math.random() < P.turn) {                     // vira de vez em quando ou quando bate
     const opts = [0, 1, 2, 3, 4, 5].filter(k => ok(k) && k !== d);
-    if (!opts.length) { if (d >= 0 && ok(d)) opts.push(d); else return false; }
+    if (!opts.length) { if (ok(d)) opts.push(d); else return false; }
     const nd = opts[Math.floor(Math.random() * opts.length)];
-    if (d >= 0 && nd !== d) pipeAdd(sphere(cellPos(pipe.c), P.rad * 1.5, pipe.col));
+    if (nd !== d) pipeAdd(sphere(cellPos(pipe.c), P.rad * 1.5, pipe.col));
     d = nd;
   }
   const next = [pipe.c[0] + DIRS[d][0], pipe.c[1] + DIRS[d][1], pipe.c[2] + DIRS[d][2]];
