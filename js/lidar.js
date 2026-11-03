@@ -233,6 +233,7 @@ export function drone(ctx, w, h, tt, color) {
   gl.viewport(0, 0, CW, CH);
   gl.clearColor(0.004, 0.012, 0.028, 1); gl.clear(gl.COLOR_BUFFER_BIT);
 
+  if (tt >= SCAN && tt >= lastT) return true;                      // um mundo inteiro por vez: avisa o player que acabou
   const seg = Math.floor(tt / SCAN), t = tt - seg * SCAN;
   if (tt < lastT || seg !== lastSeg) {                              // começou ou passou o tempo: mundo novo, nuvem vazia
     lastSeg = seg;
@@ -265,6 +266,8 @@ export function drone(ctx, w, h, tt, color) {
   laserLine(ctx, w, h, { cx, cy, z, yaw, pitch }, z + reach);
   hud(ctx, w, h, t, color, alt, yaw);
 }
+
+drone.untilDone = true;                                            // no standby vai até o fim do mundo escaneado, não por tempo
 
 // mesma projeção do shader, para desenhar a linha do laser no chão
 function laserLine(ctx, w, h, cam, zz) {
