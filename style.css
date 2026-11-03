@@ -154,6 +154,9 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 
 /* navegação */
 #map { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 2rem; }
+/* mapa inclinado: deitado para trás a partir da borda de baixo, como a visão de navegação do celular */
+.page[data-page="nav"] { overflow: hidden; border-radius: 2rem; }
+#map.tilt { inset: auto; left: -35%; width: 170%; bottom: 0; height: 240%; border-radius: 0; transform-origin: 50% 100%; transform: perspective(120rem) rotateX(45deg); }
 .nav-turn {
   position: absolute; left: 0; top: 0; bottom: 0; width: 30rem; padding: 1rem;
   background: rgba(14, 16, 19, .94); border-radius: 2rem;

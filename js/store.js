@@ -28,6 +28,7 @@ export const DEFAULTS = {
   clipSec: 25,              // segundos de cada GIF ou animação
   videoSound: false,        // som dos vídeos do standby/página Vídeos (botão no ícone)
   videoVolume: 0.7,         // volume quando o som está ligado (barra que abre no ícone)
+  mapTilt: true,            // mapa inclinado em perspectiva
   sleepMin: 20,             // apaga a tela depois de tantos minutos sem toque (0 = nunca)
   animOff: [],              // animações desligadas uma a uma
   mediaOff: [],             // (antigo) vídeos desligados um a um; hoje é por pasta

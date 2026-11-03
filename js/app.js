@@ -748,6 +748,7 @@ function tick() {
   if (onMap) {
     const v = isNum(gps.speed) ? gps.speed : 0;
     mapView.zoom = navInfo?.dist < 250 || v < 25 ? 17 : v < 70 ? 16 : 15;
+    mapView.tilt = !!S.mapTilt; $('map').classList.toggle('tilt', mapView.tilt);
     mapView.draw(mapPos(), gps.speed > 5 ? gps.heading : NaN, nav.route, nav.seg || 0, navInfo ? 0.66 : 0.5);
   }
 
@@ -963,7 +964,7 @@ const FIELDS = {
   sRollLimit: 'rollLimit', sPitchLimit: 'pitchLimit',
   sScreenW: 'screenW', sOffX: 'offX', sOffY: 'offY', sMask: 'mask', sOutline: 'outline',
   sVoice: 'voice', sTheme: 'theme', sNightDim: 'nightDim', sSpotifyId: 'spotifyClient',
-  sAnims: 'anims', sClipSec: 'clipSec', sSleepMin: 'sleepMin',
+  sAnims: 'anims', sClipSec: 'clipSec', sSleepMin: 'sleepMin', sMapTilt: 'mapTilt',
 };
 
 function renderAnims() {

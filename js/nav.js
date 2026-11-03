@@ -296,6 +296,7 @@ export class MapView {
   constructor(canvas) {
     this.c = canvas; this.ctx = canvas.getContext('2d');
     this.tiles = new Map(); this.rot = 0; this.zoom = 16;
+    this.tilt = false;                                               // mapa inclinado: o canvas é maior e deitado pelo CSS
   }
 
   tile(z, x, y) {
@@ -322,7 +323,7 @@ export class MapView {
 
   // pos {lat, lon}; heading em graus (NaN mantém o último); rt = rota; fromSeg = trecho já percorrido
   draw(pos, heading, rt, fromSeg = 0, anchorX = 0.5) {
-    const c = this.c, ctx = this.ctx, dpr = devicePixelRatio || 1;
+    const c = this.c, ctx = this.ctx, dpr = Math.min(devicePixelRatio || 1, this.tilt ? 2 : 4);   // inclinado o canvas é bem maior
     const w = c.clientWidth, h = c.clientHeight;
     if (!w || !h) return;
     const cw = Math.round(w * dpr), ch = Math.round(h * dpr);
@@ -339,7 +340,8 @@ export class MapView {
     const z = this.zoom, n = 2 ** z, world = 2 * Math.PI * R, tileM = world / n;
     const scale = 256 / tileM;                                   // px por metro
     const [cx, cy] = mercator(pos.lat, pos.lon);
-    const ox = w * anchorX, oy = h * 0.7;
+    // inclinado: o canvas vai de -35% a 135% na largura e o carro fica no quarto de baixo da janela
+    const ox = w * (this.tilt ? (0.35 + anchorX) / 1.7 : anchorX), oy = h * (this.tilt ? 0.84 : 0.7);
     const reach = Math.hypot(Math.max(ox, w - ox), oy) * 1.05 / scale;
 
     ctx.save();
