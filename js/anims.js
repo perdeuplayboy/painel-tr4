@@ -80,153 +80,6 @@ function road(ctx, w, h, t, color) {
   ctx.shadowBlur = 0;
 }
 
-// Trilha: morros em camadas passando e um 4x4 subindo e descendo, levantando poeira
-const hill = (x, seed, amp, base) =>
-  base + amp * (0.6 * Math.sin(x * 0.004 + seed) + 0.3 * Math.sin(x * 0.011 + seed * 2) + 0.1 * Math.sin(x * 0.029 + seed * 3));
-function trail(ctx, w, h, t, color) {
-  const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, '#04060a'); g.addColorStop(1, '#1d2230');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = color;
-  ctx.globalAlpha = 0.85;
-  ctx.beginPath(); ctx.arc(w * 0.82, h * 0.22, h * 0.07, 0, TAU); ctx.fill();
-  ctx.globalAlpha = 1;
-
-  const k = h / 220;                                               // escala: tudo proporcional à altura
-  const layers = [
-    { v: 12, seed: 1, amp: 34, base: 0.42, fill: '#202839' },
-    { v: 35, seed: 4, amp: 28, base: 0.6, fill: '#141a26' },
-    { v: 95, seed: 7, amp: 20, base: 0.86, fill: '#050608' },
-  ];
-  let ground = null;
-  for (const L of layers) {
-    const off = t * L.v * k * 3;
-    const y = x => hill((x + off) / k, L.seed, L.amp * k, h * L.base);
-    ctx.beginPath(); ctx.moveTo(0, h);
-    for (let x = 0; x <= w + 4; x += 4) ctx.lineTo(x, y(x));
-    ctx.lineTo(w, h); ctx.closePath();
-    ctx.fillStyle = L.fill; ctx.fill();
-    ground = y;
-  }
-  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.7;
-  ctx.beginPath();
-  for (let x = 0; x <= w + 4; x += 4) x ? ctx.lineTo(x, ground(x)) : ctx.moveTo(x, ground(x));
-  ctx.stroke(); ctx.globalAlpha = 1;
-
-  const s = h / 190, cx = w * 0.34, half = 34 * s;
-  const yA = ground(cx - half), yB = ground(cx + half);
-  ctx.save();
-  ctx.translate(cx, (yA + yB) / 2 + Math.sin(t * 17) * 1.2 * s);
-  ctx.rotate(Math.atan2(yB - yA, half * 2));
-  truck(ctx, t, color, s, '#9a8f80', 0.3);
-  ctx.restore();
-}
-
-// 4x4 quadradão: 100 unidades de comprimento, frente para a direita, origem no chão entre as rodas.
-// wheels: quanto cada roda (traseira, dianteira) desce ou sobe na suspensão, em unidades.
-function truck(ctx, t, color, s, dust, dustAlpha, beam = true, wheels = [0, 0]) {
-  ctx.save();
-  ctx.scale(s, s);
-  ctx.translate(0, -12);
-
-  if (beam) {                                                      // farol
-    ctx.fillStyle = color;
-    ctx.globalAlpha = 0.12;
-    ctx.beginPath(); ctx.moveTo(50, -26); ctx.lineTo(170, -50); ctx.lineTo(170, 6); ctx.closePath(); ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-
-  for (let p = 0; p < 14; p++) {                                   // poeira
-    const a = (t * 1.6 + p / 14) % 1;
-    ctx.globalAlpha = (1 - a) * dustAlpha;
-    ctx.fillStyle = dust;
-    ctx.beginPath(); ctx.arc(-46 - a * 70, 4 - a * 26 + Math.sin(p * 7.1) * 6, 4 + a * 12, 0, TAU); ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-
-  ctx.fillStyle = '#000'; ctx.strokeStyle = color; ctx.lineWidth = 1.2 / s;
-  ctx.beginPath();                                                  // carroceria quadradona
-  ctx.moveTo(-50, -2); ctx.lineTo(-50, -30); ctx.lineTo(-28, -32); ctx.lineTo(-22, -54); ctx.lineTo(24, -54);
-  ctx.lineTo(34, -34); ctx.lineTo(50, -31); ctx.lineTo(52, -2); ctx.closePath();
-  ctx.fill(); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(-24, -58); ctx.lineTo(22, -58); ctx.stroke();     // rack no teto
-  ctx.globalAlpha = 0.35; ctx.fillStyle = color;                   // vidros
-  ctx.beginPath(); ctx.moveTo(-18, -50); ctx.lineTo(-1, -50); ctx.lineTo(-1, -35); ctx.lineTo(-22, -34); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(3, -50); ctx.lineTo(21, -50); ctx.lineTo(29, -35); ctx.lineTo(3, -35); ctx.closePath(); ctx.fill();
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.arc(-55, -18, 9, 0, TAU); ctx.fill(); ctx.stroke();      // estepe
-
-  [-30, 32].forEach((wx, i) => {                                    // rodas girando, com amortecedor
-    ctx.beginPath(); ctx.moveTo(wx, -10); ctx.lineTo(wx, wheels[i]); ctx.stroke();
-    ctx.save();
-    ctx.translate(wx, wheels[i]);
-    ctx.rotate(t * 9);
-    ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.arc(0, 0, 13, 0, TAU); ctx.fill(); ctx.stroke();
-    ctx.beginPath();
-    for (let r = 0; r < 5; r++) { ctx.moveTo(0, 0); ctx.lineTo(Math.cos(r * TAU / 5) * 7, Math.sin(r * TAU / 5) * 7); }
-    ctx.stroke();
-    ctx.restore();
-  });
-  ctx.restore();
-}
-
-// Dunas: 4x4 saltando as cristas ao pôr do sol, levantando areia
-const dune = (x, seed, amp, base) =>
-  base - amp * (0.75 * (1 - Math.abs(Math.sin(x * 0.0045 + seed))) ** 1.6 + 0.25 * Math.sin(x * 0.013 + seed * 2));
-const bumps = x => 9 * Math.sin(x * 0.035 + 1.3) + 6 * Math.sin(x * 0.07 + 0.4) + 1.5 * Math.sin(x * 0.15 + 2.1);   // costelas na areia
-let dunesCar = null;                                                  // carroceria balançando na suspensão
-function dunes(ctx, w, h, t, color) {
-  const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, '#0c0610'); g.addColorStop(0.6, '#4a2214'); g.addColorStop(1, '#7a3a1c');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-  const sun = ctx.createRadialGradient(w * 0.7, h * 0.5, 0, w * 0.7, h * 0.5, h * 0.3);
-  sun.addColorStop(0, '#ffd27a'); sun.addColorStop(0.4, '#ff9a3d'); sun.addColorStop(1, 'rgba(255, 120, 40, 0)');
-  ctx.fillStyle = sun; ctx.fillRect(0, 0, w, h);
-
-  const k = h / 220;
-  const layers = [
-    { v: 10, seed: 0.5, amp: 40, base: 0.56, fill: '#3b200f' },
-    { v: 30, seed: 2.5, amp: 46, base: 0.74, fill: '#26140a' },
-    { v: 90, seed: 5, amp: 40, base: 0.88, fill: '#120904', rough: true },
-  ];
-  let ground = null;
-  for (const L of layers) {
-    const off = t * L.v * k * 3;
-    const y = x => dune((x + off) / k, L.seed, L.amp * k, h * L.base) - (L.rough ? bumps((x + off) / k) * k : 0);
-    ctx.beginPath(); ctx.moveTo(0, h);
-    for (let x = 0; x <= w + 4; x += 4) ctx.lineTo(x, y(x));
-    ctx.lineTo(w, h); ctx.closePath();
-    ctx.fillStyle = L.fill; ctx.fill();
-    ground = y;
-  }
-  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.6;
-  ctx.beginPath();
-  for (let x = 0; x <= w + 4; x += 4) x ? ctx.lineTo(x, ground(x)) : ctx.moveTo(x, ground(x));
-  ctx.stroke(); ctx.globalAlpha = 1;
-
-  const s = h / 200, cx = w * 0.36, xA = cx - 30 * s, xB = cx + 32 * s;
-  const yA = ground(xA), yB = ground(xB);
-  let lift = 0;                                                      // na crista, o carro passa por cima dela
-  for (let x = xA; x <= xB; x += 2) lift = Math.max(lift, yA + (yB - yA) * (x - xA) / (xB - xA) - ground(x));
-  const ty = yA + (yB - yA) * (cx - xA) / (xB - xA) - lift, ta = Math.atan2(yB - yA, xB - xA);
-  if (!dunesCar || t < dunesCar.t) dunesCar = { t, y: ty, vy: 0, a: ta, va: 0 };
-  const c = dunesCar, dt = Math.min(0.05, t - c.t);                 // mola + amortecedor: a carroceria vai atrás das rodas
-  c.t = t;
-  for (let i = 0, d = dt / 4; i < 4; i++) {
-    c.vy += ((ty - c.y) * 320 - c.vy * 22) * d; c.y += c.vy * d;
-    c.va += ((ta - c.a) * 260 - c.va * 20) * d; c.a += c.va * d;
-  }
-  const wheel = (wx, gy) => Math.max(-12, Math.min(12, (gy - (c.y + Math.sin(c.a) * wx * s)) / s - 1));   // roda encosta no chão
-  ctx.save();
-  ctx.translate(cx, c.y);
-  ctx.rotate(c.a);
-  truck(ctx, t, color, s, '#c9a26b', 0.45, true, [wheel(-30, yA), wheel(32, yB)]);
-  ctx.restore();
-}
-
 // Hiperespaço: estrelas esticando a partir do centro
 const stars = Array.from({ length: 220 }, () => ({ x: Math.random() * 2 - 1, y: Math.random() * 2 - 1, z: Math.random() }));
 let warpLast = 0;
@@ -496,62 +349,6 @@ function compass(ctx, w, h, t, color) {
   ctx.textBaseline = 'alphabetic';
 }
 
-// Acampamento: jipe parado sob a árvore, fogueira de pixels e estrela cadente de vez em quando
-const campStars = Array.from({ length: 70 }, (_, i) => ({ x: (i * 0.618) % 1, y: ((i * 0.377) % 1) * 0.6, p: i * 1.7 }));
-function camp(ctx, w, h, t, color) {
-  const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, '#020309'); g.addColorStop(1, '#0e1424');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = '#fff';
-  for (const s of campStars) { ctx.globalAlpha = 0.3 + 0.6 * Math.abs(Math.sin(t * 1.3 + s.p)); ctx.fillRect(s.x * w, s.y * h, 1.5, 1.5); }
-  const q = (t % 7) / 7;
-  if (q < 0.12) {                                                     // estrela cadente
-    const r = q / 0.12, n = Math.floor(t / 7);
-    const sx = w * (0.1 + (n * 0.37) % 0.5), sy = h * 0.08;
-    const hx = sx + r * w * 0.3, hy = sy + r * h * 0.22;
-    const tr = ctx.createLinearGradient(hx - w * 0.08, hy - h * 0.06, hx, hy);
-    tr.addColorStop(0, 'rgba(255,255,255,0)'); tr.addColorStop(1, 'rgba(255,255,255,.95)');
-    ctx.strokeStyle = tr; ctx.lineWidth = 2; ctx.globalAlpha = 1 - r * 0.6;
-    ctx.beginPath(); ctx.moveTo(hx - w * 0.08, hy - h * 0.06); ctx.lineTo(hx, hy); ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-  const ground = x => h * 0.8 + Math.sin(x * 0.01) * h * 0.025;
-  const fx = w * 0.34, fy = ground(fx);
-  const glow = ctx.createRadialGradient(fx, fy, 0, fx, fy, h * 0.55);
-  glow.addColorStop(0, `rgba(255, 140, 40, ${0.35 + 0.08 * Math.sin(t * 11)})`); glow.addColorStop(1, 'rgba(255, 120, 30, 0)');
-  ctx.fillStyle = '#030405';
-  ctx.beginPath(); ctx.moveTo(0, h);
-  for (let x = 0; x <= w + 6; x += 6) ctx.lineTo(x, ground(x));
-  ctx.lineTo(w, h); ctx.fill();
-  ctx.fillStyle = glow; ctx.fillRect(0, 0, w, h);
-  const tx = w * 0.8, ty = ground(tx);                                // árvore
-  ctx.fillStyle = '#020203';
-  ctx.fillRect(tx - h * 0.025, ty - h * 0.42, h * 0.05, h * 0.42);
-  for (const [ox, oy, r] of [[0, -0.5, 0.17], [-0.13, -0.42, 0.13], [0.13, -0.43, 0.13], [-0.06, -0.62, 0.12], [0.08, -0.6, 0.12]]) {
-    ctx.beginPath(); ctx.arc(tx + ox * h, ty + oy * h, r * h, 0, TAU); ctx.fill();
-  }
-  ctx.save(); ctx.translate(w * 0.62, ground(w * 0.62)); ctx.scale(-1, 1);   // jipe virado para a fogueira
-  truck(ctx, 0, '#6b4423', h / 230, '#000', 0, false);
-  ctx.restore();
-  ctx.fillStyle = '#2a1608';                                          // lenha
-  ctx.save(); ctx.translate(fx, fy - 2); ctx.rotate(0.3); ctx.fillRect(-h * 0.06, -2, h * 0.12, 4); ctx.rotate(-0.6); ctx.fillRect(-h * 0.06, -2, h * 0.12, 4); ctx.restore();
-  const cell = Math.max(2, Math.round(h / 55));                       // chamas de pixels
-  for (let gy = 0; gy < 11; gy++) {
-    for (let gx = -4; gx <= 4; gx++) {
-      const v = (1 - gy / 11) * (0.65 + 0.35 * Math.sin(t * 10 + gx * 1.7 + gy * 0.9)) - Math.abs(gx) / (5 - gy * 0.3);
-      if (v < 0.12) continue;
-      ctx.fillStyle = v > 0.6 ? '#fff3b0' : v > 0.35 ? '#ffb020' : '#ff5a1f';
-      ctx.fillRect(fx + gx * cell - cell / 2, fy - 4 - (gy + 1) * cell, cell, cell);
-    }
-  }
-  for (let i = 0; i < 10; i++) {                                      // faíscas subindo
-    const a = (t * 0.7 + i / 10) % 1;
-    ctx.fillStyle = '#ffb020'; ctx.globalAlpha = 1 - a;
-    ctx.fillRect(fx + Math.sin(i * 3 + t * 2) * cell * 3 * a, fy - 4 - a * h * 0.45, cell * 0.6, cell * 0.6);
-  }
-  ctx.globalAlpha = 1;
-}
-
 // Brilho ciano: vídeo retrô em loop (veio pronto, fica só no aparelho), desenhado no canvas como as outras animações
 const glowVideo = Object.assign(document.createElement('video'), { muted: true, loop: true, playsInline: true });
 extraURL('brilho-ciano.webm').then(url => { if (url) glowVideo.src = url; });   // vem dos "Arquivos extras" do aparelho
@@ -637,12 +434,11 @@ function johnny(ctx, w, h) {
 }
 
 export const ANIMS = {
-  equalizer, road, trail, dunes, warp, topo, scope,
-  pipes, maze, rain, ocean, drone, compass, camp, glow, johnny,
+  equalizer, road, warp, topo, scope,
+  pipes, maze, rain, ocean, drone, compass, glow, johnny,
 };
 export const ANIM_NAMES = {
-  equalizer: 'Equalizador', road: 'Estrada retrô', trail: 'Trilha',
-  dunes: 'Dunas', warp: 'Hiperespaço', topo: 'Mapa topográfico', scope: 'Osciloscópio',
+  equalizer: 'Equalizador', road: 'Estrada retrô', warp: 'Hiperespaço', topo: 'Mapa topográfico', scope: 'Osciloscópio',
   pipes: 'Canos 3D', maze: 'Labirinto de tijolos', rain: 'Chuva de dados', ocean: 'Oceano digital', drone: 'Escaneamento por drone',
-  compass: 'Bússola giroscópica', camp: 'Acampamento', glow: 'Brilho ciano', johnny: 'Johnny Castaway',
+  compass: 'Bússola giroscópica', glow: 'Brilho ciano', johnny: 'Johnny Castaway',
 };
