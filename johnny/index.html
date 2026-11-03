@@ -35,6 +35,12 @@ if (!['RESOURCE.MAP', 'RESOURCE.001', 'SCRANTIC.SCR'].every(n => files[n])) {
     preRun: [() => {
       FS.mkdir('/data');
       for (const [name, data] of Object.entries(files)) FS.writeFile('/data/' + name, new Uint8Array(data));
+      // o dia da história (11 dias, como no original) fica num arquivo que sumiria a cada vez: guarda no aparelho
+      const cfg = '/home/web_user/.jc_reborn', saved = localStorage.getItem('johnnyCfg');
+      if (saved) FS.writeFile(cfg, saved);
+      setInterval(() => {
+        try { const now = FS.readFile(cfg, { encoding: 'utf8' }); if (now !== localStorage.getItem('johnnyCfg')) localStorage.setItem('johnnyCfg', now); } catch {}
+      }, 2000);
     }],
   };
   const s = document.createElement('script');
