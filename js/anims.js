@@ -433,12 +433,24 @@ function johnny(ctx, w, h) {
   ctx.drawImage(src, 0, sy, src.width, sh, 0, 0, w, h);
 }
 
+// Aventuras do Joni: a série fica só no aparelho (Arquivos do painel → offroad.js); aqui só o carregador
+let joniMod = null, joniLoading = false;
+function joni(ctx, w, h, t) {
+  if (!joniMod) {
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+    if (!joniLoading) { joniLoading = true; extraURL('offroad.js').then(u => u && import(u)).then(m => { joniMod = m || null; }).catch(() => {}).finally(() => { joniLoading = false; }); }
+    return;
+  }
+  return joniMod.trilha(ctx, w, h, t);                                 // true quando a cena termina
+}
+joni.untilDone = true;
+
 export const ANIMS = {
   equalizer, road, warp, topo, scope,
-  pipes, maze, rain, ocean, drone, compass, glow, johnny,
+  pipes, maze, rain, ocean, drone, compass, glow, johnny, joni,
 };
 export const ANIM_NAMES = {
   equalizer: 'Equalizador', road: 'Estrada retrô', warp: 'Hiperespaço', topo: 'Mapa topográfico', scope: 'Osciloscópio',
   pipes: 'Canos 3D', maze: 'Labirinto de tijolos', rain: 'Chuva de dados', ocean: 'Oceano digital', drone: 'Escaneamento por drone',
-  compass: 'Bússola giroscópica', glow: 'Brilho ciano', johnny: 'Johnny Castaway',
+  compass: 'Bússola giroscópica', glow: 'Brilho ciano', johnny: 'Johnny Castaway', joni: 'Aventuras do Joni',
 };

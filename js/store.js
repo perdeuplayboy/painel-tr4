@@ -175,7 +175,7 @@ export const johnnyReady = () => localStorage.getItem('johnnyOk') === '1';
 
 // ---- Arquivos extras: imagens e vídeo de terceiros usados nas animações, guardados só neste aparelho ----
 // (não ficam no repositório público; sem eles o labirinto e o Brilho ciano saem do sorteio)
-export const EXTRAS = ['maze-tijolo.png', 'maze-chao.png', 'maze-teto.png', 'start.png', 'quadro.webp', 'rato.png', 'brilho-ciano.webm'];
+export const EXTRAS = ['maze-tijolo.png', 'maze-chao.png', 'maze-teto.png', 'start.png', 'quadro.webp', 'rato.png', 'brilho-ciano.webm', 'offroad.js'];
 const XDB = 'painel-tr4-extras';
 
 function openExtras() {
@@ -207,9 +207,9 @@ export async function saveExtras(files) {
   return Object.keys(found);
 }
 
-const extraType = n => n.endsWith('.png') ? 'image/png' : n.endsWith('.webp') ? 'image/webp' : n.endsWith('.webm') ? 'video/webm' : '';
+const extraType = n => n.endsWith('.png') ? 'image/png' : n.endsWith('.webp') ? 'image/webp' : n.endsWith('.webm') ? 'video/webm' : n.endsWith('.js') ? 'text/javascript' : '';
 export const extrasHave = () => { try { return JSON.parse(localStorage.getItem('extrasOk') || '[]'); } catch { return []; } };
-const NEEDS = { maze: ['maze-tijolo.png', 'maze-chao.png', 'maze-teto.png', 'start.png', 'quadro.webp', 'rato.png'], glow: ['brilho-ciano.webm'] };
+const NEEDS = { maze: ['maze-tijolo.png', 'maze-chao.png', 'maze-teto.png', 'start.png', 'quadro.webp', 'rato.png'], glow: ['brilho-ciano.webm'], joni: ['offroad.js'] };
 export const extrasReady = anim => (NEEDS[anim] || []).every(n => extrasHave().includes(n));   // a animação tem o que precisa?
 
 // devolve um endereço blob: do arquivo extra, ou null se ele não foi carregado
