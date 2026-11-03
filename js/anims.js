@@ -4,7 +4,7 @@
 
 import { drone } from './lidar.js';
 import { pipes, maze } from './retro3d.js';
-import { loadJohnnyFiles, extraURL } from './store.js';
+import { loadJohnnyFiles, extraURL, extrasReady } from './store.js';
 
 const TAU = Math.PI * 2;
 
@@ -558,6 +558,11 @@ extraURL('brilho-ciano.webm').then(url => { if (url) glowVideo.src = url; });   
 let glowStop = 0;
 function glow(ctx, w, h) {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+  if (!extrasReady('glow')) {
+    ctx.fillStyle = '#9a9aa2'; ctx.font = `${Math.max(12, h * 0.07)}px sans-serif`; ctx.textAlign = 'center';
+    ctx.fillText('Escolha os Arquivos do painel TR4 nas configurações', w / 2, h / 2);
+    return;
+  }
   if (glowVideo.paused) glowVideo.play().catch(() => {});
   clearTimeout(glowStop);
   glowStop = setTimeout(() => glowVideo.pause(), 500);             // parou de desenhar: pausa o vídeo

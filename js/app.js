@@ -1,7 +1,7 @@
 import {
   State, FUELS, emptyTrip, tripAvgKmL, tripAvgSpeed, deriveAndIntegrate, MockSource, ElmBleSource,
 } from './obd.js';
-import { loadSettings, loadUpkeep, load, save, addVideos, listVideos, clearVideos, removeVideo, saveJohnnyFiles, johnnyReady, saveExtras, extrasHave, EXTRAS } from './store.js';
+import { loadSettings, loadUpkeep, load, save, addVideos, listVideos, clearVideos, removeVideo, saveJohnnyFiles, johnnyReady, saveExtras, extrasHave, extrasReady, EXTRAS } from './store.js';
 import { MapView, Navigator, geocode, distM, fmtDist, arrowPath, arrowChar } from './nav.js';
 import { Spotify } from './spotify.js';
 import { Player } from './player.js';
@@ -544,7 +544,7 @@ async function reloadVideos() {
 const mediaItems = () => [
   ...videos.map((v, i) => ({ kind: v.blob.type.startsWith('image/') ? 'image' : 'video', url: videoUrls[i], id: v.id }))
     .filter(it => !S.mediaOff.includes(it.id)),
-  ...(S.anims ? Object.keys(ANIMS).filter(a => !S.animOff.includes(a) && (a !== 'johnny' || johnnyReady()) && (a !== 'glow' || extrasHave().includes('brilho-ciano.webm'))).map(anim => ({ kind: 'anim', anim, weight: anim === 'johnny' ? 0.25 : 1 })) : []),   // Johnny tem muitas cenas: aparece bem menos
+  ...(S.anims ? Object.keys(ANIMS).filter(a => !S.animOff.includes(a) && (a !== 'johnny' || johnnyReady()) && extrasReady(a)).map(anim => ({ kind: 'anim', anim, weight: anim === 'johnny' ? 0.25 : 1 })) : []),   // Johnny tem muitas cenas: aparece bem menos
 ];
 const playerOpts = {
   clipMs: () => Math.max(5, S.clipSec) * 1000,

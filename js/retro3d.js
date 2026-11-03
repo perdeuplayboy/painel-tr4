@@ -1,7 +1,7 @@
 // Protetores de tela 3D dos anos 90, refeitos do zero em WebGL (homenagem nostálgica, com desenho próprio):
 // canos coloridos crescendo numa grade e um labirinto de tijolos visto em primeira pessoa.
 
-import { extraURL } from './store.js';
+import { extraURL, extrasReady } from './store.js';
 
 const TAU = Math.PI * 2;
 
@@ -228,49 +228,6 @@ function texture(gl, unit, draw, size = [128, 128]) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
   return tx;
 }
-const speckle = (g, x, y, w, h, base, amt, n = w * h / 3) => {    // granulado de textura antiga
-  for (let i = 0; i < n; i++) {
-    const v = (Math.random() - 0.5) * amt;
-    g.fillStyle = `rgb(${base.map(b => Math.round(Math.max(0, Math.min(255, b + v)))).join(',')})`;
-    g.fillRect(x + Math.random() * w, y + Math.random() * h, 2, 2);
-  }
-};
-function brickTex(g) {                                               // 4 fileiras de tijolo por parede
-  g.fillStyle = '#d4d4d0'; g.fillRect(0, 0, 256, 256);               // argamassa clara
-  speckle(g, 0, 0, 256, 256, [212, 212, 208], 30, 4000);
-  for (let r = 0; r < 4; r++) for (let k = -1; k < 3; k++) {
-    const x = k * 128 + (r % 2) * 64 + 7, y = r * 64 + 7, bw = 114, bh = 50;
-    g.fillStyle = 'rgba(70, 70, 70, .55)'; g.fillRect(x + 3, y + 4, bw, bh);   // sombra do tijolo na argamassa
-    const base = [128 + Math.random() * 20, 8 + Math.random() * 8, 12 + Math.random() * 8];
-    g.fillStyle = `rgb(${base.map(Math.round).join(',')})`; g.fillRect(x, y, bw, bh);
-    speckle(g, x, y, bw, bh, base, 45, 900);
-    for (let m = 0; m < 6; m++) {                                     // manchas escuras e claras
-      g.fillStyle = Math.random() < 0.5 ? 'rgba(60,0,0,.25)' : 'rgba(190,40,40,.18)';
-      g.beginPath(); g.ellipse(x + Math.random() * bw, y + Math.random() * bh, 8 + Math.random() * 16, 4 + Math.random() * 8, 0, 0, TAU); g.fill();
-    }
-    g.fillStyle = 'rgba(255,170,170,.18)'; g.fillRect(x, y, bw, 3);     // quina de cima iluminada
-  }
-}
-function floorTex(g) {                                               // chão bege granulado
-  g.fillStyle = '#b8823e'; g.fillRect(0, 0, 128, 128);
-  speckle(g, 0, 0, 128, 128, [184, 130, 62], 70, 5000);
-}
-function ceilTex(g) {                                                // forro de placas cinza
-  g.fillStyle = '#c9c9c9'; g.fillRect(0, 0, 128, 128);
-  speckle(g, 0, 0, 128, 128, [200, 200, 200], 110, 6000);
-  for (const o of [0, 64]) {
-    g.fillStyle = '#8c8c8c'; g.fillRect(o, 0, 3, 128); g.fillRect(0, o, 128, 3);
-    g.fillStyle = '#ececec'; g.fillRect(o + 3, 0, 2, 128); g.fillRect(0, o + 3, 128, 2);
-  }
-}
-function signTex(g, w, h) {                                          // placa translúcida "Start"
-  g.clearRect(0, 0, w, h);
-  g.fillStyle = 'rgba(205, 205, 205, .5)'; g.fillRect(6, 6, w - 12, h - 12);
-  g.strokeStyle = 'rgba(25, 25, 25, .85)'; g.lineWidth = 5; g.strokeRect(6, 6, w - 12, h - 12);
-  g.strokeStyle = 'rgba(255, 255, 255, .6)'; g.lineWidth = 3; g.strokeRect(14, 14, w - 28, h - 28);
-  g.fillStyle = 'rgba(20, 20, 20, .9)'; g.font = `bold ${h * 0.5}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText('Start', w / 2, h / 2 + 4);
-}
 function smileTex(g, w, h) {                                         // rosto amarelo translúcido da saída
   g.clearRect(0, 0, w, h);
   const r = w * 0.47, cx = w / 2, cy = h / 2, grad = g.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r);
@@ -280,26 +237,6 @@ function smileTex(g, w, h) {                                         // rosto am
   for (const sx of [-1, 1]) { g.beginPath(); g.ellipse(cx + sx * r * 0.42, cy - r * 0.2, r * 0.13, r * 0.08, 0, 0, TAU); g.fill(); }
   g.strokeStyle = 'rgba(40, 40, 210, .9)'; g.lineWidth = r * 0.12; g.lineCap = 'round';
   g.beginPath(); g.ellipse(cx, cy + r * 0.05, r * 0.6, r * 0.38, 0, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke();
-}
-function ratTex(g, w, h) {                                           // ratinho cinza de perfil, olhando para a direita
-  g.clearRect(0, 0, w, h);
-  g.setTransform(w / 192, 0, 0, h / 108, 0, -6 * h / 108);           // desenho ocupa a imagem toda
-  g.strokeStyle = '#8a7f86'; g.lineWidth = 5; g.lineCap = 'round';   // rabo
-  g.beginPath(); g.moveTo(40, 78); g.bezierCurveTo(18, 86, 14, 60, 4, 70); g.stroke();
-  g.fillStyle = '#5c5c62';
-  for (const x of [58, 78, 118, 134]) { g.beginPath(); g.ellipse(x, 98, 7, 4, 0, 0, TAU); g.fill(); }   // patinhas
-  const body = g.createRadialGradient(95, 62, 6, 92, 74, 58);
-  body.addColorStop(0, '#b9b9c0'); body.addColorStop(1, '#6e6e76');
-  g.fillStyle = body;
-  g.beginPath(); g.ellipse(88, 76, 52, 26, 0, 0, TAU); g.fill();       // corpo
-  g.beginPath(); g.moveTo(126, 58); g.quadraticCurveTo(168, 70, 172, 82); g.quadraticCurveTo(150, 96, 124, 92); g.fill();   // focinho
-  g.fillStyle = '#f2a0b4'; g.beginPath(); g.arc(172, 82, 5, 0, TAU); g.fill();            // nariz
-  g.fillStyle = '#9b9ba3'; g.beginPath(); g.ellipse(124, 50, 13, 16, -0.3, 0, TAU); g.fill();   // orelha
-  g.fillStyle = '#e9b3c2'; g.beginPath(); g.ellipse(124, 51, 7, 10, -0.3, 0, TAU); g.fill();
-  g.fillStyle = '#101010'; g.beginPath(); g.arc(146, 70, 4, 0, TAU); g.fill();            // olho
-  g.fillStyle = '#ffffff'; g.beginPath(); g.arc(147.5, 68.5, 1.3, 0, TAU); g.fill();
-  g.strokeStyle = 'rgba(40,40,40,.7)'; g.lineWidth = 1;               // bigodes
-  for (const dy of [-4, 0, 4]) { g.beginPath(); g.moveTo(164, 84); g.lineTo(188, 80 + dy * 2); g.stroke(); }
 }
 function logoTex(g, w, h) {                                          // OpenGL: serifa grossa, cada letra de uma cor, translúcido
   g.clearRect(0, 0, w, h);
@@ -319,8 +256,8 @@ function logoTex(g, w, h) {                                          // OpenGL: 
   g.fillStyle = 'rgba(0, 0, 0, .68)'; g.fillRect(0, 0, w, h);
   g.globalCompositeOperation = 'source-over';
 }
-// imagens de terceiros (texturas do original, placa Start, quadro, rato) vêm dos "Arquivos extras" guardados
-// no aparelho; sem elas ficam as desenhadas acima
+// imagens do original (texturas, placa Start, quadro, rato) vêm dos "Arquivos do painel TR4" guardados no
+// aparelho; sem elas o labirinto fica fora do sorteio
 const extraImg = name => {
   const img = new Image();
   extraURL(name).then(url => { if (url) img.src = url; });
@@ -328,12 +265,14 @@ const extraImg = name => {
 };
 const ratImg = extraImg('rato.png'), picImg = extraImg('quadro.webp'), startImg = extraImg('start.png');
 const mazeImgs = ['maze-tijolo.png', 'maze-chao.png', 'maze-teto.png'].map(extraImg);
-function imageTex(gl, unit, img, draw, size, flipY = false) {      // usa a imagem quando carregar; até lá, a desenhada
-  const put = () => texture(gl, unit, g => {                         // tamanho original
-    if (flipY) { g.translate(0, img.naturalHeight); g.scale(1, -1); }
-    g.drawImage(img, 0, 0);
-  }, [img.naturalWidth, img.naturalHeight]);
-  texture(gl, unit, draw, size);
+function imageTex(gl, unit, img, size = null, flipY = false) {      // sobe a imagem assim que ela carregar
+  const put = () => {
+    const [w, h] = size || [img.naturalWidth, img.naturalHeight];
+    texture(gl, unit, g => {
+      if (flipY) { g.translate(0, h); g.scale(1, -1); }
+      g.drawImage(img, 0, 0, w, h);
+    }, [w, h]);
+  };
   if (img.complete && img.naturalWidth) put(); else img.addEventListener('load', put, { once: true });
 }
 const STEP = [[1, 0], [0, 1], [-1, 0], [0, -1]];                      // direções: x+, z+, x-, z-
@@ -363,7 +302,7 @@ function mazeBuild() {                                               // labirint
     if (!o[2]) q([x, 0, z + 1], [x, 0, z], [x, 1, z], [x, 1, z + 1], wt());
     if (!o[3]) q([x, 0, z], [x + 1, 0, z], [x + 1, 1, z], [x, 1, z], wt());
   }
-  for (let k = !(picImg.complete && picImg.naturalWidth) ? 0 : N >= 7 ? 2 : 1; k--;) {   // o quadro (se carregado) em uma ou duas paredes
+  for (let k = N >= 7 ? 2 : 1; k--;) {                              // o quadro aparece em uma ou duas paredes só
     const at = wallAt.splice(Math.floor(R() * wallAt.length), 1)[0];
     for (let i = 0; i < 6; i++) v[(at + i) * 6 + 5] = 6;
   }
@@ -474,14 +413,10 @@ export function maze(ctx, w, h, t) {
       const G = makeGL(MAZE_VS, MAZE_FS, [['pos', 3], ['uv', 2], ['tex', 1]]);
       if (!G) M = { failed: true }; else {
         M = { ...G, last: Infinity, buf: G.gl.createBuffer(), dyn: G.gl.createBuffer() };
-        imageTex(G.gl, 0, mazeImgs[0], brickTex, [256, 256]); imageTex(G.gl, 1, mazeImgs[1], floorTex, [128, 128]);
-        imageTex(G.gl, 2, mazeImgs[2], ceilTex, [128, 128]);
-        texture(G.gl, 3, signTex, [256, 128]); texture(G.gl, 4, smileTex, [256, 256]);
-        const start = () => texture(G.gl, 3, g => g.drawImage(startImg, 0, 0, 512, 256), [512, 256]);   // já vem translúcida
-        if (startImg.complete && startImg.naturalWidth) start(); else startImg.addEventListener('load', start, { once: true });
-        const pic = () => texture(G.gl, 5, g => g.drawImage(picImg, 0, 0, 512, 512), [512, 512]);
-        if (picImg.complete && picImg.naturalWidth) pic(); else { texture(G.gl, 5, ceilTex); picImg.addEventListener('load', pic, { once: true }); }
-        imageTex(G.gl, 6, ratImg, ratTex, [256, 128], true);   // a imagem do rato vem de cabeça para baixo
+        mazeImgs.forEach((img, i) => imageTex(G.gl, i, img));
+        imageTex(G.gl, 3, startImg, [512, 256]); texture(G.gl, 4, smileTex, [256, 256]);
+        imageTex(G.gl, 5, picImg, [512, 512]);
+        imageTex(G.gl, 6, ratImg, null, true);                       // a imagem do rato vem de cabeça para baixo
         texture(G.gl, 7, logoTex, [512, 128]);
         ['wall', 'floor', 'ceil', 'sign', 'smile', 'pic', 'rat', 'logo'].forEach((n, i) => G.gl.uniform1i(G.u(n), i));
       }
@@ -489,6 +424,11 @@ export function maze(ctx, w, h, t) {
   }
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
   if (M.failed) return;
+  if (!extrasReady('maze')) {
+    ctx.fillStyle = '#9a9aa2'; ctx.font = `${Math.max(12, h * 0.07)}px sans-serif`; ctx.textAlign = 'center';
+    ctx.fillText('Escolha os Arquivos do painel TR4 nas configurações', w / 2, h / 2);
+    return;
+  }
   const gl = M.gl, aspect = fit(M, ctx);
   if (t < M.last) mazeBuild();
   const dt = Math.min(0.2, Math.max(0, t - M.last));
