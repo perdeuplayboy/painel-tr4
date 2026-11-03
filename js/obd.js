@@ -74,7 +74,7 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 // ---------------------------------------------------------------------------
 // Simulação: ciclo urbano/rodoviário com física simplificada, partida com queda
-// de tensão, motor esquentando e luz de injeção acendendo depois de 2 minutos.
+// de tensão e motor esquentando (sem falhas: não dispara alertas).
 export class MockSource {
   constructor() {
     this.d = emptyData();
@@ -84,8 +84,7 @@ export class MockSource {
     this.engineOn = false;
     this.crankUntil = 0;
     this.speed = 0; this.target = 0; this.nextChange = 0;
-    this.coolant = 32; this.started = performance.now();
-    this.milCleared = false;
+    this.coolant = 32;
     this.last = performance.now();
     this.timer = setInterval(() => this.update(), 150);
     setTimeout(() => this.setEngine(true), 6000);   // dá partida sozinho depois de 6 s
@@ -141,7 +140,6 @@ export class MockSource {
     const load = s < 2 ? 0.18 : clamp(0.2 + accel * 0.2 + s / 250, 0.15, 0.95);
     this.coolant += (90 - this.coolant) * 0.04 * dt;
     const t = now / 1000;
-    const mil = now - this.started > 120000 && !this.milCleared;
 
     Object.assign(d, {
       rpm, speedKmh: s, coolantC: this.coolant, intakeC: 28 + (s > 40 ? -2 : 3) + rnd(-1, 1),
@@ -152,13 +150,13 @@ export class MockSource {
       stftPct: 2 * Math.sin(t / 1.5) + rnd(-1, 1), ltftPct: 3.5 + rnd(-0.3, 0.3),
       o2s1V: 0.45 + 0.4 * Math.sin(t / 0.35), o2s2V: 0.62 + rnd(-0.02, 0.02),
       fuelSystem: this.coolant < 60 ? 1 : accel > 1.8 ? 4 : 2,
-      milOn: mil, dtcCount: mil ? 1 : 0, distMilKm: mil ? (now - this.started - 120000) / 1000 * 0.02 : 0,
+      milOn: false, dtcCount: 0, distMilKm: 0,                     // simulação sem falhas (não dispara alerta)
     });
     d.updatedAt = Date.now();
   }
 
-  async requestDtcs() { this.d.dtcs = this.d.milOn ? ['P0171'] : []; }
-  async clearDtcs() { this.milCleared = true; Object.assign(this.d, { milOn: false, dtcCount: 0, dtcs: [] }); return true; }
+  async requestDtcs() { this.d.dtcs = []; }
+  async clearDtcs() { Object.assign(this.d, { milOn: false, dtcCount: 0, dtcs: [] }); return true; }
 }
 
 // ---------------------------------------------------------------------------
