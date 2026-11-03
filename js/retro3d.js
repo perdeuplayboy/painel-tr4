@@ -28,9 +28,9 @@ function mul(a, b) {
 }
 
 // cada protetor tem sua própria tela WebGL escondida, copiada para o canvas do player
-function makeGL(vs, fs, attrs) {
+function makeGL(vs, fs, attrs, antialias = true) {
   const canvas = document.createElement('canvas');
-  const gl = canvas.getContext('webgl', { antialias: true, preserveDrawingBuffer: true });
+  const gl = canvas.getContext('webgl', { antialias, preserveDrawingBuffer: true });
   if (!gl) return null;
   const sh = (type, src) => {
     const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -521,24 +521,43 @@ export function maze(ctx, w, h, t) {
 }
 
 // ---------- Caixa de flores 3D ----------
-// cubo liso que "floresce": cada face cresce numa pétala arredondada e pontuda, e depois volta a ser cubo.
-// Uma cor por lado (às vezes em xadrez), mudando devagar; gira e flutua pela tela.
+// Cubo oco: cada face se divide em 4 pétalas presas nas arestas, que se curvam para fora (desabrocham)
+// e depois fecham de novo. Gira em X, Y e Z e quica pela tela. Cores vibrantes em degradê (ou xadrez),
+// sombreamento chapado por polígono, sem antisserrilhado e com cor de 16 bits pontilhada, como nos anos 90.
+const FLOWER_FS = `
+precision mediump float;
+uniform vec3 eye;
+varying vec3 vN, vC, vP;
+float bayer(vec2 p) {                                                // pontilhado ordenado 4x4
+  vec2 q = mod(floor(p), 4.0);
+  float a = mod(q.x + q.y * 2.0, 4.0), b = mod(q.x, 2.0) * 2.0 + mod(q.y, 2.0);
+  return (a * 4.0 + b) / 16.0 - 0.5;
+}
+void main() {
+  vec3 n = normalize(vN), V = normalize(eye - vP), L = normalize(vec3(-0.4, 0.6, 0.7));
+  float inside = 1.0;
+  if (dot(n, V) < 0.0) { n = -n; inside = 0.6; }                     // dentro da caixa oca: mais escuro
+  float dif = max(dot(n, L), 0.0), spec = pow(max(dot(reflect(-L, n), V), 0.0), 24.0);
+  vec3 c = (vC * (0.25 + 0.8 * dif) + vec3(0.7) * spec) * inside;
+  vec3 lv = vec3(31.0, 63.0, 31.0);                                   // 16 bits (5-6-5)
+  c = floor(c * lv + 0.5 + bayer(gl_FragCoord.xy)) / lv;
+  gl_FragColor = vec4(c, 1.0);
+}`;
+const FLOWER_COLORS = [[1, 0.1, 0.1], [0.1, 0.95, 0.1], [0.15, 0.25, 1], [1, 0.95, 0.1], [1, 0.15, 0.95], [0.1, 0.95, 0.95]];
 let F = null;
-const hsl = (h, s, l) => {                                           // matiz 0..1 → rgb 0..1
-  const k = n => (n + h * 12) % 12, a = s * Math.min(l, 1 - l);
-  return [0, 8, 4].map(n => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)));
-};
 function flowerReset() {
-  const R = Math.random;
+  const R = Math.random, pal = [...FLOWER_COLORS].sort(() => R() - 0.5);
   Object.assign(F, {
-    hue: R(), cycle: 0.02 + R() * 0.05, checker: R() < 0.35, point: 1.5 + R() * 2.5, amp: 0.7 + R() * 0.6, speed: 0.5 + R() * 0.5,
-    spin: [0.35 + R() * 0.5, 0.25 + R() * 0.5], pos: [0, 0], vel: [(R() < 0.5 ? -1 : 1) * (0.5 + R() * 0.6), (R() < 0.5 ? -1 : 1) * (0.25 + R() * 0.3)],
+    faces: pal.map((c, i) => [c, pal[(i + 1) % pal.length]]),       // degradê de uma cor para a vizinha
+    checker: R() < 0.35, open: 1.15 + R() * 0.35, speed: 0.6 + R() * 0.4, curl: 0.3 + R() * 0.35,
+    spin: [0.5 + R() * 0.6, 0.4 + R() * 0.6, 0.2 + R() * 0.4], pos: [0, 0],
+    vel: [(R() < 0.5 ? -1 : 1) * (0.6 + R() * 0.6), (R() < 0.5 ? -1 : 1) * (0.3 + R() * 0.3)],
   });
 }
 export function flowerbox(ctx, w, h, t) {
   if (!F) {
     try {
-      const G = makeGL(PIPE_VS, PIPE_FS, [['pos', 3], ['nrm', 3], ['col', 3]]);
+      const G = makeGL(PIPE_VS, FLOWER_FS, [['pos', 3], ['nrm', 3], ['col', 3]], false);
       F = G ? { ...G, last: Infinity, buf: G.gl.createBuffer() } : { failed: true };
     } catch (e) { console.warn('caixa de flores', e); F = { failed: true }; }
   }
@@ -548,44 +567,57 @@ export function flowerbox(ctx, w, h, t) {
   if (t < F.last) flowerReset();
   const dt = Math.min(0.2, Math.max(0, t - F.last));
   F.last = t;
-  const D = 6, half = Math.tan(0.36) * D, lim = [Math.max(0.1, half * aspect - 2.2), Math.max(0.05, half - 1.9)];
-  for (const i of [0, 1]) {                                          // flutua e quica nas bordas
+  const D = 7, half = Math.tan(0.36) * D, lim = [Math.max(0.1, half * aspect - 2.6), Math.max(0.05, half - 2.2)];
+  for (const i of [0, 1]) {                                          // anda e quica nas bordas
     F.pos[i] += F.vel[i] * dt;
     if (Math.abs(F.pos[i]) > lim[i]) { F.pos[i] = Math.sign(F.pos[i]) * lim[i]; F.vel[i] *= -1; }
   }
-  const bloom = F.amp * (0.5 - 0.5 * Math.cos(t * F.speed));       // 0 = cubo, máximo = flor aberta
-  const [ax, ay] = F.spin.map(v => v * t);
-  const ca = Math.cos(ax), sa = Math.sin(ax), cb = Math.cos(ay), sb = Math.sin(ay);
-  const rot = ([x, y, z]) => { const y1 = y * ca - z * sa, z1 = y * sa + z * ca; return [x * cb + z1 * sb, y1, -x * sb + z1 * cb]; };
-  const N = 18, axes = [[0, 1, 2, 1], [0, 1, 2, -1], [1, 2, 0, 1], [1, 2, 0, -1], [2, 0, 1, 1], [2, 0, 1, -1]];
-  const v = [];
-  axes.forEach(([iu, iv, iw, sg], f) => {
-    const grid = [];                                                  // pontos da face já com a pétala
-    for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
-      const u = i / N * 2 - 1, w2 = j / N * 2 - 1, p = [0, 0, 0];
-      p[iu] = u * sg; p[iv] = w2; p[iw] = sg;
-      const l = Math.hypot(...p), petal = (Math.cos(u * Math.PI / 2) * Math.cos(w2 * Math.PI / 2)) ** F.point - 0.2;
-      const r = 1 + bloom * petal * 1.4, k = bloom / F.amp;            // arredonda e estica conforme floresce
-      grid.push(rot(p.map(c => c * (1 - k) + c / l * 1.25 * r * k)));
-    }
-    const at = (i, j) => grid[Math.max(0, Math.min(N, i)) * (N + 1) + Math.max(0, Math.min(N, j))];
-    const nrm = (i, j) => {                                          // normal lisa a partir dos vizinhos
-      const a = at(i + 1, j), b = at(i - 1, j), c = at(i, j + 1), d = at(i, j - 1);
-      const du = a.map((x, k) => x - b[k]), dv = c.map((x, k) => x - d[k]);
-      let n = [du[1] * dv[2] - du[2] * dv[1], du[2] * dv[0] - du[0] * dv[2], du[0] * dv[1] - du[1] * dv[0]];
-      const p = at(i, j), l = Math.hypot(...n) || 1;
-      n = n.map(x => x / l);
-      return n[0] * p[0] + n[1] * p[1] + n[2] * p[2] < 0 ? n.map(x => -x) : n;
-    };
-    const base = hsl((F.hue + f / 6 + t * F.cycle) % 1, 0.85, 0.55), alt = hsl((F.hue + f / 6 + 0.5 + t * F.cycle) % 1, 0.85, 0.55);
-    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
-      const col = F.checker && ((i >> 2) + (j >> 2)) % 2 ? alt : base;
-      for (const [a, b] of [[i, j], [i + 1, j], [i + 1, j + 1], [i, j], [i + 1, j + 1], [i, j + 1]]) {
-        const p = at(a, b);
-        v.push(p[0] + F.pos[0], p[1] + F.pos[1], p[2], ...nrm(a, b), ...col);
+  const bloom = 0.5 - 0.5 * Math.cos(t * F.speed);                   // 0 = caixa fechada, 1 = flor aberta
+  const theta = F.open * bloom;
+  const [ax, ay, az] = F.spin.map(v => v * t);
+  const rot = ([x, y, z]) => {
+    [y, z] = [y * Math.cos(ax) - z * Math.sin(ax), y * Math.sin(ax) + z * Math.cos(ax)];
+    [x, z] = [x * Math.cos(ay) + z * Math.sin(ay), -x * Math.sin(ay) + z * Math.cos(ay)];
+    [x, y] = [x * Math.cos(az) - y * Math.sin(az), x * Math.sin(az) + y * Math.cos(az)];
+    return [x + F.pos[0], y + F.pos[1], z];
+  };
+  const add = (a, b, k = 1) => a.map((v, i) => v + b[i] * k);
+  const v = [], S = 6;                                               // cada pétala em 6 faixas, para curvar
+  const tri = (a, b, c, col) => {                                    // sombreamento chapado: uma normal por triângulo
+    const u = b.map((x, i) => x - a[i]), q = c.map((x, i) => x - a[i]);
+    let n = [u[1] * q[2] - u[2] * q[1], u[2] * q[0] - u[0] * q[2], u[0] * q[1] - u[1] * q[0]];
+    const l = Math.hypot(...n) || 1; n = n.map(x => x / l);
+    for (const p of [a, b, c]) v.push(...p, ...n, ...col);
+  };
+  const axes = [[0, 1, 2], [1, 2, 0], [2, 0, 1]];
+  let f = 0;
+  for (const [iu, iv, iw] of axes) for (const sg of [1, -1]) {
+    const nrm = [0, 0, 0]; nrm[iw] = sg;
+    const U = [0, 0, 0]; U[iu] = 1;
+    const Vv = [0, 0, 0]; Vv[iv] = 1;
+    const [c0, c1] = F.faces[f++];
+    // 4 pétalas: cada uma presa numa aresta da face, com a ponta no centro da face
+    for (const [e, l] of [[U, Vv], [U.map(x => -x), Vv], [Vv, U], [Vv.map(x => -x), U]]) {
+      const base = add(nrm, e), dIn = e.map(x => -x);               // meio da aresta e direção para o centro
+      const pts = [base];                                            // linha central curvando para fora
+      let p = base;
+      for (let i = 0; i < S; i++) {
+        const s = (i + 0.5) / S, phi = theta * (0.7 + F.curl * s);    // dobra um pouco mais perto da ponta
+        p = add(add(p, dIn, Math.cos(phi) / S), nrm, Math.sin(phi) / S);
+        pts.push(p);
+      }
+      for (let i = 0; i < S; i++) {
+        const w0 = 1 - i / S, w1 = 1 - (i + 1) / S;                   // a pétala afina até a ponta
+        const a0 = add(pts[i], l, -w0), a1 = add(pts[i], l, w0), b0 = add(pts[i + 1], l, -w1), b1 = add(pts[i + 1], l, w1);
+        const m0 = pts[i], m1 = pts[i + 1], k = i / (S - 1);
+        const grad = c0.map((x, j) => x + (c1[j] - x) * k);           // degradê da base até a ponta
+        const colL = F.checker && i % 2 ? c1 : grad, colR = F.checker && !(i % 2) ? c1 : grad;
+        const P = q => rot(q);
+        tri(P(a0), P(m0), P(m1), colL); tri(P(a0), P(m1), P(b0), colL);
+        tri(P(m0), P(a1), P(b1), colR); tri(P(m0), P(b1), P(m1), colR);
       }
     }
-  });
+  }
   gl.bindBuffer(gl.ARRAY_BUFFER, F.buf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.DYNAMIC_DRAW);
   F.bind();
@@ -595,5 +627,7 @@ export function flowerbox(ctx, w, h, t) {
   gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.DEPTH_TEST);
   gl.drawArrays(gl.TRIANGLES, 0, v.length / 9);
+  ctx.imageSmoothingEnabled = false;
   ctx.drawImage(F.canvas, 0, 0, w, h);
+  ctx.imageSmoothingEnabled = true;
 }
