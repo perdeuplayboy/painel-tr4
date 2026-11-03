@@ -1,7 +1,7 @@
 import {
   State, FUELS, emptyTrip, tripAvgKmL, tripAvgSpeed, deriveAndIntegrate, MockSource, ElmBleSource,
 } from './obd.js';
-import { loadSettings, loadUpkeep, load, save, addVideos, listVideos, clearVideos, removeVideo, saveJohnnyFiles, johnnyReady, saveExtras, extrasHave, extrasReady, EXTRAS } from './store.js';
+import { loadSettings, loadUpkeep, load, save, addVideos, folderOf, listVideos, clearVideos, removeVideo, saveJohnnyFiles, johnnyReady, saveExtras, extrasHave, extrasReady, EXTRAS } from './store.js';
 import { MapView, Navigator, geocode, distM, fmtDist, arrowPath, arrowChar, packRoute, unpackRoute } from './nav.js';
 import { Spotify } from './spotify.js';
 import { Player } from './player.js';
@@ -585,7 +585,7 @@ async function reloadVideos() {
 // lista para tocar: seus vídeos e GIFs, mais as animações retrô (se ligadas)
 const mediaItems = () => [
   ...videos.map((v, i) => ({ kind: v.blob.type.startsWith('image/') ? 'image' : 'video', url: videoUrls[i], id: v.id }))
-    .filter(it => !S.mediaOff.includes(it.id)),
+    .filter((it, i) => !S.folderOff.includes(folderOf(videos[i]))),
   ...(S.anims ? Object.keys(ANIMS).filter(a => !S.animOff.includes(a) && (a !== 'johnny' || johnnyReady()) && extrasReady(a)).map(anim => ({ kind: 'anim', anim, weight: anim === 'johnny' ? 0.25 : 1 })) : []),   // Johnny tem muitas cenas: aparece bem menos
 ];
 const playerOpts = {
@@ -967,33 +967,28 @@ function renderAnims() {
   }));
 }
 
-// seus vídeos e GIFs: ligar/desligar, ver agora e apagar um por um
+// seus vídeos e GIFs por pasta: ligar/desligar a pasta inteira e apagar a pasta
 function renderMedia() {
-  $('mediaList').replaceChildren(...videos.map((v, i) => {
-    const gif = v.blob.type.startsWith('image/');
+  const groups = new Map();
+  videos.forEach((v, i) => { const f = folderOf(v); if (!groups.has(f)) groups.set(f, []); groups.get(f).push(i); });
+  $('mediaList').replaceChildren(...[...groups].sort(([a], [b]) => a.localeCompare(b)).map(([folder, idx]) => {
     const label = document.createElement('label');
     label.className = 'check';
-    const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !S.mediaOff.includes(v.id) });
+    const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !S.folderOff.includes(folder) });
     box.addEventListener('change', () => {
-      S.mediaOff = box.checked ? S.mediaOff.filter(id => id !== v.id) : [...S.mediaOff, v.id];
+      S.folderOff = box.checked ? S.folderOff.filter(f => f !== folder) : [...S.folderOff, folder];
       saveSettings();
     });
-    const name = Object.assign(document.createElement('span'), { className: 'media-name', textContent: `${gif ? 'GIF' : 'Vídeo'} · ${v.name}` });
-    name.title = v.name;
-    const see = Object.assign(document.createElement('button'), { className: 'pill', textContent: 'ver' });
-    see.addEventListener('click', e => {
-      e.preventDefault();
-      closeSettings();
-      enterStandby(true, { kind: gif ? 'image' : 'video', url: videoUrls[i], id: v.id });
-    });
-    const del = Object.assign(document.createElement('button'), { className: 'pill warn', textContent: 'apagar' });
+    const mb = idx.reduce((t, i) => t + videos[i].blob.size, 0) / 1e6;
+    const name = Object.assign(document.createElement('span'), { className: 'media-name', textContent: `📁 ${folder} · ${idx.length} arquivo(s) · ${mb.toFixed(0)} MB` });
+    const del = Object.assign(document.createElement('button'), { className: 'pill warn', textContent: 'apagar pasta' });
     del.addEventListener('click', e => e.preventDefault());
     armed(del, async () => {
-      await removeVideo(v.id);
-      S.mediaOff = S.mediaOff.filter(id => id !== v.id); saveSettings();
+      for (const i of idx) await removeVideo(videos[i].id);
+      S.folderOff = S.folderOff.filter(f => f !== folder); saveSettings();
       await reloadVideos();
     });
-    label.append(box, name, see, del);
+    label.append(box, name, del);
     return label;
   }));
 }
@@ -1214,6 +1209,14 @@ for (const [id, key] of Object.entries(FIELDS)) {
 $('btnClose').addEventListener('click', closeSettings);
 $('btnConnect').addEventListener('click', pickAdapter);
 $('btnEngine').addEventListener('click', () => { src.setEngine?.(!src.engineOn); updateSettingsInfo(); });
+$('sFolder').addEventListener('change', async e => {         // pasta inteira: só os vídeos e GIFs dela
+  const files = [...e.target.files].filter(f => /^(video|image\/(gif|webp))/.test(f.type));
+  e.target.value = '';
+  if (!files.length) return;
+  $('videoInfo').textContent = 'salvando…';
+  try { await addVideos(files); } catch (err) { log('vídeos: ' + err.message); }
+  await reloadVideos();
+});
 $('sVideos').addEventListener('change', async e => {
   const files = [...e.target.files];
   if (!files.length) return;

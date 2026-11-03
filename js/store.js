@@ -28,7 +28,8 @@ export const DEFAULTS = {
   clipSec: 25,
   videoSound: false,        // som dos vídeos do standby/página Vídeos (botão no standby)              // segundos de cada GIF ou animação
   animOff: [],              // animações desligadas uma a uma
-  mediaOff: [],             // vídeos/GIFs desligados (ids do IndexedDB)
+  mediaOff: [],             // (antigo) vídeos desligados um a um; hoje é por pasta
+  folderOff: [],            // pastas de vídeos/GIFs desligadas (pasta nova entra ligada)
 };
 
 // Intervalos de partida para a TR4 2.0 flex em uso misto; confira no manual e ajuste.
@@ -89,10 +90,16 @@ async function tx(mode, fn) {
   });
 }
 
-export async function addVideos(files) {
+// pasta de cada vídeo: a escolhida com "Adicionar pasta" (ou mandada pelo cabo); arquivos soltos vão para "Avulsos"
+export async function addVideos(files, folder) {
   try { await navigator.storage?.persist?.(); } catch {}
-  for (const f of files) await tx('readwrite', s => s.add({ name: f.name, blob: f }));
+  for (const f of files) {
+    const dir = folder || f.webkitRelativePath?.split('/').slice(0, -1).pop() || 'Avulsos';
+    await tx('readwrite', s => s.add({ name: f.name, blob: f, folder: dir }));
+  }
 }
+// vídeos guardados antes das pastas: "rally-07.mp4" fica na pasta "rally"
+export const folderOf = v => v.folder || v.name.match(/^(.+?)[-_ ]?\d+\.\w+$/)?.[1] || 'Avulsos';
 
 export async function listVideos() {
   try { return (await tx('readonly', s => s.getAll())) || []; } catch { return []; }

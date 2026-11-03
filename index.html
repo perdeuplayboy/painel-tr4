@@ -276,11 +276,13 @@
     <label>Minutos parado com motor ligado <input id="sStandbyMin" type="number" step="1" min="1" inputmode="numeric"></label>
     <p class="muted">Com o motor desligado o standby entra em 10 segundos. Toque no meio para passar ao próximo; toque nas laterais, no relógio ou arraste para o lado para sair. Os mesmos vídeos, GIFs e animações tocam na página Vídeos com o carro andando.</p>
     <div class="row">
+      <label class="pill file">Adicionar pasta<input id="sFolder" type="file" webkitdirectory multiple hidden></label>
       <label class="pill file">Adicionar vídeos ou GIFs<input id="sVideos" type="file" accept="video/*,image/gif,image/webp" multiple hidden></label>
       <button id="btnClearVideos" class="pill warn">Apagar vídeos e GIFs</button>
       <span id="videoInfo" class="muted"></span>
     </div>
     <div id="mediaList" class="anim-list"></div>
+    <p class="muted">Cada pasta liga ou desliga inteira. Pasta nova já entra ligada; vídeos avulsos ficam em "Avulsos".</p>
     <label class="check"><input id="sAnims" type="checkbox"> Incluir animações retrô</label>
     <div id="animList" class="anim-list"></div>
     <div class="row">
