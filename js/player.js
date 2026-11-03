@@ -3,7 +3,7 @@
 import { ANIMS } from './anims.js';
 
 export class Player {
-  // box: elemento onde as mídias entram; items(): [{ kind: 'video'|'image'|'anim', url?, anim? }]
+  // box: elemento onde as mídias entram; items(): [{ kind: 'video'|'image'|'anim', url?, anim?, weight? }] (weight: chance relativa, padrão 1)
   // opts: { clipMs(): tempo de GIF/animação, color(): cor das animações }
   constructor(box, items, opts) {
     Object.assign(this, { box, items, opts, on: false, cur: null, last: -1, timer: 0, raf: 0 });
@@ -45,8 +45,9 @@ export class Player {
     this.clear();
     const list = this.items();
     if (!chosen && !list.length) { this.cur = null; return; }
-    let i = Math.floor(Math.random() * list.length);
-    if (list.length > 1 && i === this.last) i = (i + 1) % list.length;   // não repete o mesmo seguido
+    const weights = list.map((it, k) => (list.length > 1 && k === this.last ? 0 : it.weight ?? 1));   // não repete o mesmo seguido
+    let r = Math.random() * weights.reduce((a, b) => a + b, 0), i = 0;
+    while (i < list.length - 1 && (r -= weights[i]) >= 0) i++;
     this.last = i;
     const it = this.cur = chosen || list[i];
     if (it.kind === 'video') {

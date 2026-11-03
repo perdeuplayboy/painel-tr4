@@ -544,7 +544,7 @@ async function reloadVideos() {
 const mediaItems = () => [
   ...videos.map((v, i) => ({ kind: v.blob.type.startsWith('image/') ? 'image' : 'video', url: videoUrls[i], id: v.id }))
     .filter(it => !S.mediaOff.includes(it.id)),
-  ...(S.anims ? Object.keys(ANIMS).filter(a => !S.animOff.includes(a) && (a !== 'johnny' || johnnyReady())).map(anim => ({ kind: 'anim', anim })) : []),
+  ...(S.anims ? Object.keys(ANIMS).filter(a => !S.animOff.includes(a) && (a !== 'johnny' || johnnyReady())).map(anim => ({ kind: 'anim', anim, weight: anim === 'johnny' ? 0.25 : 1 })) : []),   // Johnny tem muitas cenas: aparece bem menos
 ];
 const playerOpts = {
   clipMs: () => Math.max(5, S.clipSec) * 1000,
