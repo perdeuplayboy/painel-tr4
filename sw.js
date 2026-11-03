@@ -1,6 +1,6 @@
 // Guarda o app no celular para funcionar sem internet (trilha, garagem).
 // Ao mudar qualquer arquivo do app, suba a versão para o celular baixar de novo.
-const VERSION = 'painel-tr4-v19';
+const VERSION = 'painel-tr4-v20';
 const TILES = 'painel-tr4-mapa';          // pedaços do mapa já vistos (sobrevive às versões)
 const FILES = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
@@ -10,7 +10,7 @@ const FILES = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
@@ -25,7 +25,7 @@ self.addEventListener('fetch', e => {
   if (e.request.method === 'GET' && url.hostname === 'tile.openstreetmap.org') { e.respondWith(tile(e.request)); return; }
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-cache' })                          // confere com o site (não usa a cópia velha de 10 min)
       .then(r => { const copy = r.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); return r; })
       .catch(() => caches.match(e.request, { ignoreSearch: true }))
   );
