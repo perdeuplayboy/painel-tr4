@@ -151,28 +151,51 @@ async function fetchRoute(from, to, heading) {
   throw err;
 }
 
-function buildRoute(r) {
-  const pts = r.geometry.coordinates.map(([lon, lat]) => ({ lat, lon }));
+// trajeto a partir dos pontos: plano local, distância acumulada e projeção do mapa
+function geometry(pts) {
   const toXY = localXY(pts[0].lat, pts[0].lon);
   const xy = pts.map(p => toXY(p.lat, p.lon));
   const cum = [0];
   for (let i = 1; i < xy.length; i++) cum.push(cum[i - 1] + Math.hypot(xy[i][0] - xy[i - 1][0], xy[i][1] - xy[i - 1][1]));
-  const total = cum[cum.length - 1];
-  const k = r.distance > 0 ? total / r.distance : 1;                 // acerta a escala do OSRM com a nossa
+  return { pts, xy, cum, total: cum[cum.length - 1], toXY, merc: pts.map(p => mercator(p.lat, p.lon)) };
+}
+
+function buildRoute(r) {
+  const g = geometry(r.geometry.coordinates.map(([lon, lat]) => ({ lat, lon })));
+  const k = r.distance > 0 ? g.total / r.distance : 1;               // acerta a escala do OSRM com a nossa
   let at = 0;
   const steps = r.legs.flatMap(l => l.steps).map(s => {
     const st = { type: s.maneuver.type, modifier: s.maneuver.modifier, exit: s.maneuver.exit, name: s.name || s.ref || '', at };
     at += s.distance * k;
     return st;
   });
-  return { pts, xy, cum, total, duration: r.duration, steps, toXY, merc: pts.map(p => mercator(p.lat, p.lon)) };
+  return { ...g, duration: r.duration, steps };
+}
+
+// rota guardada no aparelho (para retomar sem internet): só os pontos e as manobras; o resto é refeito
+export function packRoute(rt) {
+  return { p: rt.pts.flatMap(q => [+q.lat.toFixed(6), +q.lon.toFixed(6)]), duration: rt.duration, steps: rt.steps };
+}
+export function unpackRoute(o) {
+  const pts = [];
+  for (let i = 0; i + 1 < o.p.length; i += 2) pts.push({ lat: o.p[i], lon: o.p[i + 1] });
+  return pts.length > 1 ? { ...geometry(pts), duration: o.duration, steps: o.steps } : null;
 }
 
 // ---------------------------------------------------------------------------
 // Acompanhamento da rota: posição no trajeto, próxima manobra, avisos e recálculo
+// onRoute(dest, rt) a cada rota calculada (para guardar); saved(dest) devolve a rota guardada
+// para esse destino, usada quando não dá para calcular (sem internet); onArrive ao chegar
 export class Navigator {
-  constructor({ speak = () => {}, log = () => {} } = {}) {
-    Object.assign(this, { speak, log, route: null, dest: null, pending: null, busy: false, msg: '', gen: 0 });
+  constructor({ speak = () => {}, log = () => {}, onRoute = () => {}, saved = () => null, onArrive = () => {} } = {}) {
+    Object.assign(this, { speak, log, onRoute, saved, onArrive, route: null, dest: null, pending: null, busy: false, msg: '', gen: 0 });
+  }
+
+  // volta a uma rota já calculada, sem precisar de internet
+  resume(dest, rt) {
+    this.gen++;
+    Object.assign(this, { dest, route: rt, pending: null, busy: false, seg: 0, along: 0, offSince: null, ann: {}, msg: '' });
+    this.speak(`Retomando a rota para ${dest.name}`);
   }
 
   get active() { return !!(this.route || this.pending || this.busy); }
@@ -192,11 +215,14 @@ export class Navigator {
       const rt = await fetchRoute(pos, dest, pos.speed > 10 ? pos.heading : NaN);
       if (gen !== this.gen) return;
       Object.assign(this, { route: rt, seg: 0, along: 0, offSince: null, ann: {}, msg: '' });
+      this.onRoute(dest, rt);
       if (!reroute) this.speak(`Rota para ${dest.name}. ${spokenDist(rt.total)}, chegada às ${hhmm(Date.now() + rt.duration * 1000)}`);
     } catch (e) {
       if (gen !== this.gen) return;
-      this.msg = 'sem rota: ' + (e.name === 'TimeoutError' ? 'sem internet?' : e.message);
       this.log('rota: ' + e.message);
+      const old = !reroute && this.saved(dest);                     // sem internet: usa a rota guardada para esse destino
+      if (old) { this.resume(dest, old); return; }
+      this.msg = 'sem rota: ' + (e.name === 'TimeoutError' ? 'sem internet?' : e.message);
     } finally {
       if (gen === this.gen) this.busy = false;
     }
@@ -231,6 +257,7 @@ export class Navigator {
     const remain = Math.max(0, rt.total - this.along);
     if (remain < 30 && this.along > 0) {
       this.speak('Você chegou ao destino');
+      this.onArrive(this.dest);
       this.stop();
       this.msg = 'chegou ao destino ✓';
       setTimeout(() => { if (!this.active) this.msg = ''; }, 20000);

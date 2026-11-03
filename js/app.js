@@ -2,7 +2,7 @@ import {
   State, FUELS, emptyTrip, tripAvgKmL, tripAvgSpeed, deriveAndIntegrate, MockSource, ElmBleSource,
 } from './obd.js';
 import { loadSettings, loadUpkeep, load, save, addVideos, listVideos, clearVideos, removeVideo, saveJohnnyFiles, johnnyReady, saveExtras, extrasHave, extrasReady, EXTRAS } from './store.js';
-import { MapView, Navigator, geocode, distM, fmtDist, arrowPath, arrowChar } from './nav.js';
+import { MapView, Navigator, geocode, distM, fmtDist, arrowPath, arrowChar, packRoute, unpackRoute } from './nav.js';
 import { Spotify } from './spotify.js';
 import { Player } from './player.js';
 import { ANIMS, ANIM_NAMES } from './anims.js';
@@ -327,7 +327,15 @@ setInterval(applyTheme, 60000);
 // ---------------------------------------------------------------------------
 // Navegação: mapa, rota e destinos (falados, buscados ou enviados do celular)
 const mapView = new MapView($('map'));
-const nav = new Navigator({ speak: t => speak(t, 'nav'), log });
+// a última rota calculada fica guardada 30 dias: "Retomar rota" e destino repetido sem internet
+const ROUTE_KEEP = 30 * 86400000;
+const storedRoute = () => { const o = load('navRoute', null); return o?.rt && Date.now() - o.at < ROUTE_KEEP ? o : null; };
+const storedRouteFor = dest => { const o = storedRoute(); return o && distM(o.dest, dest) < 50 ? unpackRoute(o.rt) : null; };
+const nav = new Navigator({
+  speak: t => speak(t, 'nav'), log, saved: storedRouteFor,
+  onRoute: (dest, rt) => save('navRoute', { dest, rt: packRoute(rt), at: Date.now() }),
+  onArrive: () => { const o = storedRoute(); if (o) save('navRoute', { ...o, done: true }); },   // chegou: não oferece retomar
+});
 let navRecent = load('navRecent', []);
 let navInfo = null;
 
@@ -357,9 +365,22 @@ function goTo(dest) {
 
 function stopNav() { nav.stop(); navInfo = null; save('navDest', null); }
 
-// rota em andamento continua se o Chrome for fechado e reaberto (até 6 h)
+// rota em andamento continua se o Chrome for fechado e reaberto (até 6 h), pela rota guardada: não precisa de internet
 const savedDest = load('navDest', null);
-if (savedDest && Date.now() - savedDest.at < 6 * 3600000) nav.go(savedDest, null);
+if (savedDest && Date.now() - savedDest.at < 6 * 3600000) {
+  const rt = storedRouteFor(savedDest);
+  if (rt) nav.resume(savedDest, rt); else nav.go(savedDest, null);
+}
+
+// depois de encerrar (sem querer ou não), a última rota pode ser retomada do mesmo jeito
+function resumeRoute() {
+  const o = storedRoute(), rt = o && unpackRoute(o.rt);
+  if (!rt) return;
+  $('navPick').hidden = true;
+  save('navDest', { ...o.dest, at: Date.now() });
+  nav.resume(o.dest, rt);
+  showPage(PAGES.indexOf('nav'));
+}
 
 // ?demo: parado na Av. Paulista; com rota, anda por ela na velocidade da simulação
 if (DEMO) {
@@ -396,9 +417,23 @@ function destButton(it) {
   return b;
 }
 
-function showPick(title, items) {
+function resumeButton(o) {
+  const b = document.createElement('button');
+  b.className = 'dest resume';
+  const name = document.createElement('b'), sub = document.createElement('small');
+  name.textContent = '↩ Retomar rota';
+  sub.textContent = o.dest.name;
+  b.append(name, sub);
+  b.addEventListener('click', resumeRoute);
+  return b;
+}
+
+// back = rota guardada que pode ser retomada (aparece primeiro)
+function showPick(title, items, back = null) {
   set('navPickTitle', title);
-  $('navPickList').replaceChildren(...items.slice(0, 4).map(destButton));
+  const list = items.slice(0, back ? 3 : 4).map(destButton);
+  if (back) list.unshift(resumeButton(back));
+  $('navPickList').replaceChildren(...list);
   $('navPick').hidden = false;
 }
 
@@ -425,7 +460,8 @@ function listenDest() {
 }
 
 $('btnNavDest').addEventListener('click', () => {
-  showPick(navRecent.length ? 'Para onde? (recentes)' : 'Para onde?', navRecent);
+  const o = storedRoute();
+  showPick(navRecent.length ? 'Para onde? (recentes)' : 'Para onde?', navRecent, o && !o.done ? o : null);
 });
 $('btnNavMic').addEventListener('click', listenDest);
 $('btnNavPickClose').addEventListener('click', () => { $('navPick').hidden = true; });

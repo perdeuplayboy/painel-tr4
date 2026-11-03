@@ -176,6 +176,7 @@ button { font: inherit; color: inherit; background: none; border: 0; }
   overflow: hidden; cursor: pointer;
 }
 .dest b, .dest small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dest.resume { border-color: var(--accent); }
 .dest b { font-size: 2.6rem; }
 .dest small { font-size: 1.8rem; }
 .status.nav { font-size: 2.6rem; color: var(--accent); font-weight: 600; }
