@@ -1311,14 +1311,21 @@ const standalone = matchMedia('(display-mode: fullscreen), (display-mode: standa
 const touch = matchMedia('(pointer: coarse)').matches;
 addEventListener('pointerdown', () => { if (touch && !standalone && !document.fullscreenElement) goFullscreen(); }, { once: true });
 
-let wakeLock = null;
+// trava de tela acesa: uma só de cada vez (cada pedido cria uma trava nova, e todas precisam ser soltas para apagar)
+const wakeLocks = new Set();
+let wakePending = false;
 async function keepAwake() {
-  if (asleep) return;
-  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
+  if (asleep || wakePending || [...wakeLocks].some(l => !l.released)) return;
+  wakePending = true;
+  try {
+    const l = await navigator.wakeLock?.request('screen');
+    if (l) { wakeLocks.add(l); l.addEventListener('release', () => wakeLocks.delete(l)); if (asleep) l.release(); }
+  } catch {}
+  wakePending = false;
 }
 
 // Apagar a tela: o painel cobre tudo de preto e solta a trava de tela acesa; o Android apaga a tela pelo
-// tempo de desligar dele (30 s). Acende de novo pelo botão de ligar ou quando a energia volta.
+// tempo de desligar dele (5 s no G42). Acende de novo pelo botão de ligar ou quando a energia volta.
 let lastTouch = Date.now(), holdTimer = 0, holdAt = null;
 function sleepScreen() {
   if (asleep) return;
@@ -1326,8 +1333,7 @@ function sleepScreen() {
   exitStandby(); pgPlayer.stop();
   if (!$('sleep')) document.body.append(Object.assign(document.createElement('div'), { id: 'sleep' }));
   $('sleep').hidden = false;
-  try { wakeLock?.release(); } catch {}
-  wakeLock = null;
+  for (const l of wakeLocks) { try { l.release(); } catch {} }
 }
 function wakeScreen() {
   if (!asleep) return;
