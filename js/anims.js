@@ -445,71 +445,6 @@ function ocean(ctx, w, h, t, color) {
   ctx.globalAlpha = 1;
 }
 
-// Fita K7: rolos girando em velocidades diferentes, um enchendo e outro esvaziando
-function cassette(ctx, w, h, t, color) {
-  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
-  const W = Math.max(w * 0.86, h * 1.7), H = W / 1.6, x0 = (w - W) / 2, y0 = h * 0.5 - H * 0.38;   // close-up nos rolos
-  ctx.fillStyle = '#16181d'; ctx.strokeStyle = '#2e323a'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.roundRect(x0, y0, W, H, H * 0.06); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = '#2e323a';
-  for (const [sx, sy] of [[0.03, 0.05], [0.97, 0.05], [0.03, 0.93], [0.97, 0.93], [0.5, 0.93]]) {
-    ctx.beginPath(); ctx.arc(x0 + W * sx, y0 + H * sy, H * 0.018, 0, TAU); ctx.fill();
-  }
-  ctx.fillStyle = '#d9d2bf';                                        // etiqueta
-  ctx.beginPath(); ctx.roundRect(x0 + W * 0.06, y0 + H * 0.08, W * 0.88, H * 0.58, H * 0.03); ctx.fill();
-  ctx.fillStyle = color; ctx.fillRect(x0 + W * 0.06, y0 + H * 0.5, W * 0.88, H * 0.06);
-  ctx.fillStyle = '#2a2a2a'; ctx.font = `bold ${H * 0.1}px sans-serif`; ctx.textAlign = 'left';
-  ctx.fillText('A', x0 + W * 0.09, y0 + H * 0.2);
-  ctx.strokeStyle = '#8a8478'; ctx.lineWidth = 1;
-  for (const ly of [0.16, 0.24]) { ctx.beginPath(); ctx.moveTo(x0 + W * 0.17, y0 + H * ly); ctx.lineTo(x0 + W * 0.9, y0 + H * ly); ctx.stroke(); }
-  ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1.5;                 // "letra de mão" na etiqueta
-  ctx.beginPath();
-  for (let x = 0; x < W * 0.5; x += 3) ctx.lineTo(x0 + W * 0.2 + x, y0 + H * 0.145 + Math.sin(x * 0.5) * H * 0.012);
-  ctx.stroke();
-
-  const wx = x0 + W * 0.2, wy = y0 + H * 0.28, ww = W * 0.6, wh = H * 0.2;
-  ctx.fillStyle = '#0a0b0e';
-  ctx.beginPath(); ctx.roundRect(wx, wy, ww, wh, wh * 0.5); ctx.fill();
-  const p = (t / 45) % 1, rMin = H * 0.07, rMax = H * 0.21;
-  const rL = rMin + (rMax - rMin) * (1 - p), rR = rMin + (rMax - rMin) * p;
-  const hubs = [[x0 + W * 0.31, rL], [x0 + W * 0.69, rR]], hy = wy + wh / 2;
-  ctx.save();
-  ctx.beginPath(); ctx.roundRect(wx, wy, ww, wh, wh * 0.5); ctx.clip();
-  for (const [hx, r] of hubs) { ctx.fillStyle = '#3b2a1c'; ctx.beginPath(); ctx.arc(hx, hy, r, 0, TAU); ctx.fill(); }
-  const [[ax, ar], [bx, br]] = hubs;                                // fita passando de um rolo ao outro
-  ctx.strokeStyle = '#6b4a2e'; ctx.lineWidth = 2.5;
-  ctx.beginPath(); ctx.moveTo(ax, hy + ar); ctx.lineTo(bx, hy + br); ctx.stroke();
-  ctx.strokeStyle = '#a07a54'; ctx.lineWidth = 2.5;
-  const len = bx - ax;
-  for (let s = (t * 60) % 16; s < len; s += 16) {
-    const f = s / len;
-    ctx.beginPath(); ctx.moveTo(ax + s, hy + ar + (br - ar) * f); ctx.lineTo(ax + s + 5, hy + ar + (br - ar) * (f + 5 / len)); ctx.stroke();
-  }
-  ctx.restore();
-  for (const [hx, r] of hubs) {                                     // cubo branco com dentes girando
-    const a = t * 18 * rMin / r;
-    ctx.fillStyle = '#e8e4da';
-    ctx.beginPath(); ctx.arc(hx, hy, H * 0.055, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#0a0b0e';
-    ctx.beginPath(); ctx.arc(hx, hy, H * 0.032, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#e8e4da';
-    for (let q = 0; q < 6; q++) {
-      const b = a + q * TAU / 6;
-      ctx.fillRect(hx + Math.cos(b) * H * 0.028 - 1.5, hy + Math.sin(b) * H * 0.028 - 1.5, 3, 3);
-    }
-  }
-  const ty = y0 + H * 0.86;                                         // fita correndo embaixo
-  ctx.fillStyle = '#0a0b0e';
-  ctx.beginPath(); ctx.moveTo(x0 + W * 0.18, y0 + H); ctx.lineTo(x0 + W * 0.24, y0 + H * 0.76);
-  ctx.lineTo(x0 + W * 0.76, y0 + H * 0.76); ctx.lineTo(x0 + W * 0.82, y0 + H); ctx.fill();
-  ctx.strokeStyle = '#5a3d26'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(x0 + W * 0.2, ty); ctx.lineTo(x0 + W * 0.8, ty); ctx.stroke();
-  ctx.strokeStyle = '#8a6a4a'; ctx.lineWidth = 2;
-  for (let x = (t * 40) % 14; x < W * 0.6; x += 14) { ctx.beginPath(); ctx.moveTo(x0 + W * 0.2 + x, ty); ctx.lineTo(x0 + W * 0.2 + x + 4, ty); ctx.stroke(); }
-  ctx.fillStyle = '#2e323a';
-  for (const gx of [0.27, 0.5, 0.73]) ctx.fillRect(x0 + W * gx - 4, ty - 2, 8, 6);
-}
-
 // Bússola giroscópica: o mostrador balança procurando a direção e, ao travar no Norte, pulsa
 function compass(ctx, w, h, t, color) {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
@@ -675,12 +610,11 @@ function johnny(ctx, w, h) {
 
 export const ANIMS = {
   equalizer, road, trail, dunes, warp, topo, scope,
-  pipes, maze, flowerbox, rain, ocean, drone, cassette, compass, camp, glow, johnny,
+  pipes, maze, flowerbox, rain, ocean, drone, compass, camp, glow, johnny,
 };
 export const ANIM_NAMES = {
   equalizer: 'Equalizador', road: 'Estrada retrô', trail: 'Trilha',
   dunes: 'Dunas', warp: 'Hiperespaço', topo: 'Mapa topográfico', scope: 'Osciloscópio',
   pipes: 'Canos 3D', maze: 'Labirinto de tijolos', flowerbox: 'Caixa de flores 3D', rain: 'Chuva de dados', ocean: 'Oceano digital', drone: 'Escaneamento por drone',
-  cassette: 'Fita K7',
   compass: 'Bússola giroscópica', camp: 'Acampamento', glow: 'Brilho ciano', johnny: 'Johnny Castaway',
 };
