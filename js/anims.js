@@ -172,63 +172,6 @@ function truck(ctx, t, color, s, dust, dustAlpha, beam = true, wheels = [0, 0]) 
   ctx.restore();
 }
 
-// Estrada à noite: postes passando, faixas tracejadas e as lanternas de um carro à frente
-function night(ctx, w, h, t, color) {
-  const hz = h * 0.45, cx = w / 2, run = t * 7;
-  let g = ctx.createLinearGradient(0, 0, 0, hz);
-  g.addColorStop(0, '#02030a'); g.addColorStop(1, '#151a2b');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, w, hz);
-  ctx.fillStyle = color; ctx.globalAlpha = 0.18;                   // brilho da cidade no horizonte
-  ctx.fillRect(0, hz - h * 0.05, w, h * 0.05);
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = '#040406'; ctx.fillRect(0, hz, w, h - hz);
-  const Y = z => hz + (h - hz) / z;                                // profundidade → altura na tela
-  ctx.fillStyle = '#101114';
-  ctx.beginPath();
-  ctx.moveTo(cx - w * 0.006, hz); ctx.lineTo(cx + w * 0.006, hz); ctx.lineTo(cx + w * 0.8, h); ctx.lineTo(cx - w * 0.8, h);
-  ctx.fill();
-
-  ctx.fillStyle = '#d9d9d0';                                       // faixas: 2 divisórias de pista
-  for (let k = 0; k < 14; k++) {
-    const a = k * 3 - (run % 3) + 1, b = a + 1.3;
-    if (a < 0.9) continue;
-    for (const lane of [-0.27, 0.27]) {
-      ctx.globalAlpha = Math.min(1, 6 / a);
-      ctx.beginPath();
-      ctx.moveTo(cx + (lane - 0.01) * w / a, Y(a)); ctx.lineTo(cx + (lane + 0.01) * w / a, Y(a));
-      ctx.lineTo(cx + (lane + 0.01) * w / b, Y(b)); ctx.lineTo(cx + (lane - 0.01) * w / b, Y(b));
-      ctx.fill();
-    }
-  }
-  ctx.globalAlpha = 1;
-
-  const lamps = [];
-  for (let k = 0; k < 9; k++) {
-    const z = k * 4 - (run % 4) + 1;
-    if (z > 0.8) for (const side of [-1, 1]) lamps.push([z, side]);
-  }
-  lamps.sort((a, b) => b[0] - a[0]);                               // longe primeiro
-  for (const [z, side] of lamps) {
-    const x = cx + side * w * 0.95 / z, y = Y(z), ph = h * 1.1 / z;
-    ctx.strokeStyle = '#2a2d33'; ctx.lineWidth = Math.max(1, 6 / z);
-    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - ph); ctx.lineTo(x - side * ph * 0.25, y - ph); ctx.stroke();
-    const lx = x - side * ph * 0.25, ly = y - ph, r = h * 0.35 / z;
-    const glow = ctx.createRadialGradient(lx, ly, 0, lx, ly, r);
-    glow.addColorStop(0, 'rgba(255, 210, 140, .9)'); glow.addColorStop(1, 'rgba(255, 180, 90, 0)');
-    ctx.fillStyle = glow; ctx.fillRect(lx - r, ly - r, 2 * r, 2 * r);
-  }
-
-  const z = 5 + Math.sin(t * 0.4) * 0.8, x = cx + w * 0.135 / z + Math.sin(t * 0.7) * w * 0.01, y = Y(z);
-  const cw = w * 0.2 / z;
-  ctx.fillStyle = '#000';
-  ctx.fillRect(x - cw / 2, y - cw * 0.55, cw, cw * 0.5);
-  for (const sx of [-0.38, 0.38]) {
-    const tl = ctx.createRadialGradient(x + sx * cw, y - cw * 0.35, 0, x + sx * cw, y - cw * 0.35, cw * 0.3);
-    tl.addColorStop(0, 'rgba(255, 40, 40, 1)'); tl.addColorStop(1, 'rgba(255, 0, 0, 0)');
-    ctx.fillStyle = tl; ctx.fillRect(x + sx * cw - cw * 0.3, y - cw * 0.65, cw * 0.6, cw * 0.6);
-  }
-}
-
 // Dunas: 4x4 saltando as cristas ao pôr do sol, levantando areia
 const dune = (x, seed, amp, base) =>
   base - amp * (0.75 * (1 - Math.abs(Math.sin(x * 0.0045 + seed))) ** 1.6 + 0.25 * Math.sin(x * 0.013 + seed * 2));
@@ -567,73 +510,6 @@ function cassette(ctx, w, h, t, color) {
   for (const gx of [0.27, 0.5, 0.73]) ctx.fillRect(x0 + W * gx - 4, ty - 2, 8, 6);
 }
 
-// Golfinhos: dois golfinhos pixelados saltando sincronizados num mar de ondas vetoriais
-const DOLPHIN = [
-  '...........##.......',
-  '..........###.......',
-  '.....###########....',
-  '...#############o##.',
-  '#.#################.',
-  '##.##############...',
-  '#....#########......',
-  '.......##...........',
-];
-let dolphinSprite = null, dolphinColor = '';
-function dolphinImg(color) {
-  if (dolphinSprite && dolphinColor === color) return dolphinSprite;
-  const c = document.createElement('canvas');
-  c.width = DOLPHIN[0].length; c.height = DOLPHIN.length;
-  const g = c.getContext('2d');
-  DOLPHIN.forEach((row, y) => [...row].forEach((ch, x) => {
-    if (ch === '.') return;
-    g.fillStyle = ch === 'o' ? '#fff' : color;
-    g.fillRect(x, y, 1, 1);
-  }));
-  dolphinSprite = c; dolphinColor = color;
-  return c;
-}
-function dolphins(ctx, w, h, t, color) {
-  ctx.fillStyle = '#02040b'; ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = '#ffffff';
-  for (let i = 0; i < 40; i++) {
-    ctx.globalAlpha = 0.3 + 0.4 * Math.abs(Math.sin(t + i));
-    ctx.fillRect((i * 97) % w, (i * 53) % (h * 0.45), 2, 2);
-  }
-  ctx.globalAlpha = 1;
-  const sea = h * 0.62;
-  ctx.lineWidth = 1.5;
-  for (let r = 0; r < 9; r++) {                                     // ondas vetoriais
-    const y0 = sea + r * h * 0.045;
-    ctx.strokeStyle = r % 2 ? '#1d6fa5' : color; ctx.globalAlpha = 0.9 - r * 0.08;
-    ctx.beginPath();
-    for (let x = 0; x <= w; x += 6) {
-      const y = y0 + Math.sin(x * 0.03 + t * 2 + r) * h * 0.012 + Math.sin(x * 0.011 - t * 1.3 + r * 2) * h * 0.01;
-      x ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-    }
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-  const img = dolphinImg(color), px = Math.max(2, Math.round(h / 55)), sw = img.width * px, shh = img.height * px;
-  const period = 5;
-  for (const [lag, dy] of [[0, 0], [0.035, h * 0.07]]) {             // dois, quase juntos
-    const p = (t / period + lag) % 1;
-    const x = -sw + p * (w + 2 * sw);
-    const arc = Math.sin(p * TAU * 2);                               // dois saltos por travessia
-    const y = sea + dy - Math.max(0, arc) * h * 0.38 + Math.max(0, -arc) * h * 0.08;
-    const slope = -Math.cos(p * TAU * 2) * (arc > 0 ? 0.9 : 0.25);
-    ctx.save();
-    ctx.imageSmoothingEnabled = false;
-    ctx.globalAlpha = arc > -0.1 ? 1 : 0.35;                          // debaixo d'água fica apagado
-    ctx.translate(x, y); ctx.rotate(slope);
-    ctx.drawImage(img, -sw / 2, -shh / 2, sw, shh);
-    ctx.restore();
-    if (Math.abs(arc) < 0.12) {                                       // respingo ao entrar/sair da água
-      ctx.fillStyle = '#cfe8ff';
-      for (let q = 0; q < 8; q++) ctx.fillRect(x + (q - 4) * px * 1.5, sea + dy - Math.abs(Math.sin(q * 1.7 + t * 9)) * h * 0.08, px, px);
-    }
-  }
-}
-
 // Bússola giroscópica: o mostrador balança procurando a direção e, ao travar no Norte, pulsa
 function compass(ctx, w, h, t, color) {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
@@ -798,13 +674,13 @@ function johnny(ctx, w, h) {
 }
 
 export const ANIMS = {
-  equalizer, road, trail, night, dunes, warp, topo, scope,
-  pipes, maze, flowerbox, rain, ocean, drone, cassette, dolphins, compass, camp, glow, johnny,
+  equalizer, road, trail, dunes, warp, topo, scope,
+  pipes, maze, flowerbox, rain, ocean, drone, cassette, compass, camp, glow, johnny,
 };
 export const ANIM_NAMES = {
-  equalizer: 'Equalizador', road: 'Estrada retrô', trail: 'Trilha', night: 'Estrada à noite',
+  equalizer: 'Equalizador', road: 'Estrada retrô', trail: 'Trilha',
   dunes: 'Dunas', warp: 'Hiperespaço', topo: 'Mapa topográfico', scope: 'Osciloscópio',
   pipes: 'Canos 3D', maze: 'Labirinto de tijolos', flowerbox: 'Caixa de flores 3D', rain: 'Chuva de dados', ocean: 'Oceano digital', drone: 'Escaneamento por drone',
-  cassette: 'Fita K7', dolphins: 'Golfinhos',
+  cassette: 'Fita K7',
   compass: 'Bússola giroscópica', camp: 'Acampamento', glow: 'Brilho ciano', johnny: 'Johnny Castaway',
 };
