@@ -1094,6 +1094,8 @@ $('sJohnny').addEventListener('change', async e => {                // dados do 
   try {
     const got = await saveJohnnyFiles(files);
     johnnyInfo();
+$('sJohnnySom').checked = localStorage.getItem('johnnySom') === '1';   // som do Johnny: só neste aparelho
+$('sJohnnySom').addEventListener('change', e => localStorage.setItem('johnnySom', e.target.checked ? '1' : ''));
     if (!johnnyReady()) $('johnnyInfo').textContent = `faltam arquivos (achei: ${got.join(', ') || 'nenhum'})`;
   } catch (err) { $('johnnyInfo').textContent = 'erro: ' + err.message; }
   e.target.value = '';

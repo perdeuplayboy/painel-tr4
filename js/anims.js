@@ -4,6 +4,7 @@
 
 import { drone } from './lidar.js';
 import { pipes, maze } from './retro3d.js';
+import { loadJohnnyFiles } from './store.js';
 
 const TAU = Math.PI * 2;
 
@@ -568,6 +569,27 @@ function glow(ctx, w, h) {
 // Johnny Castaway: o protetor original rodando no motor Johnny Reborn (página johnny/ num iframe escondido).
 // Os dados do original ficam só no aparelho; sem eles aparece um aviso.
 let jFrame = null, jStop = 0, jScan = 0, jCrop = 180, jTarget = 180;
+let jAudio = null, jSounds = null;
+// a página do motor avisa qual efeito tocar; toca aqui, por cima da música (opção "Som do Johnny")
+window.johnnySound = async nb => {
+  if (localStorage.getItem('johnnySom') !== '1') return;
+  try {
+    jAudio ??= new AudioContext();
+    if (jAudio.state === 'suspended') jAudio.resume().catch(() => {});
+    jSounds ??= loadJohnnyFiles().then(async files => {
+      const out = {};
+      for (const [name, data] of Object.entries(files)) {
+        const m = /^SOUND(\d+)\.WAV$/.exec(name);
+        if (m) out[m[1]] = await jAudio.decodeAudioData(data.slice(0));
+      }
+      return out;
+    });
+    const buf = (await jSounds)[nb];
+    if (!buf) return;
+    const src = jAudio.createBufferSource();
+    src.buffer = buf; src.connect(jAudio.destination); src.start();
+  } catch {}
+};
 function johnny(ctx, w, h) {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
   if (!jFrame) {

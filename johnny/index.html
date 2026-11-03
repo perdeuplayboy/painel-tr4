@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>Johnny Castaway</title>
 <!-- Motor: Johnny Reborn (GPL-3.0, código-fonte em https://github.com/xesf/jc_reborn, licença em LICENSE).
-     Os arquivos de dados do original (RESOURCE.MAP, RESOURCE.001, SCRANTIC.SCR) não vêm com o app:
+     Os arquivos de dados do original (RESOURCE.MAP, RESOURCE.001, SCRANTIC.SCR e os sons soundN.wav) não vêm com o app:
      o usuário escolhe nas configurações e eles ficam guardados só no aparelho (IndexedDB). -->
 <style>html, body { margin: 0; background: #000; overflow: hidden; } canvas { display: block; }</style>
 </head>
@@ -34,7 +34,10 @@ if (!['RESOURCE.MAP', 'RESOURCE.001', 'SCRANTIC.SCR'].every(n => files[n])) {
     print: dbg ? console.log : () => {}, printErr: dbg ? console.warn : () => {},   // ?debug mostra o que o motor faz
     preRun: [() => {
       FS.mkdir('/data');
-      for (const [name, data] of Object.entries(files)) FS.writeFile('/data/' + name, new Uint8Array(data));
+      for (const [name, data] of Object.entries(files)) {               // os sons o motor procura em minúsculas
+        FS.writeFile('/data/' + (/^SOUND/.test(name) ? name.toLowerCase() : name), new Uint8Array(data));
+      }
+      watchSounds();
       // o dia da história (11 dias, como no original) fica num arquivo que sumiria a cada vez: guarda no aparelho
       const cfg = '/home/web_user/.jc_reborn', saved = localStorage.getItem('johnnyCfg');
       if (saved) FS.writeFile(cfg, saved);
@@ -43,6 +46,38 @@ if (!['RESOURCE.MAP', 'RESOURCE.001', 'SCRANTIC.SCR'].every(n => files[n])) {
       }, 2000);
     }],
   };
+  // sons: o motor escolhe o efeito (soundPlay guarda o ponteiro do som em currentSound), mas a versão web
+  // não toca nada. Acha a tabela de sons na memória pelos tamanhos dos WAV, vigia quem aponta para ela
+  // e pede ao painel para tocar (o painel já tem permissão de áudio pelos toques na tela).
+  function watchSounds() {
+    const lens = [];
+    for (let n = 1; n <= 24; n++) {
+      const w = files[`SOUND${n}.WAV`];
+      lens[n] = w ? new DataView(w).getUint32(40, true) : -1;
+    }
+    if (lens[1] < 0 || lens[2] < 0 || lens[3] < 0) return;
+    let base = -1;
+    const timer = setInterval(() => {
+      const H = window.HEAPU32;
+      if (!H) return;
+      if (base < 0) {                                                 // sounds[1..3]: { tamanho, ponteiro } seguidos
+        for (let j = 0; j < H.length - 6; j++) {
+          if (H[j] === lens[1] && H[j + 2] === lens[2] && H[j + 4] === lens[3] && H[j + 1] && H[j + 3]) { base = j * 4 - 8; break; }
+        }
+        if (base < 0) return;
+      }
+      const from = Math.max(0, base / 4 - 512), to = Math.min(H.length, base / 4 + 50 + 512);
+      for (let a = from; a < to; a++) {
+        if (a >= base / 4 && a < base / 4 + 50) continue;               // a própria tabela
+        const v = H[a], nb = (v - base) / 8;
+        if (v > base && Number.isInteger(nb) && nb >= 1 && nb <= 24 && lens[nb] > 0) {
+          H[a] = 0;                                                     // pronto para perceber o próximo
+          try { window.parent?.johnnySound?.(nb); } catch {}
+          if (dbg) console.log('som', nb);
+        }
+      }
+    }, 40);
+  }
   const s = document.createElement('script');
   s.src = 'jc_reborn.js';
   document.body.append(s);

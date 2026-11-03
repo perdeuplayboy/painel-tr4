@@ -107,6 +107,7 @@ export async function clearVideos() {
 
 // ---- Johnny Castaway: arquivos de dados do original, guardados só neste aparelho ----
 const JDB = 'painel-tr4-johnny', JNAMES = ['RESOURCE.MAP', 'RESOURCE.001', 'SCRANTIC.SCR'];
+const isSound = n => /^SOUND\d{1,2}\.WAV$/.test(n);                 // efeitos sonoros (opcionais)
 
 function openJohnny() {
   return new Promise((resolve, reject) => {
@@ -135,14 +136,14 @@ async function unzip(blob) {
   return out;
 }
 
-// aceita o zip do protetor ou os três arquivos soltos; devolve quais nomes encontrou
+// aceita o zip do protetor ou os arquivos soltos (os três de dados e os sons); devolve quais nomes encontrou
 export async function saveJohnnyFiles(files) {
   const found = {};
   for (const f of files) {
     const items = /\.zip$/i.test(f.name) ? await unzip(f) : [{ name: f.name, get: () => f.arrayBuffer() }];
     for (const it of items) {
       const base = it.name.split(/[\/]/).pop().toUpperCase();
-      if (JNAMES.includes(base)) found[base] = await it.get();
+      if (JNAMES.includes(base) || isSound(base)) found[base] = await it.get();
     }
   }
   const db = await openJohnny();
@@ -160,8 +161,11 @@ export async function loadJohnnyFiles() {
   try {
     const db = await openJohnny();
     return await new Promise((resolve, reject) => {
-      const t = db.transaction('files'), s = t.objectStore('files'), res = {};
-      for (const n of JNAMES) s.get(n).onsuccess = e => { if (e.target.result) res[n] = e.target.result; };
+      const t = db.transaction('files'), res = {};
+      t.objectStore('files').openCursor().onsuccess = e => {
+        const c = e.target.result;
+        if (c) { res[c.key] = c.value; c.continue(); }
+      };
       t.oncomplete = () => resolve(res); t.onerror = () => reject(t.error);
     });
   } catch { return {}; }
