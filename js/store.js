@@ -104,3 +104,67 @@ export async function removeVideo(id) {
 export async function clearVideos() {
   try { await tx('readwrite', s => s.clear()); } catch {}
 }
+
+// ---- Johnny Castaway: arquivos de dados do original, guardados só neste aparelho ----
+const JDB = 'painel-tr4-johnny', JNAMES = ['RESOURCE.MAP', 'RESOURCE.001', 'SCRANTIC.SCR'];
+
+function openJohnny() {
+  return new Promise((resolve, reject) => {
+    const r = indexedDB.open(JDB, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('files');
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+}
+
+// lê um zip sem biblioteca (arquivos guardados ou comprimidos com deflate)
+async function unzip(blob) {
+  const buf = new Uint8Array(await blob.arrayBuffer()), dv = new DataView(buf.buffer);
+  let end = buf.length - 22;
+  while (end >= 0 && dv.getUint32(end, true) !== 0x06054b50) end--;
+  if (end < 0) throw new Error('zip inválido');
+  const out = [];
+  for (let i = 0, p = dv.getUint32(end + 16, true); i < dv.getUint16(end + 10, true); i++) {
+    const method = dv.getUint16(p + 10, true), size = dv.getUint32(p + 20, true), nlen = dv.getUint16(p + 28, true);
+    const name = new TextDecoder().decode(buf.subarray(p + 46, p + 46 + nlen)), local = dv.getUint32(p + 42, true);
+    const data = buf.subarray(local + 30 + dv.getUint16(local + 26, true) + dv.getUint16(local + 28, true)).subarray(0, size);
+    out.push({ name, get: async () => method === 0 ? data.slice().buffer
+      : new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer() });
+    p += 46 + nlen + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
+  }
+  return out;
+}
+
+// aceita o zip do protetor ou os três arquivos soltos; devolve quais nomes encontrou
+export async function saveJohnnyFiles(files) {
+  const found = {};
+  for (const f of files) {
+    const items = /\.zip$/i.test(f.name) ? await unzip(f) : [{ name: f.name, get: () => f.arrayBuffer() }];
+    for (const it of items) {
+      const base = it.name.split(/[\/]/).pop().toUpperCase();
+      if (JNAMES.includes(base)) found[base] = await it.get();
+    }
+  }
+  const db = await openJohnny();
+  await new Promise((resolve, reject) => {
+    const t = db.transaction('files', 'readwrite');
+    for (const [k, v] of Object.entries(found)) t.objectStore('files').put(v, k);
+    t.oncomplete = resolve; t.onerror = () => reject(t.error);
+  });
+  const all = await loadJohnnyFiles();
+  localStorage.setItem('johnnyOk', JNAMES.every(n => all[n]) ? '1' : '');
+  return Object.keys(found);
+}
+
+export async function loadJohnnyFiles() {
+  try {
+    const db = await openJohnny();
+    return await new Promise((resolve, reject) => {
+      const t = db.transaction('files'), s = t.objectStore('files'), res = {};
+      for (const n of JNAMES) s.get(n).onsuccess = e => { if (e.target.result) res[n] = e.target.result; };
+      t.oncomplete = () => resolve(res); t.onerror = () => reject(t.error);
+    });
+  } catch { return {}; }
+}
+
+export const johnnyReady = () => localStorage.getItem('johnnyOk') === '1';

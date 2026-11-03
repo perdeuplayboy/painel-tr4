@@ -754,14 +754,57 @@ function glow(ctx, w, h) {
   ctx.drawImage(glowVideo, (w - vw * s) / 2, (h - vh * s) / 2, vw * s, vh * s);
 }
 
+// Johnny Castaway: o protetor original rodando no motor Johnny Reborn (página johnny/ num iframe escondido).
+// Os dados do original ficam só no aparelho; sem eles aparece um aviso.
+let jFrame = null, jStop = 0, jScan = 0, jCrop = 180, jTarget = 180;
+function johnny(ctx, w, h) {
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+  if (!jFrame) {
+    jFrame = Object.assign(document.createElement('iframe'), { src: 'johnny/index.html', tabIndex: -1 });
+    jFrame.style.cssText = 'position:fixed;left:0;top:0;width:640px;height:480px;opacity:0;pointer-events:none;border:0;z-index:-1';
+    document.body.append(jFrame);
+  }
+  clearTimeout(jStop);
+  jStop = setTimeout(() => { jFrame?.remove(); jFrame = null; }, 2000);   // saiu da tela: desliga o motor
+  let src = null, missing = false;
+  try { missing = jFrame.contentWindow.johnnyMissing; src = jFrame.contentDocument?.getElementById('canvas'); } catch {}
+  if (missing) {
+    ctx.fillStyle = '#9a9aa2'; ctx.font = `${Math.max(12, h * 0.07)}px sans-serif`; ctx.textAlign = 'center';
+    ctx.fillText('Escolha os arquivos do Johnny Castaway nas configurações', w / 2, h / 2);
+    return;
+  }
+  if (!src?.width) return;
+  const s = w / src.width, sh = h / s, now = performance.now();
+  if (now - jScan > 1000) {                                          // a ilha muda de lugar entre as cenas: acha a areia
+    jScan = now;
+    try {
+      const d = src.getContext('2d').getImageData(0, 0, src.width, src.height).data;
+      let top = -1, bottom = -1;                                     // topo da copa (verde) e areia (amarelo)
+      for (let y = 0; y < src.height; y += 3) {
+        for (let x = 0; x < src.width; x += 6) {
+          const i = (y * src.width + x) * 4, r = d[i], g = d[i + 1], b = d[i + 2];
+          if (top < 0 && g > 140 && r < 120 && b < 120) top = y;
+          if (r > 190 && g > 160 && b < 140) bottom = y;
+        }
+      }
+      if (top >= 0 && bottom > top) jTarget = bottom - top + 20 <= sh ? (top + bottom) / 2 - sh / 2 : top - 6;   // palmeira inteira
+      else if (bottom > 0) jTarget = bottom + 12 - sh * 0.9;
+    } catch {}
+  }
+  jCrop += (jTarget - jCrop) * 0.06;                                 // desliza suave
+  const sy = Math.min(src.height - sh, Math.max(0, jCrop));
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(src, 0, sy, src.width, sh, 0, 0, w, h);
+}
+
 export const ANIMS = {
   equalizer, road, trail, night, dunes, warp, topo, scope,
-  pipes, maze, flowerbox, rain, ocean, drone, cassette, dolphins, compass, camp, glow,
+  pipes, maze, flowerbox, rain, ocean, drone, cassette, dolphins, compass, camp, glow, johnny,
 };
 export const ANIM_NAMES = {
   equalizer: 'Equalizador', road: 'Estrada retrô', trail: 'Trilha', night: 'Estrada à noite',
   dunes: 'Dunas', warp: 'Hiperespaço', topo: 'Mapa topográfico', scope: 'Osciloscópio',
   pipes: 'Canos 3D', maze: 'Labirinto de tijolos', flowerbox: 'Caixa de flores 3D', rain: 'Chuva de dados', ocean: 'Oceano digital', drone: 'Escaneamento por drone',
   cassette: 'Fita K7', dolphins: 'Golfinhos',
-  compass: 'Bússola giroscópica', camp: 'Acampamento', glow: 'Brilho ciano',
+  compass: 'Bússola giroscópica', camp: 'Acampamento', glow: 'Brilho ciano', johnny: 'Johnny Castaway',
 };

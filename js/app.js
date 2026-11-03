@@ -1,7 +1,7 @@
 import {
   State, FUELS, emptyTrip, tripAvgKmL, tripAvgSpeed, deriveAndIntegrate, MockSource, ElmBleSource,
 } from './obd.js';
-import { loadSettings, loadUpkeep, load, save, addVideos, listVideos, clearVideos, removeVideo } from './store.js';
+import { loadSettings, loadUpkeep, load, save, addVideos, listVideos, clearVideos, removeVideo, saveJohnnyFiles, johnnyReady } from './store.js';
 import { MapView, Navigator, geocode, distM, fmtDist, arrowPath, arrowChar } from './nav.js';
 import { Spotify } from './spotify.js';
 import { Player } from './player.js';
@@ -544,7 +544,7 @@ async function reloadVideos() {
 const mediaItems = () => [
   ...videos.map((v, i) => ({ kind: v.blob.type.startsWith('image/') ? 'image' : 'video', url: videoUrls[i], id: v.id }))
     .filter(it => !S.mediaOff.includes(it.id)),
-  ...(S.anims ? Object.keys(ANIMS).filter(a => !S.animOff.includes(a)).map(anim => ({ kind: 'anim', anim })) : []),
+  ...(S.anims ? Object.keys(ANIMS).filter(a => !S.animOff.includes(a) && (a !== 'johnny' || johnnyReady())).map(anim => ({ kind: 'anim', anim })) : []),
 ];
 const playerOpts = {
   clipMs: () => Math.max(5, S.clipSec) * 1000,
@@ -1086,6 +1086,19 @@ $('sVideos').addEventListener('change', async e => {
   await reloadVideos();
 });
 armed($('btnClearVideos'), async () => { await clearVideos(); await reloadVideos(); });
+const johnnyInfo = () => { $('johnnyInfo').textContent = johnnyReady() ? 'arquivos guardados neste aparelho' : 'faltam os arquivos'; };
+$('sJohnny').addEventListener('change', async e => {                // dados do Johnny: ficam só neste aparelho
+  const files = [...e.target.files];
+  if (!files.length) return;
+  $('johnnyInfo').textContent = 'lendo…';
+  try {
+    const got = await saveJohnnyFiles(files);
+    johnnyInfo();
+    if (!johnnyReady()) $('johnnyInfo').textContent = `faltam arquivos (achei: ${got.join(', ') || 'nenhum'})`;
+  } catch (err) { $('johnnyInfo').textContent = 'erro: ' + err.message; }
+  e.target.value = '';
+});
+johnnyInfo();
 armed($('btnResetFuel'), () => {
   fuelStats.gasolina = { km: 0, l: 0 }; fuelStats.etanol = { km: 0, l: 0 }; persist();
 });

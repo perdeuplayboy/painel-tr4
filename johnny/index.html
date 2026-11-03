@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Johnny Castaway</title>
+<!-- Motor: Johnny Reborn (GPL-3.0, código-fonte em https://github.com/xesf/jc_reborn, licença em LICENSE).
+     Os arquivos de dados do original (RESOURCE.MAP, RESOURCE.001, SCRANTIC.SCR) não vêm com o app:
+     o usuário escolhe nas configurações e eles ficam guardados só no aparelho (IndexedDB). -->
+<style>html, body { margin: 0; background: #000; overflow: hidden; } canvas { display: block; }</style>
+</head>
+<body>
+<canvas id="canvas" width="640" height="480" oncontextmenu="event.preventDefault()"></canvas>
+<script type="module">
+import { loadJohnnyFiles } from '../js/store.js';
+
+const files = await loadJohnnyFiles(), dbg = location.search.includes('debug');
+if (!['RESOURCE.MAP', 'RESOURCE.001', 'SCRANTIC.SCR'].every(n => files[n])) {
+  window.johnnyMissing = true;                                     // o painel mostra o aviso
+} else {
+  // o motor (v0.62) cria um contexto WebGL que não usa e depois desenha em 2D no mesmo canvas, o que falha;
+  // recusando o WebGL ele desenha normalmente
+  const getContext = HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = function (type, ...rest) { return /webgl/i.test(type) ? null : getContext.call(this, type, ...rest); };
+  // ele também manda os pixels em BGR com alfa zero (o navegador descartaria as cores): acerta a ordem e força opaco
+  const put = CanvasRenderingContext2D.prototype.putImageData;
+  CanvasRenderingContext2D.prototype.putImageData = function (img, ...rest) {
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) { const b = d[i]; d[i] = d[i + 2]; d[i + 2] = b; d[i + 3] = 255; }
+    return put.call(this, img, ...rest);
+  };
+  window.Module = {
+    canvas: document.getElementById('canvas'),
+    arguments: ['window'],                                         // sem pedir tela cheia
+    print: dbg ? console.log : () => {}, printErr: dbg ? console.warn : () => {},   // ?debug mostra o que o motor faz
+    preRun: [() => {
+      FS.mkdir('/data');
+      for (const [name, data] of Object.entries(files)) FS.writeFile('/data/' + name, new Uint8Array(data));
+    }],
+  };
+  const s = document.createElement('script');
+  s.src = 'jc_reborn.js';
+  document.body.append(s);
+}
+</script>
+</body>
+</html>
