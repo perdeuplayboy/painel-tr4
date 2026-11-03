@@ -1,6 +1,8 @@
 // Protetores de tela 3D dos anos 90, refeitos do zero em WebGL (homenagem nostálgica, com desenho próprio):
 // canos coloridos crescendo numa grade e um labirinto de tijolos visto em primeira pessoa.
 
+import { extraURL } from './store.js';
+
 const TAU = Math.PI * 2;
 
 // ---------- matrizes 4x4 (coluna por coluna, como o WebGL espera) ----------
@@ -317,11 +319,15 @@ function logoTex(g, w, h) {                                          // OpenGL: 
   g.fillStyle = 'rgba(0, 0, 0, .68)'; g.fillRect(0, 0, w, h);
   g.globalCompositeOperation = 'source-over';
 }
-const ratImg = Object.assign(new Image(), { src: 'img/rato.png' });     // rato enviado pelo usuário
-const picImg = Object.assign(new Image(), { src: 'img/quadro.webp' });   // imagem que aparece em paredes sorteadas
-const startImg = Object.assign(new Image(), { src: 'img/start.png' });   // placa Start enviada pelo usuário
-const mazeImgs = ['img/maze-tijolo.png', 'img/maze-chao.png', 'img/maze-teto.png']   // texturas tiradas do original
-  .map(src => Object.assign(new Image(), { src }));
+// imagens de terceiros (texturas do original, placa Start, quadro, rato) vêm dos "Arquivos extras" guardados
+// no aparelho; sem elas ficam as desenhadas acima
+const extraImg = name => {
+  const img = new Image();
+  extraURL(name).then(url => { if (url) img.src = url; });
+  return img;
+};
+const ratImg = extraImg('rato.png'), picImg = extraImg('quadro.webp'), startImg = extraImg('start.png');
+const mazeImgs = ['maze-tijolo.png', 'maze-chao.png', 'maze-teto.png'].map(extraImg);
 function imageTex(gl, unit, img, draw, size, flipY = false) {      // usa a imagem quando carregar; até lá, a desenhada
   const put = () => texture(gl, unit, g => {                         // tamanho original
     if (flipY) { g.translate(0, img.naturalHeight); g.scale(1, -1); }
@@ -357,7 +363,7 @@ function mazeBuild() {                                               // labirint
     if (!o[2]) q([x, 0, z + 1], [x, 0, z], [x, 1, z], [x, 1, z + 1], wt());
     if (!o[3]) q([x, 0, z], [x + 1, 0, z], [x + 1, 1, z], [x, 1, z], wt());
   }
-  for (let k = N >= 7 ? 2 : 1; k--;) {                              // o quadro aparece em uma ou duas paredes só
+  for (let k = !(picImg.complete && picImg.naturalWidth) ? 0 : N >= 7 ? 2 : 1; k--;) {   // o quadro (se carregado) em uma ou duas paredes
     const at = wallAt.splice(Math.floor(R() * wallAt.length), 1)[0];
     for (let i = 0; i < 6; i++) v[(at + i) * 6 + 5] = 6;
   }
@@ -475,7 +481,8 @@ export function maze(ctx, w, h, t) {
         if (startImg.complete && startImg.naturalWidth) start(); else startImg.addEventListener('load', start, { once: true });
         const pic = () => texture(G.gl, 5, g => g.drawImage(picImg, 0, 0, 512, 512), [512, 512]);
         if (picImg.complete && picImg.naturalWidth) pic(); else { texture(G.gl, 5, ceilTex); picImg.addEventListener('load', pic, { once: true }); }
-        imageTex(G.gl, 6, ratImg, ratTex, [256, 128], true);   // a imagem do rato vem de cabeça para baixo texture(G.gl, 7, logoTex, [512, 128]);
+        imageTex(G.gl, 6, ratImg, ratTex, [256, 128], true);   // a imagem do rato vem de cabeça para baixo
+        texture(G.gl, 7, logoTex, [512, 128]);
         ['wall', 'floor', 'ceil', 'sign', 'smile', 'pic', 'rat', 'logo'].forEach((n, i) => G.gl.uniform1i(G.u(n), i));
       }
     } catch (e) { console.warn('labirinto', e); M = { failed: true }; }

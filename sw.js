@@ -1,12 +1,12 @@
 // Guarda o app no celular para funcionar sem internet (trilha, garagem).
 // Ao mudar qualquer arquivo do app, suba a versão para o celular baixar de novo.
-const VERSION = 'painel-tr4-v18';
+const VERSION = 'painel-tr4-v19';
 const TILES = 'painel-tr4-mapa';          // pedaços do mapa já vistos (sobrevive às versões)
 const FILES = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
   'js/app.js', 'js/obd.js', 'js/store.js', 'js/nav.js', 'js/spotify.js', 'js/player.js', 'js/anims.js', 'js/lidar.js', 'js/retro3d.js', 'js/vendor/qrcode.js',
   'enviar.html', 'enviar.webmanifest', 'js/enviar.js',
-  'img/cad360.webp', 'img/quadro.webp', 'img/start.png', 'img/rato.png', 'img/maze-tijolo.png', 'img/maze-chao.png', 'img/maze-teto.png', 'videos/brilho-ciano.webm', 'johnny/index.html', 'johnny/jc_reborn.js', 'johnny/jc_reborn.wasm', 'icons/icon-192.png', 'icons/icon-512.png',
+  'img/cad360.webp', 'johnny/index.html', 'johnny/jc_reborn.js', 'johnny/jc_reborn.wasm', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 
 self.addEventListener('install', e => {

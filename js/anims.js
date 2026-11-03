@@ -4,7 +4,7 @@
 
 import { drone } from './lidar.js';
 import { pipes, maze } from './retro3d.js';
-import { loadJohnnyFiles } from './store.js';
+import { loadJohnnyFiles, extraURL } from './store.js';
 
 const TAU = Math.PI * 2;
 
@@ -552,8 +552,9 @@ function camp(ctx, w, h, t, color) {
   ctx.globalAlpha = 1;
 }
 
-// Brilho ciano: vídeo retrô em loop (veio pronto), desenhado no canvas como as outras animações
-const glowVideo = Object.assign(document.createElement('video'), { src: 'videos/brilho-ciano.webm', muted: true, loop: true, playsInline: true });
+// Brilho ciano: vídeo retrô em loop (veio pronto, fica só no aparelho), desenhado no canvas como as outras animações
+const glowVideo = Object.assign(document.createElement('video'), { muted: true, loop: true, playsInline: true });
+extraURL('brilho-ciano.webm').then(url => { if (url) glowVideo.src = url; });   // vem dos "Arquivos extras" do aparelho
 let glowStop = 0;
 function glow(ctx, w, h) {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
@@ -603,7 +604,7 @@ function johnny(ctx, w, h) {
   try { missing = jFrame.contentWindow.johnnyMissing; src = jFrame.contentDocument?.getElementById('canvas'); } catch {}
   if (missing) {
     ctx.fillStyle = '#9a9aa2'; ctx.font = `${Math.max(12, h * 0.07)}px sans-serif`; ctx.textAlign = 'center';
-    ctx.fillText('Escolha os arquivos do Johnny Castaway nas configurações', w / 2, h / 2);
+    ctx.fillText('Escolha os Arquivos do painel TR4 nas configurações', w / 2, h / 2);
     return;
   }
   if (!src?.width) return;

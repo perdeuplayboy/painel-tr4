@@ -172,3 +172,53 @@ export async function loadJohnnyFiles() {
 }
 
 export const johnnyReady = () => localStorage.getItem('johnnyOk') === '1';
+
+// ---- Arquivos extras: imagens e vídeo de terceiros usados nas animações, guardados só neste aparelho ----
+// (não ficam no repositório público; sem eles as animações usam desenhos próprios ou saem do sorteio)
+export const EXTRAS = ['maze-tijolo.png', 'maze-chao.png', 'maze-teto.png', 'start.png', 'quadro.webp', 'rato.png', 'brilho-ciano.webm'];
+const XDB = 'painel-tr4-extras';
+
+function openExtras() {
+  return new Promise((resolve, reject) => {
+    const r = indexedDB.open(XDB, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('files');
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+}
+
+export async function saveExtras(files) {
+  const found = {};
+  for (const f of files) {
+    const items = /\.zip$/i.test(f.name) ? await unzip(f) : [{ name: f.name, get: () => f.arrayBuffer() }];
+    for (const it of items) {
+      const base = it.name.split(/[\/]/).pop().toLowerCase();
+      if (EXTRAS.includes(base)) found[base] = new Blob([await it.get()], { type: extraType(base) });
+    }
+  }
+  const db = await openExtras();
+  await new Promise((resolve, reject) => {
+    const t = db.transaction('files', 'readwrite');
+    for (const [k, v] of Object.entries(found)) t.objectStore('files').put(v, k);
+    t.oncomplete = resolve; t.onerror = () => reject(t.error);
+  });
+  const have = new Set([...extrasHave(), ...Object.keys(found)]);
+  localStorage.setItem('extrasOk', JSON.stringify([...have]));
+  return Object.keys(found);
+}
+
+const extraType = n => n.endsWith('.png') ? 'image/png' : n.endsWith('.webp') ? 'image/webp' : n.endsWith('.webm') ? 'video/webm' : '';
+export const extrasHave = () => { try { return JSON.parse(localStorage.getItem('extrasOk') || '[]'); } catch { return []; } };
+
+// devolve um endereço blob: do arquivo extra, ou null se ele não foi carregado
+export async function extraURL(name) {
+  if (!extrasHave().includes(name)) return null;
+  try {
+    const db = await openExtras();
+    const blob = await new Promise((resolve, reject) => {
+      const r = db.transaction('files').objectStore('files').get(name);
+      r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error);
+    });
+    return blob ? URL.createObjectURL(blob) : null;
+  } catch { return null; }
+}
