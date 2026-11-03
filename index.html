@@ -182,7 +182,7 @@
         <section class="page" data-page="video" id="videoPage">
           <div class="v-empty" id="pgVideoEmpty">Nada para tocar · adicione vídeos ou GIFs, ou ligue as animações (Configurações → Standby)</div>
           <div class="v-song" data-k="vSong"></div>
-          <button id="pgSound" class="sb-sound pg" hidden aria-label="Som do vídeo"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="s-on" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/><path class="s-off" d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></svg></button>
+          <div class="sound-box pg" id="pgSoundBox"><button id="pgSound" class="sb-sound pg" hidden aria-label="Som do vídeo"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="s-on" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/><path class="s-off" d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></svg></button><input class="vol" type="range" min="0" max="100" step="5" hidden aria-label="Volume do vídeo"></div>
         </section>
       </main>
 
@@ -197,7 +197,7 @@
 
     <div id="standby" hidden>
       <div class="sb-clock" id="sbClock"><b data-k="time">--:--</b><small data-k="sbLine">--</small></div>
-      <button id="sbSound" class="sb-sound" hidden aria-label="Som do vídeo"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="s-on" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/><path class="s-off" d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></svg></button>
+      <div class="sound-box" id="sbSoundBox"><button id="sbSound" class="sb-sound" hidden aria-label="Som do vídeo"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="s-on" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/><path class="s-off" d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></svg></button><input class="vol" type="range" min="0" max="100" step="5" hidden aria-label="Volume do vídeo"></div>
     </div>
 
     <div id="night"></div>
@@ -274,6 +274,8 @@
   <section>
     <h3>Standby e página Vídeos</h3>
     <label>Minutos parado com motor ligado <input id="sStandbyMin" type="number" step="1" min="1" inputmode="numeric"></label>
+    <label>Apagar a tela depois de (minutos sem toque, 0 = nunca) <input id="sSleepMin" type="number" step="1" min="0" inputmode="numeric"></label>
+    <p class="muted">Segurar o dedo em qualquer lugar (menos no relógio) também apaga a tela. Para acender: botão de ligar do celular ou ligar a energia.</p>
     <p class="muted">Com o motor desligado o standby entra em 10 segundos. Toque no meio para passar ao próximo; toque nas laterais, no relógio ou arraste para o lado para sair. Os mesmos vídeos, GIFs e animações tocam na página Vídeos com o carro andando.</p>
     <div class="row">
       <label class="pill file">Adicionar pasta<input id="sFolder" type="file" webkitdirectory multiple hidden></label>

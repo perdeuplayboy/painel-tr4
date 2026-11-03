@@ -25,8 +25,10 @@ export const DEFAULTS = {
   nightDim: 45,             // % de escurecimento à noite
   spotifyClient: '',        // Client ID do app criado em developer.spotify.com
   anims: true,              // animações retrô entram na lista do standby/página Vídeos
-  clipSec: 25,
-  videoSound: false,        // som dos vídeos do standby/página Vídeos (botão no standby)              // segundos de cada GIF ou animação
+  clipSec: 25,              // segundos de cada GIF ou animação
+  videoSound: false,        // som dos vídeos do standby/página Vídeos (botão no ícone)
+  videoVolume: 0.7,         // volume quando o som está ligado (barra que abre no ícone)
+  sleepMin: 20,             // apaga a tela depois de tantos minutos sem toque (0 = nunca)
   animOff: [],              // animações desligadas uma a uma
   mediaOff: [],             // (antigo) vídeos desligados um a um; hoje é por pasta
   folderOff: [],            // pastas de vídeos/GIFs desligadas (pasta nova entra ligada)

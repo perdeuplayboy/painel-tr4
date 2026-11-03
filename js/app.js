@@ -590,10 +590,12 @@ const mediaItems = () => [
 ];
 const playerOpts = {
   sound: () => S.videoSound,
+  volume: () => S.videoVolume,
   clipMs: () => Math.max(5, S.clipSec) * 1000,
   color: () => $('musicPage').style.getPropertyValue('--m-accent') || '#ffb020',
 };
 
+let asleep = false;                                                   // tela apagada (ver sleepScreen)
 const sb = { on: false, forced: false, engineOffSince: null, stoppedSince: null, suppressUntil: 0, moveTimer: 0 };
 const sbPlayer = new Player($('standby'), mediaItems, playerOpts);
 
@@ -605,7 +607,7 @@ function moveStandbyClock() {
 }
 
 function enterStandby(forced = false, first = null) {
-  if (sb.on) return;
+  if (sb.on || asleep) return;                                       // tela apagada: nada toca por baixo
   sb.on = true; sb.forced = forced;
   $('standby').hidden = false;
   $('standby').classList.toggle('novideo', sbPlayer.empty && !first);
@@ -644,18 +646,35 @@ $('standby').addEventListener('pointerup', e => {
 $('standby').addEventListener('pointercancel', () => { sbTouch = null; });
 
 // botão de som no standby e na página Vídeos: liga e desliga o som dos vídeos (vale para os dois)
+// tocar no ícone abre a barra de volume (some sozinha em 4 s); tocar de novo no ícone com a barra aberta liga/desliga o som
+let volTimer = 0;
 function showSoundBtn() {
-  $('sbSound').hidden = !(sb.on && sbPlayer.cur?.kind === 'video');
-  $('pgSound').hidden = !(!sb.on && PAGES[page] === 'video' && pgPlayer.cur?.kind === 'video');
-  for (const id of ['sbSound', 'pgSound']) $(id).classList.toggle('on', !!S.videoSound);
+  $('sbSoundBox').hidden = !(sb.on && sbPlayer.cur?.kind === 'video');
+  $('pgSoundBox').hidden = !(!sb.on && PAGES[page] === 'video' && pgPlayer.cur?.kind === 'video');
+  for (const id of ['sbSound', 'pgSound']) { $(id).hidden = false; $(id).classList.toggle('on', !!S.videoSound); }
+}
+function applySound() {
+  saveSettings();
+  for (const p of [sbPlayer, pgPlayer]) { p.video.muted = !S.videoSound; p.video.volume = S.videoVolume; if (S.videoSound && p.on) p.video.play().catch(() => {}); }
+  showSoundBtn();
+}
+function volBar(box, show) {
+  const bar = box.querySelector('.vol');
+  bar.hidden = !show; bar.value = S.videoSound ? Math.round(S.videoVolume * 100) : 0;
+  clearTimeout(volTimer); if (show) volTimer = setTimeout(() => { bar.hidden = true; }, 4000);
 }
 for (const id of ['sbSound', 'pgSound']) {
-  $(id).addEventListener('pointerdown', e => e.stopPropagation());   // não troca de vídeo nem sai do standby
-  $(id).addEventListener('pointerup', e => {
-    e.stopPropagation();
-    S.videoSound = !S.videoSound; saveSettings();
-    for (const p of [sbPlayer, pgPlayer]) { p.video.muted = !S.videoSound; if (S.videoSound && p.on) p.video.play().catch(() => {}); }
-    showSoundBtn();
+  const box = $(id + 'Box'), bar = box.querySelector('.vol');
+  box.addEventListener('pointerdown', e => e.stopPropagation());     // não troca de vídeo nem sai do standby
+  box.addEventListener('pointerup', e => e.stopPropagation());
+  $(id).addEventListener('pointerup', () => {
+    if (bar.hidden) { if (!S.videoSound) { S.videoSound = true; applySound(); } volBar(box, true); }
+    else { S.videoSound = !S.videoSound; applySound(); volBar(box, true); }
+  });
+  bar.addEventListener('input', () => {
+    const v = bar.value / 100;
+    S.videoSound = v > 0; if (v > 0) S.videoVolume = v;
+    applySound(); volBar(box, true);
   });
 }
 setInterval(showSoundBtn, 500);
@@ -664,7 +683,7 @@ setInterval(showSoundBtn, 500);
 const pgPlayer = new Player($('videoPage'), mediaItems, playerOpts);
 function pageVideo() {
   $('pgVideoEmpty').hidden = !pgPlayer.empty;
-  if (PAGES[page] === 'video' && !sb.on && $('settings').hidden) pgPlayer.start(); else pgPlayer.stop();
+  if (PAGES[page] === 'video' && !sb.on && !asleep && $('settings').hidden) pgPlayer.start(); else pgPlayer.stop();
   if (pgPlayer.on && !pgPlayer.cur && !pgPlayer.empty) pgPlayer.next();     // lista era vazia e ganhou itens
 }
 
@@ -944,7 +963,7 @@ const FIELDS = {
   sRollLimit: 'rollLimit', sPitchLimit: 'pitchLimit',
   sScreenW: 'screenW', sOffX: 'offX', sOffY: 'offY', sMask: 'mask', sOutline: 'outline',
   sVoice: 'voice', sTheme: 'theme', sNightDim: 'nightDim', sSpotifyId: 'spotifyClient',
-  sAnims: 'anims', sClipSec: 'clipSec',
+  sAnims: 'anims', sClipSec: 'clipSec', sSleepMin: 'sleepMin',
 };
 
 function renderAnims() {
@@ -1293,9 +1312,39 @@ addEventListener('pointerdown', () => { if (touch && !standalone && !document.fu
 
 let wakeLock = null;
 async function keepAwake() {
+  if (asleep) return;
   try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') keepAwake(); });
+
+// Apagar a tela: o painel cobre tudo de preto e solta a trava de tela acesa; o Android apaga a tela pelo
+// tempo de desligar dele (30 s). Acende de novo pelo botão de ligar ou quando a energia volta.
+let lastTouch = Date.now(), holdTimer = 0, holdAt = null;
+function sleepScreen() {
+  if (asleep) return;
+  asleep = true;
+  exitStandby(); pgPlayer.stop();
+  if (!$('sleep')) document.body.append(Object.assign(document.createElement('div'), { id: 'sleep' }));
+  $('sleep').hidden = false;
+  try { wakeLock?.release(); } catch {}
+  wakeLock = null;
+}
+function wakeScreen() {
+  if (!asleep) return;
+  asleep = false; lastTouch = Date.now();
+  $('sleep').hidden = true;
+  keepAwake(); pageVideo();
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { wakeScreen(); keepAwake(); } });
+addEventListener('pointerdown', e => {
+  lastTouch = Date.now();
+  if (asleep) { wakeScreen(); return; }
+  if (e.target.closest('#wing-left, #settings, #fitter, .sound-box')) return;   // o relógio é para as configurações
+  holdAt = [e.clientX, e.clientY];
+  clearTimeout(holdTimer); holdTimer = setTimeout(sleepScreen, 1500);   // segurar 1,5 s apaga a tela
+}, true);
+addEventListener('pointermove', e => { if (holdAt && Math.hypot(e.clientX - holdAt[0], e.clientY - holdAt[1]) > 30) { clearTimeout(holdTimer); holdAt = null; } }, true);
+for (const ev of ['pointerup', 'pointercancel']) addEventListener(ev, () => { clearTimeout(holdTimer); holdAt = null; }, true);
+setInterval(() => { if (!asleep && S.sleepMin > 0 && Date.now() - lastTouch > S.sleepMin * 60000) sleepScreen(); }, 10000);
 
 setInterval(() => {
   $('shift').style.transform = `translate(${rand(-0.8, 0.8).toFixed(2)}rem, ${rand(-0.6, 0.6).toFixed(2)}rem)`;

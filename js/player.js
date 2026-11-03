@@ -53,6 +53,7 @@ export class Player {
     if (it.kind === 'video') {
       this.video.hidden = false;
       this.video.muted = !this.opts.sound?.();                          // som dos vídeos: botão no standby
+      this.video.volume = this.opts.volume?.() ?? 1;
       this.video.src = it.url;
       this.video.play().catch(() => {});
       return;
