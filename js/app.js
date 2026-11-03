@@ -41,11 +41,17 @@ function layout() {
   Object.assign($('screen').style, {
     width: W * mm + 'px', height: H * mm + 'px', left: (vw - W * mm) / 2 + 'px', top: (vh - H * mm) / 2 + 'px',
   });
-  const x0 = (W - 140) / 2 + S.offX, y0 = (H - 45) / 2 + S.offY;
-  Object.assign($('stage').style, { left: x0 + 'rem', top: y0 + 'rem' });
+  let x0 = (W - 140) / 2 + S.offX, y0 = (H - 45) / 2 + S.offY, k = 1, hole = holePath(x0, y0);
+  if (S.holeShape?.length > 10) {                                    // janela desenhada com o dedo: o conteúdo encolhe para caber nela
+    const xs = S.holeShape.map(p => p[0]), ys = S.holeShape.map(p => p[1]);
+    const bx = Math.min(...xs), by = Math.min(...ys), bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by;
+    k = Math.min(1.1, bw / 140, bh / 45); x0 = bx + (bw - 140 * k) / 2; y0 = by + (bh - 45 * k) / 2; hole = shapePath(S.holeShape);
+  }
+  Object.assign($('stage').style, { left: x0 + 'rem', top: y0 + 'rem', transform: k === 1 ? '' : `scale(${k})`, transformOrigin: '0 0' });
   $('mask').setAttribute('viewBox', `0 0 ${W} ${H}`);
-  $('maskPath').setAttribute('d', `M0 0 H${W} V${H} H0 Z ` + holePath(x0, y0));
-  $('outlinePath').setAttribute('d', S.outline ? holePath(x0, y0) : '');
+  $('maskPath').setAttribute('d', `M0 0 H${W} V${H} H0 Z ` + hole);
+  $('outlinePath').setAttribute('d', S.outline ? hole : '');
+  $('btnFitReset').hidden = !S.holeShape;
   $('screen').classList.toggle('dim', S.mask === 'dim');
 }
 
@@ -1089,15 +1095,39 @@ function openSettings() {
 function closeSettings() { $('settings').hidden = true; }
 
 // ---------------------------------------------------------------------------
-// Encaixe na moldura pelo traçado: o dedo percorre a borda de dentro da janela; o centro do traçado dá o
-// deslocamento (não depende de o dedo ficar um pouco para dentro) e a largura dá a escala, se o usuário quiser
+// Encaixe na moldura pelo traçado: o dedo percorre a borda de dentro da janela e esse desenho vira a janela.
+// O traçado é suavizado (raio médio por ângulo em volta do centro) e guardado em mm; o conteúdo encolhe para caber.
+function shapeFromTrace(pts, mm) {
+  const all = pts.flat().map(([x, y]) => [x / mm, y / mm]);
+  if (all.length < 40) return null;
+  const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
+  const x1 = Math.min(...xs), x2 = Math.max(...xs), y1 = Math.min(...ys), y2 = Math.max(...ys);
+  const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, ax = (x2 - x1) / 2, ay = (y2 - y1) / 2;
+  if (ax < 30 || ay < 10) return null;
+  const N = 180, bins = Array.from({ length: N }, () => []);
+  for (const [x, y] of all) {                                         // ângulo medido com a janela "achatada" num círculo
+    const u = (x - cx) / ax, v = (y - cy) / ay, k = Math.floor(((Math.atan2(v, u) / (2 * Math.PI)) + 1) % 1 * N);
+    bins[k].push(Math.hypot(u, v));
+  }
+  const r = bins.map(b => b.length ? b.sort((p, q) => p - q)[b.length >> 1] : null);
+  if (r.filter(v => v != null).length < N * 0.7) return null;          // faltou contornar um pedaço grande
+  for (let i = 0; i < N; i++) if (r[i] == null) {                     // buracos: liga os vizinhos
+    let a = 1, b = 1; while (r[(i - a + N) % N] == null) a++; while (r[(i + b) % N] == null) b++;
+    r[i] = (r[(i - a + N) % N] * b + r[(i + b) % N] * a) / (a + b);
+  }
+  const sm = r.map((_, i) => { let t = 0; for (let j = -3; j <= 3; j++) t += r[(i + j + N) % N]; return t / 7; });
+  return sm.map((v, i) => { const a = (i + 0.5) / N * 2 * Math.PI; return [+(cx + Math.cos(a) * v * ax).toFixed(1), +(cy + Math.sin(a) * v * ay).toFixed(1)]; });
+}
+const shapePath = pts => 'M' + pts.map(p => p.join(' ')).join(' L') + ' Z';
+
 function fitByTrace() {
   closeSettings();
   const box = document.createElement('div'); box.id = 'fitter';
   const cv = document.createElement('canvas'), ui = document.createElement('div'); ui.className = 'fit-ui';
   box.append(cv, ui); document.body.append(box);
   const ctx = cv.getContext('2d'), pts = [];
-  let stroke = null, result = null;
+  let stroke = null, shape = null;
+  const scr = () => { const r = $('screen').getBoundingClientRect(); return { r, mm: r.width / S.screenW }; };
   const size = () => { const d = devicePixelRatio || 1; cv.width = innerWidth * d; cv.height = innerHeight * d; draw(); };
   const btn = (txt, fn) => { const b = Object.assign(document.createElement('button'), { textContent: txt }); b.addEventListener('click', e => { e.stopPropagation(); fn(); }); return b; };
   const msg = (text, ...btns) => { const p = document.createElement('p'); p.textContent = text; ui.replaceChildren(p, ...btns); };
@@ -1107,47 +1137,27 @@ function fitByTrace() {
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.setTransform(d, 0, 0, d, 0, 0);
     ctx.strokeStyle = '#f28a1c'; ctx.lineWidth = 3; ctx.lineCap = ctx.lineJoin = 'round';
     for (const s of pts) { ctx.beginPath(); s.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); }
-    if (result) {                                                    // contorno calculado por cima do traçado
-      const r = $('screen').getBoundingClientRect(), sc = r.width / result.W;
-      const x0 = (result.W - 140) / 2 + result.offX, y0 = (result.W * 0.45 - 45) / 2 + result.offY;
-      ctx.setTransform(d * sc, 0, 0, d * sc, d * r.left, d * r.top);
-      ctx.strokeStyle = '#4ad0ff'; ctx.lineWidth = 0.6; ctx.stroke(new Path2D(holePath(x0, y0)));
+    if (shape) {                                                     // janela que vai ficar, por cima do traçado
+      const { r, mm } = scr();
+      ctx.setTransform(d * mm, 0, 0, d * mm, d * r.left, d * r.top);
+      ctx.strokeStyle = '#4ad0ff'; ctx.lineWidth = 0.6; ctx.stroke(new Path2D(shapePath(shape)));
     }
   }
-  function compute(useWidth) {
-    const all = pts.flat(); if (all.length < 40) return null;
-    const q = (a, p) => a[Math.min(a.length - 1, Math.max(0, Math.round(p * (a.length - 1))))];
-    const xs = all.map(p => p[0]).sort((a, b) => a - b), ys = all.map(p => p[1]).sort((a, b) => a - b);
-    const x1 = q(xs, 0.01), x2 = q(xs, 0.99), y1 = q(ys, 0.01), y2 = q(ys, 0.99);
-    const r = $('screen').getBoundingClientRect();
-    const k = useWidth ? (x2 - x1) / 140 : r.width / S.screenW;      // px por mm
-    const W = useWidth ? r.width / k : S.screenW;
-    const cx = ((x1 + x2) / 2 - r.left) / k, cy = ((y1 + y2) / 2 - r.top) / k;
-    const res = { W: +W.toFixed(1), offX: +(cx - W / 2).toFixed(1), offY: +(cy - W * 0.45 / 2).toFixed(1), wide: (x2 - x1) / k, tall: (y2 - y1) / k };
-    return Math.abs(res.offX) < 20 && Math.abs(res.offY) < 15 && res.W > 120 && res.W < 175 && res.wide > 90 && res.tall > 25 ? res : null;
-  }
-  let useWidth = false;
   function ask() {
-    result = null; draw();
+    shape = null; draw();
     msg('Passe o dedo por toda a borda de dentro da janela, encostando na moldura. Pode ser em vários pedaços.',
       btn('Pronto', done), btn('Refazer', () => { pts.length = 0; draw(); }), btn('Cancelar', close));
   }
   function done() {
-    result = compute(useWidth);
-    if (!result) { msg('Não deu para calcular: contorne a janela inteira, de ponta a ponta, encostando na moldura.', btn('Tentar de novo', () => { pts.length = 0; ask(); }), btn('Cancelar', close)); draw(); return; }
+    const { r, mm } = scr();
+    shape = shapeFromTrace(pts.map(s => s.map(([x, y]) => [x - r.left, y - r.top])), mm);
+    if (!shape) { msg('Não deu para calcular: contorne a janela inteira, de ponta a ponta, encostando na moldura.', btn('Tentar de novo', () => { pts.length = 0; ask(); }), btn('Cancelar', close)); draw(); return; }
     draw();
-    const chk = Object.assign(document.createElement('input'), { type: 'checkbox', checked: useWidth });
-    chk.addEventListener('change', () => { useWidth = chk.checked; done(); });
-    const lab = document.createElement('label'); lab.append(chk, ' ajustar também a largura da tela (só se o azul ficar maior ou menor que a janela)');
-    const n = v => String(v).replace('.', ',');
-    msg(`O contorno azul é o calculado. Deslocamento ${n(result.offX)} mm na horizontal e ${n(result.offY)} mm na vertical` + (useWidth ? `, largura ${n(result.W)} mm.` : '.'),
-      btn('Aplicar', () => {
-        S.offX = result.offX; S.offY = result.offY; if (useWidth) S.screenW = result.W;
-        saveSettings(); layout(); close();
-      }), btn('Refazer', () => { pts.length = 0; ask(); }), btn('Cancelar', close));
-    ui.append(lab);
+    msg('O contorno azul é a janela que vai ficar (o seu desenho, suavizado).',
+      btn('Aplicar', () => { S.holeShape = shape; saveSettings(); layout(); close(); }),
+      btn('Refazer', () => { pts.length = 0; ask(); }), btn('Cancelar', close));
   }
-  box.addEventListener('pointerdown', e => { if (result || e.target.closest('button,label')) return; stroke = [[e.clientX, e.clientY]]; pts.push(stroke); box.setPointerCapture(e.pointerId); draw(); });
+  box.addEventListener('pointerdown', e => { if (shape || e.target.closest('button,label')) return; stroke = [[e.clientX, e.clientY]]; pts.push(stroke); box.setPointerCapture(e.pointerId); draw(); });
   box.addEventListener('pointermove', e => {
     if (!stroke) return;
     const evs = e.getCoalescedEvents?.();                            // pontos entre os quadros (pode vir vazio)
@@ -1159,6 +1169,7 @@ function fitByTrace() {
   addEventListener('resize', size); size(); ask();
 }
 $('btnFit').addEventListener('click', fitByTrace);
+$('btnFitReset').addEventListener('click', () => { delete S.holeShape; saveSettings(); layout(); });
 
 function updateSettingsInfo() {
   document.querySelectorAll('.sim-only').forEach(el => { el.hidden = S.source !== 'sim'; });
