@@ -66,96 +66,114 @@ function newWorld(seed) {
 }
 
 // tipos de ponto: 0 chão, 1 estrada, 2 faixa/borda/poste aceso, 3 árvore, 4 água, 5 janela acesa
+// cada ponto leva uma sombra (0..1) pela direção da superfície em relação ao sol: é o que dá relevo à nuvem
+const SUN = (() => { const v = [-0.45, 0.8, 0.4], n = Math.hypot(...v); return v.map(c => c / n); })();
+const lit = (nx, ny, nz) => { const n = Math.hypot(nx, ny, nz) || 1; return 0.28 + 0.72 * Math.max(0, (nx * SUN[0] + ny * SUN[1] + nz * SUN[2]) / n); };
+const slope = (x, z) => lit(ground(x - 0.6, z) - ground(x + 0.6, z), 1.2, ground(x, z - 0.6) - ground(x, z + 0.6));
 function buildCloud(seed) {
   const r = newWorld(seed), P = [];
-  const add = (x, y, z, k) => P.push(x, y, z, k, r());
+  const add = (x, y, z, k, s = 1) => P.push(x, y, z, k, r(), s);
   const sea = W.type === 'litoral' ? -W.seaY0 : null;
-  for (let z = 0; z < L; z += 0.95) {
-    for (let x = -75; x <= 75; x += 0.95) {
-      const px = x + (r() - 0.5) * 0.8, pz = z + (r() - 0.5) * 0.8;
-      if (Math.abs(px - roadX(pz)) < W.rw + 0.1) continue;
+  const city = W.type === 'cidade' ? planCity(r) : [];
+  const inside = (x, z) => city.some(b => x > b.xa - 0.3 && x < b.xb + 0.3 && z > b.za - 0.3 && z < b.zb + 0.3);   // embaixo da laje o laser não chega
+  for (let z = 0; z < L; z += 0.8) {
+    for (let x = -75; x <= 75; x += 0.8) {
+      const px = x + (r() - 0.5) * 0.7, pz = z + (r() - 0.5) * 0.7;
+      if (Math.abs(px - roadX(pz)) < W.rw + 0.1 || (city.length && inside(px, pz))) continue;
       const g = ground(px, pz);
       if (sea != null && g < sea + 0.3) { if (r() < 0.85) add(px, sea + 0.3, pz, 4); continue; }   // mar
-      add(px, g + (r() - 0.5) * 0.15, pz, 0);
+      add(px, g + (r() - 0.5) * 0.12, pz, 0, slope(px, pz));
     }
   }
-  for (let z = 0; z < L; z += 0.45) {
+  for (let z = 0; z < L; z += 0.4) {
     const c = roadX(z);
-    for (let d = -W.rw; d <= W.rw; d += 0.45) {
-      const x = c + d + (r() - 0.5) * 0.2, edge = W.marks && Math.abs(Math.abs(d) - (W.rw - 0.3)) < 0.25;
+    for (let d = -W.rw; d <= W.rw; d += 0.4) {
+      const x = c + d + (r() - 0.5) * 0.18, edge = W.marks && Math.abs(Math.abs(d) - (W.rw - 0.3)) < 0.22;
       const dash = W.marks && Math.abs(d) < 0.2 && z % 9 < 4.5;
-      add(x, ground(x, z) + 0.05, z, edge || dash ? 2 : W.type === 'mata' || W.type === 'deserto' ? 0 : 1);   // trilha de terra não tem faixa
+      add(x, ground(x, z) + 0.05, z, edge || dash ? 2 : W.type === 'mata' || W.type === 'deserto' ? 0 : 1, slope(x, z));   // trilha de terra não tem faixa
     }
   }
-  if (W.type === 'cidade') buildCity(r, add);
+  if (city.length) drawCity(r, add, city);
   for (let i = 0, tries = 0; i < W.trees && tries < W.trees * 6; tries++) {
     const z = r() * L, sd = r() < 0.5 ? -1 : 1, x = roadX(z) + sd * (W.near + r() ** 1.6 * (W.type === 'cidade' ? 1.5 : 60));
     if (Math.abs(x) > 75 || wave(W.patch, z, x) < r() * 1.6 - 0.8) continue;   // mata em manchas, com clareiras
     if (sea != null && ground(x, z) < sea + 1) continue;
     i++;
     const base = ground(x, z), H = 6 + r() * 8;
-    for (let k = 0; k < 18; k++) add(x + (r() - 0.5) * 0.3, base + r() * H * 0.25, z + (r() - 0.5) * 0.3, 3);
+    for (let k = 0; k < 18; k++) add(x + (r() - 0.5) * 0.3, base + r() * H * 0.25, z + (r() - 0.5) * 0.3, 3, 0.45);
     if (r() < W.pines) {                                             // pinheiro em camadas
-      const R = H * (0.24 + r() * 0.08), n = 90 + H * 10;
+      const R = H * (0.24 + r() * 0.08), n = 100 + H * 11;
       for (let k = 0; k < n; k++) {
         const v = r(), tier = 0.62 + 0.38 * ((v * 5) % 1);
         const rad = R * (1 - v) * tier * (0.75 + r() * 0.25), a = r() * Math.PI * 2;
-        add(x + Math.cos(a) * rad, base + H * (0.18 + v * 0.82), z + Math.sin(a) * rad, 3);
+        add(x + Math.cos(a) * rad, base + H * (0.18 + v * 0.82), z + Math.sin(a) * rad, 3, lit(Math.cos(a), 0.7, Math.sin(a)));
       }
     } else {                                                         // árvore de copa redonda
-      const R = H * (0.3 + r() * 0.12), cy = base + H * 0.7, n = 110 + H * 9;
+      const R = H * (0.3 + r() * 0.12), cy = base + H * 0.7, n = 120 + H * 10;
       for (let k = 0; k < n; k++) {
         const u = r() * 2 - 1, a = r() * Math.PI * 2, q = Math.sqrt(1 - u * u), rr = R * (0.8 + r() * 0.25);
-        add(x + Math.cos(a) * q * rr, cy + u * rr * 0.8, z + Math.sin(a) * q * rr, 3);
+        add(x + Math.cos(a) * q * rr, cy + u * rr * 0.8, z + Math.sin(a) * q * rr, 3, lit(Math.cos(a) * q, u, Math.sin(a) * q));
       }
     }
   }
   for (let i = 0; i < (W.cacti || 0); i++) {                         // cactos: tronco e dois braços
     const z = r() * L, x = roadX(z) + (r() < 0.5 ? -1 : 1) * (5 + r() * 50), base = ground(x, z), H = 2.5 + r() * 3;
-    for (let k = 0; k < 60 * H; k++) { const a = r() * Math.PI * 2, y = r() * H; add(x + Math.cos(a) * 0.3, base + y, z + Math.sin(a) * 0.3, 3); }
+    for (let k = 0; k < 60 * H; k++) { const a = r() * Math.PI * 2, y = r() * H; add(x + Math.cos(a) * 0.3, base + y, z + Math.sin(a) * 0.3, 3, lit(Math.cos(a), 0.2, Math.sin(a))); }
     for (const s of [-1, 1]) {
       const ay = base + H * (0.35 + r() * 0.3), ah = H * (0.25 + r() * 0.25);
-      for (let k = 0; k < 40; k++) { const u = r(); add(x + s * (0.3 + Math.min(u * 2, 1) * 0.7), ay + Math.max(0, u * 2 - 1) * ah, z + (r() - 0.5) * 0.4, 3); }
+      for (let k = 0; k < 40; k++) { const u = r(); add(x + s * (0.3 + Math.min(u * 2, 1) * 0.7), ay + Math.max(0, u * 2 - 1) * ah, z + (r() - 0.5) * 0.4, 3, lit(s, 0.4, 0)); }
     }
   }
   for (let i = 0; i < W.rocks; i++) {                                // pedras soltas
     const z = r() * L, x = roadX(z) + (r() < 0.5 ? -1 : 1) * (5 + r() * 40), R = 0.6 + r() * 1.8, base = ground(x, z);
     if (sea != null && base < sea + 0.5) continue;
-    for (let k = 0; k < 40 * R; k++) {
+    if (city.length && inside(x, z)) continue;
+    for (let k = 0; k < 45 * R; k++) {
       const u = r(), a = r() * Math.PI * 2, q = Math.sqrt(1 - u * u);
-      add(x + Math.cos(a) * q * R * 1.3, base + u * R * 0.7, z + Math.sin(a) * q * R, 0);
+      add(x + Math.cos(a) * q * R * 1.3, base + u * R * 0.7, z + Math.sin(a) * q * R, 0, lit(Math.cos(a) * q, u, Math.sin(a) * q));
     }
   }
   return new Float32Array(P);
 }
 
-// cidade: quarteirões dos dois lados da avenida, prédios de alturas variadas com janelas acesas e postes
-function buildCity(r, add) {
+// cidade: quarteirões dos dois lados da avenida, prédios de alturas variadas com janelas acesas e postes.
+// Primeiro sorteia onde ficam os prédios (para o chão não ter pontos embaixo deles), depois desenha.
+function planCity(r) {
+  const list = [];
   for (const sd of [-1, 1]) {
     for (let z = 2; z < L - 12; ) {
       const fw = 8 + r() * 10, fd = 8 + r() * 12, H = r() < 0.15 ? 35 + r() * 30 : 6 + r() * 26;
       const zc = z + fw / 2, off = W.rw + 5 + r() * 4, x0 = roadX(zc) + sd * off, x1 = x0 + sd * fd;
-      const base = ground(x0, zc), xa = Math.min(x0, x1), xb = Math.max(x0, x1), za = z, zb = z + fw;
-      const wall = (ax, az, bx, bz) => {
-        const len = Math.hypot(bx - ax, bz - az), n = Math.ceil(len / 0.9);
-        for (let i = 0; i <= n; i++) for (let y = 0; y <= H; y += 0.9) {
-          const u = i / n, lit = (i % 3 === 1) && (Math.floor(y / 3) % 1 === 0) && y % 3 > 1 && r() < 0.35;
-          if (r() < (lit ? 1 : 0.55)) add(ax + (bx - ax) * u, base + y, az + (bz - az) * u, lit ? 5 : 0);
-        }
-      };
-      wall(xa, za, xb, za); wall(xb, za, xb, zb); wall(xb, zb, xa, zb); wall(xa, zb, xa, za);
-      for (let x = xa; x <= xb; x += 1.1) for (let zz = za; zz <= zb; zz += 1.1) add(x, base + H, zz, 0);   // laje
+      list.push({ xa: Math.min(x0, x1), xb: Math.max(x0, x1), za: z, zb: z + fw, H, base: ground(x0, zc), sd });
       z += fw + 3 + r() * 8;
     }
-    for (let z = 5; z < L; z += 22) {                                // postes com a luz acesa
-      const x = roadX(z) + sd * (W.rw + 1.2), base = ground(x, z);
-      for (let y = 0; y < 7; y += 0.3) add(x, base + y, z, 1);
-      for (let k = 0; k < 14; k++) add(x - sd * (r() * 1.2), base + 7 + (r() - 0.5) * 0.3, z + (r() - 0.5) * 0.4, 2);
-    }
+  }
+  return list;
+}
+function drawCity(r, add, list) {
+  for (const { xa, xb, za, zb, H, base } of list) {
+    const mx = (xa + xb) / 2, mz = (za + zb) / 2;
+    const wall = (ax, az, bx, bz) => {
+      const len = Math.hypot(bx - ax, bz - az), n = Math.ceil(len / 0.8);
+      let nx = bz - az, nz = -(bx - ax);                              // normal da parede, virada para fora do prédio
+      if (nx * ((ax + bx) / 2 - mx) + nz * ((az + bz) / 2 - mz) < 0) { nx = -nx; nz = -nz; }
+      const s = lit(nx, 0, nz);
+      for (let i = 0; i <= n; i++) for (let y = 0; y <= H; y += 0.8) {
+        const u = i / n, on = i % 3 === 1 && y % 3 > 1.2 && r() < 0.35;
+        if (r() < (on ? 1 : 0.6)) add(ax + (bx - ax) * u, base + y, az + (bz - az) * u, on ? 5 : 0, s);
+      }
+    };
+    wall(xa, za, xb, za); wall(xb, za, xb, zb); wall(xb, zb, xa, zb); wall(xa, zb, xa, za);
+    for (let x = xa; x <= xb; x += 0.9) for (let zz = za; zz <= zb; zz += 0.9) add(x, base + H, zz, 0, lit(0, 1, 0));   // laje
+  }
+  for (const sd of [-1, 1]) for (let z = 5; z < L; z += 22) {          // postes com a luz acesa
+    const x = roadX(z) + sd * (W.rw + 1.2), base = ground(x, z);
+    for (let y = 0; y < 7; y += 0.3) add(x, base + y, z, 1, 0.6);
+    for (let k = 0; k < 14; k++) add(x - sd * (r() * 1.2), base + 7 + (r() - 0.5) * 0.3, z + (r() - 0.5) * 0.4, 2);
   }
 }
 const VS = `
-attribute vec3 pos; attribute float kind; attribute float seed;
+attribute vec3 pos; attribute float kind; attribute float seed; attribute float shade;
 uniform vec3 cam; uniform vec2 rot; uniform float pitch, fy, aspect, px, time, front, beam;
 varying vec3 vCol; varying float vA;
 vec3 turbo(float x) {
@@ -172,7 +190,8 @@ void main() {
   vec3 c = vec3(p.x * rot.x - p.z * rot.y, p.y, p.x * rot.y + p.z * rot.x);
   float cp = cos(pitch), sp = sin(pitch);
   float zc = -c.y * sp + c.z * cp, yc = c.y * cp + c.z * sp;
-  gl_Position = vec4(c.x * fy / aspect, yc * fy, 0.0, zc);
+  // profundidade de verdade (perto 0,5 m, longe 200 m): o que está na frente esconde o que está atrás
+  gl_Position = vec4(c.x * fy / aspect, yc * fy, (zc * 200.5 - 200.0) / 199.5, zc);
   float fog = 1.0 - smoothstep(60.0, 150.0, zc);
   float near = smoothstep(1.5, 8.0, zc);
   float h = (pos.y + 2.0) / 26.0;
@@ -184,18 +203,19 @@ void main() {
   float built = front - p.z;                                       // só existe o que o laser já varreu
   float fresh = exp(-built / 1.2);                                 // recém-escaneado brilha e assenta
   float laser = exp(-pow((p.z - beam) / 0.7, 2.0));                // a faixa do laser agora
-  float flick = 0.85 + 0.15 * sin(seed * 91.0 + time * 4.0);
-  vCol = mix(col * flick, vec3(0.8, 1.0, 1.0), fresh * 0.3) + vec3(1.0, 0.15, 0.2) * laser * 2.0;
-  vA = fog * near * (kind == 3.0 || kind == 5.0 ? 0.95 : kind == 4.0 ? 0.9 : 0.75) * (0.7 + fresh * 0.4 + laser * 1.5);
-  gl_PointSize = zc > 0.5 && built > 0.0 ? clamp(px * 0.42 / zc * (1.0 + fresh * 0.6), 1.0, 6.0) : 0.0;
+  float flick = 0.94 + 0.06 * sin(seed * 91.0 + time * 4.0);
+  float lightK = kind == 0.0 || kind == 1.0 || kind == 3.0 ? shade : 1.0;   // relevo: face virada para o sol mais clara
+  vCol = mix(col * lightK * flick, vec3(0.8, 1.0, 1.0), fresh * 0.25) + vec3(1.0, 0.15, 0.2) * laser * 1.6;
+  vA = fog * near;                                                // some na neblina ao longe e perto da câmera
+  gl_PointSize = zc > 0.5 && built > 0.0 ? clamp(px * 0.46 / zc * (1.0 + fresh * 0.5), 1.5, 5.0) : 0.0;
 }`;
 const FS = `
 precision mediump float;
 varying vec3 vCol; varying float vA;
 void main() {
   float d = length(gl_PointCoord - 0.5);
-  if (d > 0.5) discard;
-  gl_FragColor = vec4(vCol, vA * (1.0 - d * 1.4));
+  if (d > 0.5 || vA < 0.02) discard;
+  gl_FragColor = vec4(mix(vec3(0.004, 0.012, 0.028), vCol * (1.0 - d * 0.6), vA), 1.0);   // ponto sólido, borda um pouco mais escura
 }`;
 
 let gl = null, glCanvas = null, prog = null, count = 0, U = {}, failed = false;
@@ -203,7 +223,7 @@ let built = 0, lastT = Infinity, lastSeg = -1;                     // até onde 
 const SCAN = 24;                                                   // segundos de cada mundo escaneado
 function init() {
   glCanvas = document.createElement('canvas');
-  gl = glCanvas.getContext('webgl', { antialias: false, alpha: false, preserveDrawingBuffer: true });
+  gl = glCanvas.getContext('webgl', { antialias: false, alpha: false, depth: true, preserveDrawingBuffer: true });
   if (!gl) { failed = true; return; }
   const sh = (type, src) => {
     const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -214,14 +234,13 @@ function init() {
   gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
   gl.linkProgram(prog); gl.useProgram(prog);
   gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-  [['pos', 3, 0], ['kind', 1, 3], ['seed', 1, 4]].forEach(([name, n, off]) => {
+  [['pos', 3, 0], ['kind', 1, 3], ['seed', 1, 4], ['shade', 1, 5]].forEach(([name, n, off]) => {
     const loc = gl.getAttribLocation(prog, name);
     gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, n, gl.FLOAT, false, 20, off * 4);
+    gl.vertexAttribPointer(loc, n, gl.FLOAT, false, 24, off * 4);
   });
   for (const u of ['cam', 'rot', 'pitch', 'fy', 'aspect', 'px', 'time', 'front', 'beam']) U[u] = gl.getUniformLocation(prog, u);
-  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE);         // pontos somam brilho
-  gl.disable(gl.DEPTH_TEST);
+  gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS);   // pontos sólidos com profundidade: dá forma aos objetos
 }
 
 export function drone(ctx, w, h, tt, color) {
@@ -231,14 +250,14 @@ export function drone(ctx, w, h, tt, color) {
   const CW = ctx.canvas.width, CH = ctx.canvas.height;
   if (glCanvas.width !== CW || glCanvas.height !== CH) { glCanvas.width = CW; glCanvas.height = CH; }
   gl.viewport(0, 0, CW, CH);
-  gl.clearColor(0.004, 0.012, 0.028, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.clearColor(0.004, 0.012, 0.028, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
   if (tt >= SCAN && tt >= lastT) return true;                      // um mundo inteiro por vez: avisa o player que acabou
   const seg = Math.floor(tt / SCAN), t = tt - seg * SCAN;
   if (tt < lastT || seg !== lastSeg) {                              // começou ou passou o tempo: mundo novo, nuvem vazia
     lastSeg = seg;
     const data = buildCloud(Math.floor(Math.random() * 1e9));
-    count = data.length / 5;
+    count = data.length / 6;
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
     built = 0;
   }
