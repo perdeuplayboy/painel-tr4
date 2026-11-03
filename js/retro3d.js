@@ -28,9 +28,9 @@ function mul(a, b) {
 }
 
 // cada protetor tem sua própria tela WebGL escondida, copiada para o canvas do player
-function makeGL(vs, fs, attrs, antialias = true) {
+function makeGL(vs, fs, attrs) {
   const canvas = document.createElement('canvas');
-  const gl = canvas.getContext('webgl', { antialias, preserveDrawingBuffer: true });
+  const gl = canvas.getContext('webgl', { antialias: true, preserveDrawingBuffer: true });
   if (!gl) return null;
   const sh = (type, src) => {
     const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -389,8 +389,8 @@ function mazeBuild() {                                               // labirint
   Object.assign(M, { N, open, walls, n: v.length / 6, x: sx, z: sz, dir, move: null, steps: 0, walkNext: false,
     ex: far % N, ez: Math.floor(far / N), intro: 0, rocks, roll: 0, rollTo: 0 });
   M.logos = Array.from({ length: 1 + Math.floor(R() * 2) }, () => Math.floor(R() * N * N)).filter(c => c !== sc && c !== far);
-  const rc = Math.floor(R() * N * N);                                // o rato começa numa casa qualquer
-  M.rat = { x: rc % N, z: Math.floor(rc / N), dir: [0, 1, 2, 3].find(d => open[rc][d]) ?? 0, t: 0 };
+  const rc = Math.floor(R() * N * N);                                // se tiver rato, começa numa casa qualquer
+  M.rat = R() < 0.05 ? { x: rc % N, z: Math.floor(rc / N), dir: [0, 1, 2, 3].find(d => open[rc][d]) ?? 0, t: 0 } : null;   // rato raro: 5% dos labirintos
 }
 function mazeNext() {                                                // sempre com a mão direita na parede
   if (M.walkNext) { M.walkNext = false; return { kind: 'walk', dur: 0.55, t: 0 }; }   // acabou de virar: anda
@@ -444,13 +444,16 @@ function dynamic(t, eyeAng) {                                        // pedras g
     const LP = [[lx - ldx, y0 - 0.115, lz - ldz], [lx + ldx, y0 - 0.115, lz + ldz], [lx + ldx, y0 + 0.115, lz + ldz], [lx - ldx, y0 + 0.115, lz - ldz]];
     for (const [i, uv] of [[0, [0, 1]], [1, [1, 1]], [2, [1, 0]], [0, [0, 1]], [2, [1, 0]], [3, [0, 0]]]) v.push(...LP[i], ...uv, 8);
   });
-  const r = M.rat, rx = r.x + 0.5 + STEP[r.dir][0] * r.t, rz = r.z + 0.5 + STEP[r.dir][1] * r.t;   // rato sempre de frente para a câmera
-  const right = [-Math.sin(eyeAng), Math.cos(eyeAng)], flip = STEP[r.dir][0] * right[0] + STEP[r.dir][1] * right[1] < 0;
-  const hw = 0.3, bob = Math.abs(Math.sin(t * 14)) * 0.015;
-  const RP = [[rx - right[0] * hw, bob, rz - right[1] * hw], [rx + right[0] * hw, bob, rz + right[1] * hw],
-    [rx + right[0] * hw, 0.3 + bob, rz + right[1] * hw], [rx - right[0] * hw, 0.3 + bob, rz - right[1] * hw]];
-  const u0 = flip ? 1 : 0, u1 = flip ? 0 : 1;
-  for (const [i, uv] of [[0, [u0, 1]], [1, [u1, 1]], [2, [u1, 0]], [0, [u0, 1]], [2, [u1, 0]], [3, [u0, 0]]]) v.push(...RP[i], ...uv, 7);
+  const r = M.rat;
+  if (r) {                                                           // rato sempre de frente para a câmera
+    const rx = r.x + 0.5 + STEP[r.dir][0] * r.t, rz = r.z + 0.5 + STEP[r.dir][1] * r.t;
+    const right = [-Math.sin(eyeAng), Math.cos(eyeAng)], flip = STEP[r.dir][0] * right[0] + STEP[r.dir][1] * right[1] < 0;
+    const hw = 0.3, bob = Math.abs(Math.sin(t * 14)) * 0.015;
+    const RP = [[rx - right[0] * hw, bob, rz - right[1] * hw], [rx + right[0] * hw, bob, rz + right[1] * hw],
+      [rx + right[0] * hw, 0.3 + bob, rz + right[1] * hw], [rx - right[0] * hw, 0.3 + bob, rz - right[1] * hw]];
+    const u0 = flip ? 1 : 0, u1 = flip ? 0 : 1;
+    for (const [i, uv] of [[0, [u0, 1]], [1, [u1, 1]], [2, [u1, 0]], [0, [u0, 1]], [2, [u1, 0]], [3, [u0, 0]]]) v.push(...RP[i], ...uv, 7);
+  }
   const gl = M.gl;
   gl.bindBuffer(gl.ARRAY_BUFFER, M.dyn);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.DYNAMIC_DRAW);
@@ -488,12 +491,12 @@ export function maze(ctx, w, h, t) {
       const rest = (M.move.t - 1) * M.move.dur;                      // sobra de tempo passa para o próximo passo
       if (M.move.kind === 'walk') { M.x += STEP[M.dir][0]; M.z += STEP[M.dir][1]; M.steps++; }
       else M.dir = ((M.move.to % 4) + 4) % 4;
-      if (M.x === M.ex && M.z === M.ez || M.steps > 260) { mazeBuild(); break; }   // chegou no rosto: outro labirinto
+      if (M.x === M.ex && M.z === M.ez || M.steps > 260) { mazeBuild(); M.done = true; break; }   // chegou no rosto: outro labirinto
       M.move = mazeNext();
       M.move.t = rest / M.move.dur;
     }
   }
-  if (M.intro > 3) ratStep(dt);
+  if (M.intro > 3 && M.rat) ratStep(dt);
   const mv = M.move, e = mv ? Math.min(1, mv.t) : 0;
   let ang = M.dir * Math.PI / 2, px = M.x + 0.5, pz = M.z + 0.5;
   if (mv?.kind === 'turn') ang = (mv.from + (mv.to - mv.from) * e) * Math.PI / 2;
@@ -518,116 +521,6 @@ export function maze(ctx, w, h, t) {
   gl.bindBuffer(gl.ARRAY_BUFFER, M.buf); M.bind();
   gl.drawArrays(gl.TRIANGLES, M.walls, M.n - M.walls);
   ctx.drawImage(M.canvas, 0, 0, w, h);
+  if (M.done) { M.done = false; return true; }                     // avisa o player: terminou
 }
-
-// ---------- Caixa de flores 3D ----------
-// Cubo oco: cada face se divide em 4 pétalas presas nas arestas, que se curvam para fora (desabrocham)
-// e depois fecham de novo. Gira em X, Y e Z e quica pela tela. Cores vibrantes em degradê (ou xadrez),
-// sombreamento chapado por polígono, sem antisserrilhado e com cor de 16 bits pontilhada, como nos anos 90.
-const FLOWER_FS = `
-precision mediump float;
-uniform vec3 eye;
-varying vec3 vN, vC, vP;
-float bayer(vec2 p) {                                                // pontilhado ordenado 4x4
-  vec2 q = mod(floor(p), 4.0);
-  float a = mod(q.x + q.y * 2.0, 4.0), b = mod(q.x, 2.0) * 2.0 + mod(q.y, 2.0);
-  return (a * 4.0 + b) / 16.0 - 0.5;
-}
-void main() {
-  vec3 n = normalize(vN), V = normalize(eye - vP), L = normalize(vec3(-0.4, 0.6, 0.7));
-  float inside = 1.0;
-  if (dot(n, V) < 0.0) { n = -n; inside = 0.6; }                     // dentro da caixa oca: mais escuro
-  float dif = max(dot(n, L), 0.0), spec = pow(max(dot(reflect(-L, n), V), 0.0), 24.0);
-  vec3 c = (vC * (0.25 + 0.8 * dif) + vec3(0.7) * spec) * inside;
-  vec3 lv = vec3(31.0, 63.0, 31.0);                                   // 16 bits (5-6-5)
-  c = floor(c * lv + 0.5 + bayer(gl_FragCoord.xy)) / lv;
-  gl_FragColor = vec4(c, 1.0);
-}`;
-const FLOWER_COLORS = [[1, 0.1, 0.1], [0.1, 0.95, 0.1], [0.15, 0.25, 1], [1, 0.95, 0.1], [1, 0.15, 0.95], [0.1, 0.95, 0.95]];
-let F = null;
-function flowerReset() {
-  const R = Math.random, pal = [...FLOWER_COLORS].sort(() => R() - 0.5);
-  Object.assign(F, {
-    faces: pal.map((c, i) => [c, pal[(i + 1) % pal.length]]),       // degradê de uma cor para a vizinha
-    checker: R() < 0.35, open: 1.15 + R() * 0.35, speed: 0.6 + R() * 0.4, curl: 0.3 + R() * 0.35,
-    spin: [0.5 + R() * 0.6, 0.4 + R() * 0.6, 0.2 + R() * 0.4], pos: [0, 0],
-    vel: [(R() < 0.5 ? -1 : 1) * (0.6 + R() * 0.6), (R() < 0.5 ? -1 : 1) * (0.3 + R() * 0.3)],
-  });
-}
-export function flowerbox(ctx, w, h, t) {
-  if (!F) {
-    try {
-      const G = makeGL(PIPE_VS, FLOWER_FS, [['pos', 3], ['nrm', 3], ['col', 3]], false);
-      F = G ? { ...G, last: Infinity, buf: G.gl.createBuffer() } : { failed: true };
-    } catch (e) { console.warn('caixa de flores', e); F = { failed: true }; }
-  }
-  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
-  if (F.failed) return;
-  const gl = F.gl, aspect = fit(F, ctx);
-  if (t < F.last) flowerReset();
-  const dt = Math.min(0.2, Math.max(0, t - F.last));
-  F.last = t;
-  const D = 7, half = Math.tan(0.36) * D, lim = [Math.max(0.1, half * aspect - 2.6), Math.max(0.05, half - 2.2)];
-  for (const i of [0, 1]) {                                          // anda e quica nas bordas
-    F.pos[i] += F.vel[i] * dt;
-    if (Math.abs(F.pos[i]) > lim[i]) { F.pos[i] = Math.sign(F.pos[i]) * lim[i]; F.vel[i] *= -1; }
-  }
-  const bloom = 0.5 - 0.5 * Math.cos(t * F.speed);                   // 0 = caixa fechada, 1 = flor aberta
-  const theta = F.open * bloom;
-  const [ax, ay, az] = F.spin.map(v => v * t);
-  const rot = ([x, y, z]) => {
-    [y, z] = [y * Math.cos(ax) - z * Math.sin(ax), y * Math.sin(ax) + z * Math.cos(ax)];
-    [x, z] = [x * Math.cos(ay) + z * Math.sin(ay), -x * Math.sin(ay) + z * Math.cos(ay)];
-    [x, y] = [x * Math.cos(az) - y * Math.sin(az), x * Math.sin(az) + y * Math.cos(az)];
-    return [x + F.pos[0], y + F.pos[1], z];
-  };
-  const add = (a, b, k = 1) => a.map((v, i) => v + b[i] * k);
-  const v = [], S = 6;                                               // cada pétala em 6 faixas, para curvar
-  const tri = (a, b, c, col) => {                                    // sombreamento chapado: uma normal por triângulo
-    const u = b.map((x, i) => x - a[i]), q = c.map((x, i) => x - a[i]);
-    let n = [u[1] * q[2] - u[2] * q[1], u[2] * q[0] - u[0] * q[2], u[0] * q[1] - u[1] * q[0]];
-    const l = Math.hypot(...n) || 1; n = n.map(x => x / l);
-    for (const p of [a, b, c]) v.push(...p, ...n, ...col);
-  };
-  const axes = [[0, 1, 2], [1, 2, 0], [2, 0, 1]];
-  let f = 0;
-  for (const [iu, iv, iw] of axes) for (const sg of [1, -1]) {
-    const nrm = [0, 0, 0]; nrm[iw] = sg;
-    const U = [0, 0, 0]; U[iu] = 1;
-    const Vv = [0, 0, 0]; Vv[iv] = 1;
-    const [c0, c1] = F.faces[f++];
-    // 4 pétalas: cada uma presa numa aresta da face, com a ponta no centro da face
-    for (const [e, l] of [[U, Vv], [U.map(x => -x), Vv], [Vv, U], [Vv.map(x => -x), U]]) {
-      const base = add(nrm, e), dIn = e.map(x => -x);               // meio da aresta e direção para o centro
-      const pts = [base];                                            // linha central curvando para fora
-      let p = base;
-      for (let i = 0; i < S; i++) {
-        const s = (i + 0.5) / S, phi = theta * (0.7 + F.curl * s);    // dobra um pouco mais perto da ponta
-        p = add(add(p, dIn, Math.cos(phi) / S), nrm, Math.sin(phi) / S);
-        pts.push(p);
-      }
-      for (let i = 0; i < S; i++) {
-        const w0 = 1 - i / S, w1 = 1 - (i + 1) / S;                   // a pétala afina até a ponta
-        const a0 = add(pts[i], l, -w0), a1 = add(pts[i], l, w0), b0 = add(pts[i + 1], l, -w1), b1 = add(pts[i + 1], l, w1);
-        const m0 = pts[i], m1 = pts[i + 1], k = i / (S - 1);
-        const grad = c0.map((x, j) => x + (c1[j] - x) * k);           // degradê da base até a ponta
-        const colL = F.checker && i % 2 ? c1 : grad, colR = F.checker && !(i % 2) ? c1 : grad;
-        const P = q => rot(q);
-        tri(P(a0), P(m0), P(m1), colL); tri(P(a0), P(m1), P(b0), colL);
-        tri(P(m0), P(a1), P(b1), colR); tri(P(m0), P(b1), P(m1), colR);
-      }
-    }
-  }
-  gl.bindBuffer(gl.ARRAY_BUFFER, F.buf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.DYNAMIC_DRAW);
-  F.bind();
-  const eye = [0, 0, D];
-  gl.uniformMatrix4fv(F.u('mvp'), false, mul(perspective(0.72, aspect, 0.5, 50), lookAt(eye, [0, 0, 0], [0, 1, 0])));
-  gl.uniform3f(F.u('eye'), ...eye);
-  gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  gl.enable(gl.DEPTH_TEST);
-  gl.drawArrays(gl.TRIANGLES, 0, v.length / 9);
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(F.canvas, 0, 0, w, h);
-  ctx.imageSmoothingEnabled = true;
-}
+maze.untilDone = true;                                             // no standby vai até o rosto, não por tempo

@@ -3,7 +3,7 @@
 // A cor é a da música tocando ou o laranja do painel.
 
 import { drone } from './lidar.js';
-import { pipes, maze, flowerbox } from './retro3d.js';
+import { pipes, maze } from './retro3d.js';
 
 const TAU = Math.PI * 2;
 
@@ -610,11 +610,11 @@ function johnny(ctx, w, h) {
 
 export const ANIMS = {
   equalizer, road, trail, dunes, warp, topo, scope,
-  pipes, maze, flowerbox, rain, ocean, drone, compass, camp, glow, johnny,
+  pipes, maze, rain, ocean, drone, compass, camp, glow, johnny,
 };
 export const ANIM_NAMES = {
   equalizer: 'Equalizador', road: 'Estrada retrô', trail: 'Trilha',
   dunes: 'Dunas', warp: 'Hiperespaço', topo: 'Mapa topográfico', scope: 'Osciloscópio',
-  pipes: 'Canos 3D', maze: 'Labirinto de tijolos', flowerbox: 'Caixa de flores 3D', rain: 'Chuva de dados', ocean: 'Oceano digital', drone: 'Escaneamento por drone',
+  pipes: 'Canos 3D', maze: 'Labirinto de tijolos', rain: 'Chuva de dados', ocean: 'Oceano digital', drone: 'Escaneamento por drone',
   compass: 'Bússola giroscópica', camp: 'Acampamento', glow: 'Brilho ciano', johnny: 'Johnny Castaway',
 };

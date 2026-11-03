@@ -58,7 +58,8 @@ export class Player {
     }
     if (it.kind === 'image') { this.img.hidden = false; this.img.src = it.url; }
     else { this.canvas.hidden = false; this.animate(ANIMS[it.anim]); }
-    this.timer = setTimeout(() => this.next(), this.opts.clipMs());
+    const whole = it.kind === 'anim' && ANIMS[it.anim].untilDone;    // algumas animações vão até o fim (com limite)
+    this.timer = setTimeout(() => this.next(), whole ? 4 * 60000 : this.opts.clipMs());
   }
 
   animate(draw) {
@@ -76,7 +77,7 @@ export class Player {
         c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      draw(ctx, w, h, (now - t0) / 1000, this.opts.color());
+      if (draw(ctx, w, h, (now - t0) / 1000, this.opts.color()) === true) this.next();   // a animação terminou
     };
     this.raf = requestAnimationFrame(frame);
   }
