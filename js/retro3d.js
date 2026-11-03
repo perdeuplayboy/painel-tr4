@@ -190,7 +190,7 @@ export function pipes(ctx, w, h, t) {
 }
 
 // ---------- Labirinto de tijolos ----------
-// materiais (atributo tex): 0 tijolo, 1 chão, 2 teto, 3 placa Start, 4 pedra (cinza, brilho em uv.x), 5 rosto, 6 quadro, 7 rato
+// materiais (atributo tex): 0 tijolo, 1 chão, 2 teto, 3 placa Start, 4 pedra (cinza, brilho em uv.x), 5 rosto, 6 quadro, 7 rato, 8 logo OpenGL
 const MAZE_VS = `
 attribute vec3 pos; attribute vec2 uv; attribute float tex;
 uniform mat4 mvp; uniform float rise;
@@ -202,7 +202,7 @@ void main() {
 }`;
 const MAZE_FS = `
 precision mediump float;
-uniform sampler2D wall, floor, ceil, sign, smile, pic, rat;
+uniform sampler2D wall, floor, ceil, sign, smile, pic, rat, logo;
 varying vec2 vUv; varying float vTex;
 void main() {
   if (vTex < 0.5) gl_FragColor = texture2D(wall, vUv);
@@ -212,7 +212,8 @@ void main() {
   else if (vTex < 4.5) gl_FragColor = vec4(vec3(vUv.x), 1.0);
   else if (vTex < 5.5) gl_FragColor = texture2D(smile, vUv);
   else if (vTex < 6.5) gl_FragColor = texture2D(pic, vUv);
-  else { gl_FragColor = texture2D(rat, vUv); if (gl_FragColor.a < 0.5) discard; }
+  else if (vTex < 7.5) { gl_FragColor = texture2D(rat, vUv); if (gl_FragColor.a < 0.5) discard; }
+  else { gl_FragColor = texture2D(logo, vUv); if (gl_FragColor.a < 0.1) discard; }
 }`;
 function texture(gl, unit, draw, size = [128, 128]) {
   const c = Object.assign(document.createElement('canvas'), { width: size[0], height: size[1] });
@@ -298,6 +299,16 @@ function ratTex(g, w, h) {                                           // ratinho 
   g.strokeStyle = 'rgba(40,40,40,.7)'; g.lineWidth = 1;               // bigodes
   for (const dy of [-4, 0, 4]) { g.beginPath(); g.moveTo(164, 84); g.lineTo(188, 80 + dy * 2); g.stroke(); }
 }
+function logoTex(g, w, h) {                                          // a palavra OpenGL, em relevo
+  g.clearRect(0, 0, w, h);
+  g.font = `bold italic ${h * 0.62}px Georgia, 'Times New Roman', serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineJoin = 'round'; g.lineWidth = h * 0.08; g.strokeStyle = 'rgba(20, 20, 30, .9)';
+  g.strokeText('OpenGL', w / 2, h / 2);
+  const grad = g.createLinearGradient(0, h * 0.2, 0, h * 0.8);
+  grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.5, '#b8c4d8'); grad.addColorStop(1, '#6d7b96');
+  g.fillStyle = grad; g.fillText('OpenGL', w / 2, h / 2);
+}
+const ratImg = Object.assign(new Image(), { src: 'img/rato.png' });     // rato enviado pelo usuário
 const picImg = Object.assign(new Image(), { src: 'img/quadro.webp' });   // imagem que aparece em paredes sorteadas
 const startImg = Object.assign(new Image(), { src: 'img/start.png' });   // placa Start enviada pelo usuário
 const mazeImgs = ['img/maze-tijolo.png', 'img/maze-chao.png', 'img/maze-teto.png']   // texturas tiradas do original
@@ -368,6 +379,7 @@ function mazeBuild() {                                               // labirint
   }
   Object.assign(M, { N, open, walls, n: v.length / 6, x: sx, z: sz, dir, move: null, steps: 0, walkNext: false,
     ex: far % N, ez: Math.floor(far / N), intro: 0, rocks, roll: 0, rollTo: 0 });
+  M.logos = Array.from({ length: 1 + Math.floor(R() * 2) }, () => Math.floor(R() * N * N)).filter(c => c !== sc && c !== far);
   const rc = Math.floor(R() * N * N);                                // o rato começa numa casa qualquer
   M.rat = { x: rc % N, z: Math.floor(rc / N), dir: [0, 1, 2, 3].find(d => open[rc][d]) ?? 0, t: 0 };
 }
@@ -417,6 +429,12 @@ function dynamic(t, eyeAng) {                                        // pedras g
   const dx = Math.cos(a) * s, dz = Math.sin(a) * s;
   const P = [[fx - dx, 0.14, fz - dz], [fx + dx, 0.14, fz + dz], [fx + dx, 0.86, fz + dz], [fx - dx, 0.86, fz - dz]];
   for (const [i, uv] of [[0, [0, 1]], [1, [1, 1]], [2, [1, 0]], [0, [0, 1]], [2, [1, 0]], [3, [0, 0]]]) v.push(...P[i], ...uv, 5);
+  M.logos.forEach((c, k) => {                                        // logos OpenGL girando no ar
+    const lx = c % M.N + 0.5, lz = Math.floor(c / M.N) + 0.5, la = t * 1.1 + k * 2, y0 = 0.5 + Math.sin(t * 1.6 + k) * 0.04;
+    const ldx = Math.cos(la) * 0.34, ldz = Math.sin(la) * 0.34;
+    const LP = [[lx - ldx, y0 - 0.085, lz - ldz], [lx + ldx, y0 - 0.085, lz + ldz], [lx + ldx, y0 + 0.085, lz + ldz], [lx - ldx, y0 + 0.085, lz - ldz]];
+    for (const [i, uv] of [[0, [0, 1]], [1, [1, 1]], [2, [1, 0]], [0, [0, 1]], [2, [1, 0]], [3, [0, 0]]]) v.push(...LP[i], ...uv, 8);
+  });
   const r = M.rat, rx = r.x + 0.5 + STEP[r.dir][0] * r.t, rz = r.z + 0.5 + STEP[r.dir][1] * r.t;   // rato sempre de frente para a câmera
   const right = [-Math.sin(eyeAng), Math.cos(eyeAng)], flip = STEP[r.dir][0] * right[0] + STEP[r.dir][1] * right[1] < 0;
   const hw = 0.3, bob = Math.abs(Math.sin(t * 14)) * 0.015;
@@ -438,12 +456,12 @@ export function maze(ctx, w, h, t) {
         imageTex(G.gl, 0, mazeImgs[0], brickTex, [256, 256]); imageTex(G.gl, 1, mazeImgs[1], floorTex, [128, 128]);
         imageTex(G.gl, 2, mazeImgs[2], ceilTex, [128, 128]);
         texture(G.gl, 3, signTex, [256, 128]); texture(G.gl, 4, smileTex, [256, 256]);
-        const start = () => texture(G.gl, 3, g => { g.globalAlpha = 0.9; g.drawImage(startImg, 0, 0, 256, 128); }, [256, 128]);
+        const start = () => texture(G.gl, 3, g => g.drawImage(startImg, 0, 0, 512, 256), [512, 256]);   // já vem translúcida
         if (startImg.complete && startImg.naturalWidth) start(); else startImg.addEventListener('load', start, { once: true });
         const pic = () => texture(G.gl, 5, g => g.drawImage(picImg, 0, 0, 512, 512), [512, 512]);
         if (picImg.complete && picImg.naturalWidth) pic(); else { texture(G.gl, 5, ceilTex); picImg.addEventListener('load', pic, { once: true }); }
-        texture(G.gl, 6, ratTex, [256, 128]);
-        ['wall', 'floor', 'ceil', 'sign', 'smile', 'pic', 'rat'].forEach((n, i) => G.gl.uniform1i(G.u(n), i));
+        imageTex(G.gl, 6, ratImg, ratTex, [256, 128]); texture(G.gl, 7, logoTex, [512, 128]);
+        ['wall', 'floor', 'ceil', 'sign', 'smile', 'pic', 'rat', 'logo'].forEach((n, i) => G.gl.uniform1i(G.u(n), i));
       }
     } catch (e) { console.warn('labirinto', e); M = { failed: true }; }
   }

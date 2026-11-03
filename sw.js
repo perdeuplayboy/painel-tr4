@@ -6,7 +6,7 @@ const FILES = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
   'js/app.js', 'js/obd.js', 'js/store.js', 'js/nav.js', 'js/spotify.js', 'js/player.js', 'js/anims.js', 'js/lidar.js', 'js/retro3d.js', 'js/vendor/qrcode.js',
   'enviar.html', 'enviar.webmanifest', 'js/enviar.js',
-  'img/cad360.webp', 'img/quadro.webp', 'img/start.png', 'img/maze-tijolo.png', 'img/maze-chao.png', 'img/maze-teto.png', 'videos/brilho-ciano.webm', 'icons/icon-192.png', 'icons/icon-512.png',
+  'img/cad360.webp', 'img/quadro.webp', 'img/start.png', 'img/rato.png', 'img/maze-tijolo.png', 'img/maze-chao.png', 'img/maze-teto.png', 'videos/brilho-ciano.webm', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 
 self.addEventListener('install', e => {
