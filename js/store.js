@@ -25,7 +25,8 @@ export const DEFAULTS = {
   nightDim: 45,             // % de escurecimento à noite
   spotifyClient: '',        // Client ID do app criado em developer.spotify.com
   anims: true,              // animações retrô entram na lista do standby/página Vídeos
-  clipSec: 25,              // segundos de cada GIF ou animação
+  clipSec: 25,
+  videoSound: false,        // som dos vídeos do standby/página Vídeos (botão no standby)              // segundos de cada GIF ou animação
   animOff: [],              // animações desligadas uma a uma
   mediaOff: [],             // vídeos/GIFs desligados (ids do IndexedDB)
 };

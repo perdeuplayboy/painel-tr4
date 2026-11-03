@@ -589,6 +589,7 @@ const mediaItems = () => [
   ...(S.anims ? Object.keys(ANIMS).filter(a => !S.animOff.includes(a) && (a !== 'johnny' || johnnyReady()) && extrasReady(a)).map(anim => ({ kind: 'anim', anim, weight: anim === 'johnny' ? 0.25 : 1 })) : []),   // Johnny tem muitas cenas: aparece bem menos
 ];
 const playerOpts = {
+  sound: () => S.videoSound,
   clipMs: () => Math.max(5, S.clipSec) * 1000,
   color: () => $('musicPage').style.getPropertyValue('--m-accent') || '#ffb020',
 };
@@ -641,6 +642,24 @@ $('standby').addEventListener('pointerup', e => {
   } else sbPlayer.next();
 });
 $('standby').addEventListener('pointercancel', () => { sbTouch = null; });
+
+// botão de som no standby: liga e desliga o som dos vídeos (vale também para a página Vídeos)
+function showSoundBtn() {
+  const b = $('sbSound');
+  b.hidden = !(sb.on && sbPlayer.cur?.kind === 'video');
+  b.classList.toggle('on', !!S.videoSound);
+  $('sbSoundOn').style.display = S.videoSound ? '' : 'none';
+  $('sbSoundOff').style.display = S.videoSound ? 'none' : '';
+}
+$('sbSound').addEventListener('pointerdown', e => e.stopPropagation());
+$('sbSound').addEventListener('pointerup', e => {
+  e.stopPropagation();
+  S.videoSound = !S.videoSound; saveSettings();
+  for (const p of [sbPlayer, pgPlayer]) p.video.muted = !S.videoSound;
+  if (S.videoSound) sbPlayer.video.play().catch(() => {});
+  showSoundBtn();
+});
+setInterval(showSoundBtn, 500);
 
 // Página Vídeos: a mesma lista do standby, no centro, com o carro andando
 const pgPlayer = new Player($('videoPage'), mediaItems, playerOpts);
