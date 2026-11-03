@@ -322,8 +322,11 @@ const picImg = Object.assign(new Image(), { src: 'img/quadro.webp' });   // imag
 const startImg = Object.assign(new Image(), { src: 'img/start.png' });   // placa Start enviada pelo usuário
 const mazeImgs = ['img/maze-tijolo.png', 'img/maze-chao.png', 'img/maze-teto.png']   // texturas tiradas do original
   .map(src => Object.assign(new Image(), { src }));
-function imageTex(gl, unit, img, draw, size) {                       // usa a imagem quando carregar; até lá, a desenhada
-  const put = () => texture(gl, unit, g => g.drawImage(img, 0, 0), [img.naturalWidth, img.naturalHeight]);   // tamanho original
+function imageTex(gl, unit, img, draw, size, flipY = false) {      // usa a imagem quando carregar; até lá, a desenhada
+  const put = () => texture(gl, unit, g => {                         // tamanho original
+    if (flipY) { g.translate(0, img.naturalHeight); g.scale(1, -1); }
+    g.drawImage(img, 0, 0);
+  }, [img.naturalWidth, img.naturalHeight]);
   texture(gl, unit, draw, size);
   if (img.complete && img.naturalWidth) put(); else img.addEventListener('load', put, { once: true });
 }
@@ -472,7 +475,7 @@ export function maze(ctx, w, h, t) {
         if (startImg.complete && startImg.naturalWidth) start(); else startImg.addEventListener('load', start, { once: true });
         const pic = () => texture(G.gl, 5, g => g.drawImage(picImg, 0, 0, 512, 512), [512, 512]);
         if (picImg.complete && picImg.naturalWidth) pic(); else { texture(G.gl, 5, ceilTex); picImg.addEventListener('load', pic, { once: true }); }
-        imageTex(G.gl, 6, ratImg, ratTex, [256, 128]); texture(G.gl, 7, logoTex, [512, 128]);
+        imageTex(G.gl, 6, ratImg, ratTex, [256, 128], true);   // a imagem do rato vem de cabeça para baixo texture(G.gl, 7, logoTex, [512, 128]);
         ['wall', 'floor', 'ceil', 'sign', 'smile', 'pic', 'rat', 'logo'].forEach((n, i) => G.gl.uniform1i(G.u(n), i));
       }
     } catch (e) { console.warn('labirinto', e); M = { failed: true }; }
