@@ -213,7 +213,7 @@ void main() {
   else if (vTex < 5.5) gl_FragColor = texture2D(smile, vUv);
   else if (vTex < 6.5) gl_FragColor = texture2D(pic, vUv);
   else if (vTex < 7.5) { gl_FragColor = texture2D(rat, vUv); if (gl_FragColor.a < 0.5) discard; }
-  else { gl_FragColor = texture2D(logo, vUv); if (gl_FragColor.a < 0.1) discard; }
+  else { gl_FragColor = texture2D(logo, vUv); if (gl_FragColor.a < 0.05) discard; }
 }`;
 function texture(gl, unit, draw, size = [128, 128]) {
   const c = Object.assign(document.createElement('canvas'), { width: size[0], height: size[1] });
@@ -299,14 +299,23 @@ function ratTex(g, w, h) {                                           // ratinho 
   g.strokeStyle = 'rgba(40,40,40,.7)'; g.lineWidth = 1;               // bigodes
   for (const dy of [-4, 0, 4]) { g.beginPath(); g.moveTo(164, 84); g.lineTo(188, 80 + dy * 2); g.stroke(); }
 }
-function logoTex(g, w, h) {                                          // a palavra OpenGL, em relevo
+function logoTex(g, w, h) {                                          // OpenGL: serifa grossa, cada letra de uma cor, translúcido
   g.clearRect(0, 0, w, h);
-  g.font = `bold italic ${h * 0.62}px Georgia, 'Times New Roman', serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.lineJoin = 'round'; g.lineWidth = h * 0.08; g.strokeStyle = 'rgba(20, 20, 30, .9)';
-  g.strokeText('OpenGL', w / 2, h / 2);
-  const grad = g.createLinearGradient(0, h * 0.2, 0, h * 0.8);
-  grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.5, '#b8c4d8'); grad.addColorStop(1, '#6d7b96');
-  g.fillStyle = grad; g.fillText('OpenGL', w / 2, h / 2);
+  const letters = [['O', '#e02424'], ['p', '#2fb52a'], ['e', '#3434d6'], ['n', '#e02424'], ['G', '#ecdf1e'], ['L', '#d424c4']];
+  g.font = `bold ${h * 0.78}px 'Times New Roman', Georgia, serif`; g.textBaseline = 'alphabetic';
+  const widths = letters.map(([c]) => g.measureText(c).width), total = widths.reduce((s, x) => s + x, 0);
+  let x = (w - total) / 2;
+  letters.forEach(([c, col], i) => {
+    g.globalAlpha = 1;
+    g.fillStyle = '#000'; g.globalAlpha = 0.55; g.fillText(c, x + h * 0.035, h * 0.8 + h * 0.035);   // relevo
+    g.globalAlpha = 1; g.fillStyle = col; g.fillText(c, x, h * 0.8);
+    g.globalAlpha = 0.3; g.fillStyle = '#fff';                         // brilho em cima
+    g.save(); g.beginPath(); g.rect(x, 0, widths[i], h * 0.42); g.clip(); g.fillText(c, x, h * 0.8); g.restore();
+    x += widths[i];
+  });
+  g.globalAlpha = 1; g.globalCompositeOperation = 'destination-in';  // tudo translúcido por igual
+  g.fillStyle = 'rgba(0, 0, 0, .68)'; g.fillRect(0, 0, w, h);
+  g.globalCompositeOperation = 'source-over';
 }
 const ratImg = Object.assign(new Image(), { src: 'img/rato.png' });     // rato enviado pelo usuário
 const picImg = Object.assign(new Image(), { src: 'img/quadro.webp' });   // imagem que aparece em paredes sorteadas
@@ -431,8 +440,8 @@ function dynamic(t, eyeAng) {                                        // pedras g
   for (const [i, uv] of [[0, [0, 1]], [1, [1, 1]], [2, [1, 0]], [0, [0, 1]], [2, [1, 0]], [3, [0, 0]]]) v.push(...P[i], ...uv, 5);
   M.logos.forEach((c, k) => {                                        // logos OpenGL girando no ar
     const lx = c % M.N + 0.5, lz = Math.floor(c / M.N) + 0.5, la = t * 1.1 + k * 2, y0 = 0.5 + Math.sin(t * 1.6 + k) * 0.04;
-    const ldx = Math.cos(la) * 0.34, ldz = Math.sin(la) * 0.34;
-    const LP = [[lx - ldx, y0 - 0.085, lz - ldz], [lx + ldx, y0 - 0.085, lz + ldz], [lx + ldx, y0 + 0.085, lz + ldz], [lx - ldx, y0 + 0.085, lz - ldz]];
+    const ldx = Math.cos(la) * 0.46, ldz = Math.sin(la) * 0.46;
+    const LP = [[lx - ldx, y0 - 0.115, lz - ldz], [lx + ldx, y0 - 0.115, lz + ldz], [lx + ldx, y0 + 0.115, lz + ldz], [lx - ldx, y0 + 0.115, lz - ldz]];
     for (const [i, uv] of [[0, [0, 1]], [1, [1, 1]], [2, [1, 0]], [0, [0, 1]], [2, [1, 0]], [3, [0, 0]]]) v.push(...LP[i], ...uv, 8);
   });
   const r = M.rat, rx = r.x + 0.5 + STEP[r.dir][0] * r.t, rz = r.z + 0.5 + STEP[r.dir][1] * r.t;   // rato sempre de frente para a câmera
