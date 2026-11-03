@@ -1,17 +1,17 @@
-// Visão do drone: nuvem de pontos tipo LiDAR (terreno, estrada, pinheiros) em WebGL puro.
+// Visão do drone: nuvem de pontos tipo LiDAR (terreno, estrada, mata, cidade, fazenda, a TR4 andando) em WebGL puro.
 // Desenha numa tela WebGL escondida e copia para o canvas 2D do player, com o HUD por cima.
 
 const L = 320;                                   // o mundo se repete a cada L metros (sem emenda)
 const F = Math.PI * 2 / L;
 // Cada vez que a animação começa sorteia um mundo novo: o tipo de cenário (serra, cidade, deserto, litoral,
-// mata fechada) e, dentro dele, curvas da estrada, morros e o que tem em volta.
+// mata fechada, a TR4 na trilha, fazenda, cânion) e, dentro dele, curvas da estrada, morros e o que tem em volta.
 // As frequências são inteiras para o mundo continuar fechando sem emenda a cada L metros.
 let W = null;
 const wave = (list, z, x = 0) => list.reduce((s, [a, f, p, k]) => s + a * Math.sin(f * F * z + k * x + p), 0);
 const roadX = z => wave(W.road, z);
 const swell = z => wave(W.swell, z);                              // sobe e desce da estrada
-const TYPES = ['serra', 'cidade', 'deserto', 'litoral', 'mata'];
-const TYPE_NAME = { serra: 'SERRA', cidade: 'CIDADE', deserto: 'DESERTO', litoral: 'LITORAL', mata: 'MATA FECHADA' };
+const TYPES = ['serra', 'cidade', 'deserto', 'litoral', 'mata', 'tr4', 'fazenda', 'canion'];
+const TYPE_NAME = { serra: 'SERRA', cidade: 'CIDADE', deserto: 'DESERTO', litoral: 'LITORAL', mata: 'MATA FECHADA', tr4: 'SEGUINDO A TR4', fazenda: 'FAZENDA', canion: 'CÂNION' };
 let lastType = null;
 function ground(x, z) {
   const d = Math.abs(x - roadX(z)), dx = (x - roadX(z)) * (W.seaSide || 1);
@@ -26,6 +26,12 @@ function ground(x, z) {
   if (W.type === 'litoral') {                                      // de um lado a serra, do outro a praia descendo para o mar
     if (dx > W.shore) y = Math.min(y, swell(z) - Math.min(W.seaY0 + 4, (dx - W.shore) * 0.35));
     else if (dx < -6) y += Math.max(0, -dx - 6) ** 1.3 * 0.35;
+  }
+  if (W.type === 'canion') {                                       // paredões em degraus (3 m de parede, 1 m de patamar) e o rio no fundo
+    const out = Math.max(0, d - W.floorW), hh = W.cH * Math.min(1, out / W.run) ** 0.8;
+    y = swell(z) + Math.floor(hh / 4) * 4 + Math.max(0, (hh % 4) - 3) * 4 + 1.2 * Math.sin(x * 0.3 + z * 0.2) * Math.min(1, out / 3);
+    const rv = (x - roadX(z)) * W.rSide - W.rw - 3;
+    if (rv > 0 && rv < W.rWidth) y -= 2.6 * Math.sin(rv / W.rWidth * Math.PI) ** 0.5;
   }
   return y;
 }
@@ -62,10 +68,14 @@ function newWorld(seed) {
     swell: W.swell.map(s => [s[0] * 0.3, s[1], s[2], 0]) });
   if (type === 'mata') Object.assign(W, { trees: Math.floor(pick(600, 850)), pines: pick(0.2, 0.7), near: 3.6, patch: [[0.2, 3, 0, 0]], rocks: Math.floor(pick(20, 70)) });
   if (type === 'litoral') W.seaY0 = W.swell.reduce((s, [a]) => s + Math.abs(a), 0) + 1.5;   // o mar fica abaixo de qualquer ponto da estrada
+  if (type === 'tr4') Object.assign(W, { rw: 3, marks: false, trees: Math.floor(pick(120, 300)) });   // trilha de terra com a TR4 andando
+  if (type === 'fazenda') Object.assign(W, { hills: W.hills.map(([a, f, q, k]) => [a * 0.35, f, q, k]), lift: pick(0, 1.5), wall: 0, trees: 0, rocks: 0 });
+  if (type === 'canion') Object.assign(W, { floorW: pick(18, 25), cH: pick(40, 70), run: pick(10, 22), rSide: r() < 0.5 ? -1 : 1, rWidth: pick(5, 8), wall: 0, hills: [], lift: 0,
+    trees: Math.floor(pick(20, 60)), pines: 0.2, rocks: Math.floor(pick(80, 160)), near: 5, road: W.road.map(([a, f, q, k]) => [a * 0.6, f, q, k]) });
   return r;
 }
 
-// tipos de ponto: 0 chão, 1 estrada, 2 faixa/borda/poste aceso, 3 árvore, 4 água, 5 janela acesa
+// tipos de ponto: 0 chão, 1 estrada, 2 faixa/borda/poste aceso, 3 árvore, 4 água, 5 janela acesa, 11 plantação (6 a 10: a TR4)
 // cada ponto leva uma sombra (0..1) pela direção da superfície em relação ao sol: é o que dá relevo à nuvem
 const SUN = (() => { const v = [-0.45, 0.8, 0.4], n = Math.hypot(...v); return v.map(c => c / n); })();
 const lit = (nx, ny, nz) => { const n = Math.hypot(nx, ny, nz) || 1; return 0.28 + 0.72 * Math.max(0, (nx * SUN[0] + ny * SUN[1] + nz * SUN[2]) / n); };
@@ -74,15 +84,18 @@ function buildCloud(seed) {
   const r = newWorld(seed), P = [];
   const add = (x, y, z, k, s = 1) => P.push(x, y, z, k, r(), s);
   const sea = W.type === 'litoral' ? -W.seaY0 : null;
+  const water = z => sea != null ? sea : W.type === 'canion' ? swell(z) - 1.1 : null;   // nível do mar ou do rio
   const city = W.type === 'cidade' ? planCity(r) : [];
   const inside = (x, z) => city.some(b => x > b.xa - 0.3 && x < b.xb + 0.3 && z > b.za - 0.3 && z < b.zb + 0.3);   // embaixo da laje o laser não chega
   for (let z = 0; z < L; z += 0.8) {
     for (let x = -75; x <= 75; x += 0.8) {
       const px = x + (r() - 0.5) * 0.7, pz = z + (r() - 0.5) * 0.7;
       if (Math.abs(px - roadX(pz)) < W.rw + 0.1 || (city.length && inside(px, pz))) continue;
-      const g = ground(px, pz);
-      if (sea != null && g < sea + 0.3) { if (r() < 0.85) add(px, sea + 0.3, pz, 4); continue; }   // mar
+      const g = ground(px, pz), wl = water(pz);
+      if (wl != null && g < wl + 0.3) { if (r() < 0.85) add(px, wl + 0.3, pz, 4); continue; }   // mar ou rio
       add(px, g + (r() - 0.5) * 0.12, pz, 0, slope(px, pz));
+      const g2 = ground(px + 0.8, pz);                                // paredão: preenche a altura entre um ponto e o vizinho
+      if (Math.abs(g2 - g) > 1.2) for (let yy = Math.min(g, g2) + 0.6; yy < Math.max(g, g2); yy += 0.6) add(px + 0.4 + (r() - 0.5) * 0.3, yy, pz, 0, lit(g - g2, 0.4, 0));
     }
   }
   for (let z = 0; z < L; z += 0.4) {
@@ -94,10 +107,11 @@ function buildCloud(seed) {
     }
   }
   if (city.length) drawCity(r, add, city);
+  if (W.type === 'fazenda') buildFarm(r, add);
   for (let i = 0, tries = 0; i < W.trees && tries < W.trees * 6; tries++) {
     const z = r() * L, sd = r() < 0.5 ? -1 : 1, x = roadX(z) + sd * (W.near + r() ** 1.6 * (W.type === 'cidade' ? 1.5 : 60));
     if (Math.abs(x) > 75 || wave(W.patch, z, x) < r() * 1.6 - 0.8) continue;   // mata em manchas, com clareiras
-    if (sea != null && ground(x, z) < sea + 1) continue;
+    if (water(z) != null && ground(x, z) < water(z) + 1) continue;
     i++;
     const base = ground(x, z), H = 6 + r() * 8;
     for (let k = 0; k < 18; k++) add(x + (r() - 0.5) * 0.3, base + r() * H * 0.25, z + (r() - 0.5) * 0.3, 3, 0.45);
@@ -126,7 +140,7 @@ function buildCloud(seed) {
   }
   for (let i = 0; i < W.rocks; i++) {                                // pedras soltas
     const z = r() * L, x = roadX(z) + (r() < 0.5 ? -1 : 1) * (5 + r() * 40), R = 0.6 + r() * 1.8, base = ground(x, z);
-    if (sea != null && base < sea + 0.5) continue;
+    if (water(z) != null && base < water(z) + 0.5) continue;
     if (city.length && inside(x, z)) continue;
     for (let k = 0; k < 45 * R; k++) {
       const u = r(), a = r() * Math.PI * 2, q = Math.sqrt(1 - u * u);
@@ -172,9 +186,108 @@ function drawCity(r, add, list) {
     for (let k = 0; k < 14; k++) add(x - sd * (r() * 1.2), base + 7 + (r() - 0.5) * 0.3, z + (r() - 0.5) * 0.4, 2);
   }
 }
+// fazenda: cerca na beira da estrada, talhões de milho em fileiras, terra arada, pivôs centrais e a sede com silos
+function buildFarm(r, add) {
+  const yardSide = r() < 0.5 ? -1 : 1;
+  let yardDone = false, pivots = 0;
+  for (const sd of [-1, 1]) {
+    for (let z = 0; z < L; z += 3) { const x = roadX(z) + sd * (W.rw + 2.5), b = ground(x, z); for (let y = 0; y < 1.3; y += 0.16) add(x, b + y, z, 0, 0.55); }   // mourões
+    for (let z = 0; z < L; z += 0.3) for (const hy of [0.6, 1.1]) { const x = roadX(z) + sd * (W.rw + 2.5); add(x, ground(x, z) + hy, z, 0, 0.75); }   // arame
+    for (let z0 = 2; z0 < L - 30; ) {
+      const len = Math.min(L - 4 - z0, 55 + r() * 45), x0 = W.rw + 6, pick = r();
+      if (sd === yardSide && !yardDone && z0 > 40) { farmYard(r, add, sd, z0 + len / 2); yardDone = true; }
+      else if ((pick < 0.4 || !pivots) && len > 56) { pivot(r, add, sd, z0, len, x0); pivots++; }   // pelo menos um pivô por fazenda
+      else if (pick < 0.8) {                                       // milho em fileiras
+        const hC = 1.4 + r() * 1.2;
+        for (let off = x0; off < 72; off += 1.5) for (let z = z0; z < z0 + len; z += 0.5) {
+          const x = roadX(z) + sd * off, b = ground(x, z), hh = hC * (0.85 + 0.3 * r());
+          add(x + (r() - 0.5) * 0.25, b + hh, z, 11, lit(sd * 0.25, 1, (r() - 0.5) * 0.4));
+          if (r() < 0.35) add(x, b + hh * 0.5, z, 11, 0.45);
+        }
+      }                                                            // senão: terra arada (só o chão)
+      z0 += len + 4;
+    }
+  }
+}
+// pivô central: círculo de plantação em anéis, o braço de irrigação com torres e a torre do centro
+function pivot(r, add, sd, z0, len, x0) {
+  const R = Math.min(len / 2 - 2, 30), zc = z0 + len / 2, xc = roadX(zc) + sd * (x0 + R + 2);
+  for (let rr = 2; rr < R; rr += 1.3) for (let a = 0; a < Math.PI * 2; a += 0.6 / rr) {
+    const x = xc + Math.cos(a) * rr, z = zc + Math.sin(a) * rr;
+    add(x, ground(x, z) + 0.55 + r() * 0.2, z, 11, lit(0, 1, 0) * (0.85 + 0.15 * Math.sin(rr * 1.7)));
+  }
+  const th = r() * Math.PI * 2, ca = Math.cos(th), sa = Math.sin(th);
+  for (let s = 0; s <= R; s += 0.22) {                             // braço em treliça
+    const x = xc + ca * s, z = zc + sa * s, b = ground(x, z), sag = 0.35 * Math.sin((s % 7) / 7 * Math.PI);
+    add(x, b + 3.6 - sag, z, 2); add(x, b + 3.0 - sag * 0.6, z, 2);
+    if (s % 1.1 < 0.22) for (let y = 3.0; y < 3.6; y += 0.15) add(x, b + y - sag * 0.8, z, 2);
+  }
+  for (let s = 7; s <= R; s += 7) {                                // torres com rodas
+    const x = xc + ca * s, z = zc + sa * s, b = ground(x, z);
+    for (let y = 0; y < 3.6; y += 0.2) { add(x - sa * 0.5 * (1 - y / 3.6), b + y, z + ca * 0.5 * (1 - y / 3.6), 0, 0.8); add(x + sa * 0.5 * (1 - y / 3.6), b + y, z - ca * 0.5 * (1 - y / 3.6), 0, 0.8); }
+  }
+  for (let y = 0; y < 4.6; y += 0.15) for (let a = 0; a < 6.28; a += 1.05) add(xc + Math.cos(a) * 0.4, ground(xc, zc) + y, zc + Math.sin(a) * 0.4, 0, lit(Math.cos(a), 0.3, Math.sin(a)));
+}
+// sede: galpão com telhado de duas águas, três silos e algumas árvores
+function farmYard(r, add, sd, zc) {
+  const xc = roadX(zc) + sd * (W.rw + 16), b = ground(xc, zc), hw = 6, hl = 9, H = 5, R = 3.4;
+  for (let z = -hl; z <= hl; z += 0.45) for (let y = 0; y <= H; y += 0.45) for (const s of [-1, 1]) add(xc + s * hw, b + y, zc + z, 0, lit(s, 0, 0));
+  for (let x = -hw; x <= hw; x += 0.45) for (const s of [-1, 1]) {
+    const top = H + R * (1 - Math.abs(x) / hw);                    // oitão: a parede sobe até a cumeeira
+    for (let y = 0; y <= top; y += 0.45) add(xc + x, b + y, zc + s * hl, 0, lit(0, 0, s));
+  }
+  for (let x = -hw - 0.5; x <= hw + 0.5; x += 0.4) for (let z = -hl - 0.5; z <= hl + 0.5; z += 0.4)
+    add(xc + x, b + H + R * (1 - Math.abs(x) / hw), zc + z, 0, lit(-Math.sign(x) * 0.6, 1, 0));
+  for (let k = 0; k < 3; k++) {                                    // silos
+    const sx = xc + sd * 13, sz = zc - 8 + k * 6.5, sb = ground(sx, sz), sr = 2.3, sh = 9 + k;
+    for (let a = 0; a < Math.PI * 2; a += 0.14) for (let y = 0; y <= sh; y += 0.45) add(sx + Math.cos(a) * sr, sb + y, sz + Math.sin(a) * sr, 0, lit(Math.cos(a), 0, Math.sin(a)));
+    for (let u = 0; u < 1; u += 0.08) for (let a = 0; a < Math.PI * 2; a += 0.25 / Math.max(0.2, Math.cos(u * 1.4))) {
+      const rr = sr * Math.cos(u * Math.PI / 2), y = sh + sr * 0.8 * Math.sin(u * Math.PI / 2);
+      add(sx + Math.cos(a) * rr, sb + y, sz + Math.sin(a) * rr, 0, lit(Math.cos(a) * (1 - u), u + 0.2, Math.sin(a) * (1 - u)));
+    }
+  }
+  for (let k = 0; k < 6; k++) {                                    // árvores da sede
+    const tz = zc - 14 + k * 5.5, tx = xc - sd * 9 + (r() - 0.5) * 3, tb = ground(tx, tz), Rr = 2.8 + r() * 1.5, cy = tb + 6 + r() * 2;
+    for (let i = 0; i < 260; i++) { const u = r() * 2 - 1, a = r() * Math.PI * 2, q = Math.sqrt(1 - u * u); add(tx + Math.cos(a) * q * Rr, cy + u * Rr * 0.8, tz + Math.sin(a) * q * Rr, 3, lit(Math.cos(a) * q, u, Math.sin(a) * q)); }
+    for (let y = 0; y < cy - tb; y += 0.25) add(tx, tb + y, tz, 3, 0.45);
+  }
+}
+
+// a TR4 em pontos, no sistema do carro (x para o lado, y para cima, z para a frente; origem no chão entre as rodas).
+// Perfil tirado do desenho das Aventuras (mesmo contorno), com a altura acertada para 1,76 m.
+// tipos: 6 roda (gira), 7 lataria, 8 vidro, 9 lanterna, 10 pneu parado (estepe, rack), 2 farol
+function buildCar() {
+  const P = [], add = (x, y, z, k, s) => P.push(x, y, z, k, Math.random(), s);
+  const SZ = 0.0435, SY = 0.031, HW = 0.86;                        // unidades do desenho → metros
+  const prof = [[-36.7, -12], [-41.2, -12], [-43.7, -14.2], [-43.9, -20.6], [-42.1, -21.4], [-41.5, -24], [-40.8, -40], [-37.5, -52], [-33, -55.4],
+    [14, -56.5], [18.3, -56.3], [26.9, -39.5], [43, -36.4], [46.6, -26.5], [48, -25], [48, -18.5], [41, -13.3], [37, -12.7], [36, -12.6]].map(([u, v]) => [u * SZ, -v * SY]);
+  const inPoly = (z, y) => { let c = false; for (let i = 0, j = prof.length - 1; i < prof.length; j = i++) { const [zi, yi] = prof[i], [zj, yj] = prof[j]; if ((yi > y) !== (yj > y) && z < (zj - zi) * (y - yi) / (yj - yi) + zi) c = !c; } return c; };
+  const glassAt = (z, y) => y > 39.5 * SY && y < 52 * SY && z > -34 * SZ && z < 22 * SZ - (y - 39.5 * SY) * 0.6 && !(Math.abs(z + 20.4 * SZ) < 0.06) && !(Math.abs(z - 0.6 * SZ) < 0.05);
+  for (let z = -2; z <= 2.15; z += 0.075) for (let y = 0.3; y <= 1.8; y += 0.075) if (inPoly(z, y)) for (const s of [-1, 1]) add(s * HW, y, z, glassAt(z, y) ? 8 : 7, lit(s, 0.25, 0));
+  for (let i = 0; i < prof.length; i++) {                          // teto, capô, frente e traseira: o contorno estendido na largura
+    const [z0, y0] = prof[i], [z1, y1] = prof[(i + 1) % prof.length], len = Math.hypot(z1 - z0, y1 - y0);
+    if (y0 < 0.6 && y1 < 0.6) continue;                            // o assoalho não aparece
+    const nz = y1 - y0, ny = -(z1 - z0), glass = (i === 6 || i === 7 || i === 10);   // vidro traseiro e para-brisa
+    for (let u = 0; u < len; u += 0.07) for (let x = -HW + 0.04; x <= HW - 0.04; x += 0.08) {
+      const t = u / len; add(x, y0 + (y1 - y0) * t, z0 + (z1 - z0) * t, glass ? 8 : 7, lit(0, -ny, -nz));
+    }
+  }
+  for (const zw of [-1.11, 1.11]) for (const xs of [-1, 1]) {      // rodas: banda do pneu e o aro com raios
+    for (let a = 0; a < Math.PI * 2; a += 0.07) for (let w = 0; w <= 0.24; w += 0.06) add(xs * (0.72 + w), 0.36 + Math.sin(a) * 0.36, zw + Math.cos(a) * 0.36, 6, lit(0, Math.sin(a), Math.cos(a)));
+    for (let a = 0; a < Math.PI * 2; a += 0.12) add(xs * 0.97, 0.36 + Math.sin(a) * 0.22, zw + Math.cos(a) * 0.22, 6, lit(xs, 0.3, 0));
+    for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2; for (let rr = 0.04; rr < 0.22; rr += 0.035) add(xs * 0.97, 0.36 + Math.sin(a) * rr, zw + Math.cos(a) * rr, 6, 0.9); }
+  }
+  for (let a = 0; a < Math.PI * 2; a += 0.08) for (let rr = 0.2; rr <= 0.36; rr += 0.08) add(Math.cos(a) * rr, 0.93 + Math.sin(a) * rr, -1.97, 10, 0.7);   // estepe na tampa
+  for (let z = -1.45; z <= 0.75; z += 0.06) for (const xs of [-0.62, 0.62]) add(xs, 1.8, z, 10, 0.8);   // rack do teto
+  for (const xs of [-0.62, 0.62]) for (let k = 0; k < 30; k++) add(xs + (Math.random() - 0.5) * 0.22, 1.0 + (Math.random() - 0.5) * 0.12, 2.06, 2, 1);   // faróis
+  for (const xs of [-0.8, 0.8]) for (let k = 0; k < 24; k++) add(xs, 0.72 + Math.random() * 0.22, -1.9 + (Math.random() - 0.5) * 0.08, 9, 1);           // lanternas
+  return new Float32Array(P);
+}
+
 const VS = `
 attribute vec3 pos; attribute float kind; attribute float seed; attribute float shade;
-uniform vec3 cam; uniform vec2 rot; uniform float pitch, fy, aspect, px, time, front, beam;
+uniform vec3 cam; uniform vec2 rot; uniform float pitch, fy, aspect, px, time, front, beam, back, mode;
+uniform vec4 model; uniform vec3 wheel;                         // carro: posição e rumo; giro das rodas, balanço e arfagem
 varying vec3 vCol; varying float vA;
 vec3 turbo(float x) {
   x = clamp(x, 0.0, 1.0);
@@ -185,8 +298,22 @@ vec3 turbo(float x) {
     dot(v4, vec4(0.10667330, 12.64194608, -60.58204836, 110.36276771)) + dot(v2, vec2(-89.90310912, 27.34824973)));
 }
 void main() {
-  float wy = kind == 4.0 ? 0.25 * sin(pos.x * 0.35 + pos.z * 0.25 + time * 1.6) : 0.0;   // ondas do mar
-  vec3 p = vec3(pos.x - cam.x, pos.y + wy - cam.y, mod(pos.z - cam.z + 30.0, ${L}.0) - 30.0);
+  vec3 wp = pos;
+  if (mode > 0.5) {                                                // ponto da TR4: sistema do carro → mundo
+    vec3 q = pos;
+    if (kind == 6.0) {                                             // roda girando em volta do eixo
+      float az = q.z > 0.0 ? 1.11 : -1.11, cr = cos(wheel.x), sr = sin(wheel.x);
+      vec2 v = vec2(q.z - az, q.y - 0.36);
+      q.z = az + v.x * cr + v.y * sr; q.y = 0.36 - v.x * sr + v.y * cr;
+    } else {                                                       // lataria na suspensão: sobe, desce e arfa
+      float cq = cos(wheel.z), sq = sin(wheel.z), yy = q.y - 0.6;
+      q.y = 0.6 + yy * cq + q.z * sq + wheel.y; q.z = q.z * cq - yy * sq;
+    }
+    float cy = cos(model.w), sy = sin(model.w);
+    wp = vec3(model.x + q.x * cy + q.z * sy, model.y + q.y, model.z - q.x * sy + q.z * cy);
+  }
+  float wy = kind == 4.0 ? 0.25 * sin(wp.x * 0.35 + wp.z * 0.25 + time * 1.6) : 0.0;   // ondas do mar
+  vec3 p = vec3(wp.x - cam.x, wp.y + wy - cam.y, mod(wp.z - cam.z + back, ${L}.0) - back);
   vec3 c = vec3(p.x * rot.x - p.z * rot.y, p.y, p.x * rot.y + p.z * rot.x);
   float cp = cos(pitch), sp = sin(pitch);
   float zc = -c.y * sp + c.z * cp, yc = c.y * cp + c.z * sp;
@@ -194,17 +321,22 @@ void main() {
   gl_Position = vec4(c.x * fy / aspect, yc * fy, (zc * 200.5 - 200.0) / 199.5, zc);
   float fog = 1.0 - smoothstep(60.0, 150.0, zc);
   float near = smoothstep(1.5, 8.0, zc);
-  float h = (pos.y + 2.0) / 26.0;
+  float h = (wp.y + 2.0) / 26.0;
   vec3 col = turbo(0.08 + h * 0.85);
   if (kind == 1.0) col = vec3(0.32, 0.36, 0.42);
   if (kind == 2.0) col = vec3(1.0, 0.95, 0.8);
   if (kind == 4.0) col = mix(vec3(0.0, 0.3, 0.8), vec3(0.55, 0.95, 1.0), pow(0.5 + 0.5 * sin(pos.x * 0.5 + pos.z * 0.35 - time * 2.0), 6.0));   // mar: azul com a crista das ondas brilhando
   if (kind == 5.0) col = vec3(1.0, 0.78, 0.35);
+  if (kind == 6.0 || kind == 10.0) col = vec3(0.24, 0.26, 0.3);   // pneus
+  if (kind == 7.0) col = vec3(1.0, 0.55, 0.12);                   // lataria laranja do painel
+  if (kind == 8.0) col = vec3(0.28, 0.6, 0.8);                    // vidros
+  if (kind == 9.0) col = vec3(1.0, 0.12, 0.08);                   // lanternas
+  if (kind == 11.0) col = mix(vec3(0.2, 0.6, 0.15), vec3(0.75, 0.85, 0.28), fract(seed * 7.0));   // plantação
   float built = front - p.z;                                       // só existe o que o laser já varreu
   float fresh = exp(-built / 1.2);                                 // recém-escaneado brilha e assenta
   float laser = exp(-pow((p.z - beam) / 0.7, 2.0));                // a faixa do laser agora
   float flick = 0.94 + 0.06 * sin(seed * 91.0 + time * 4.0);
-  float lightK = kind == 0.0 || kind == 1.0 || kind == 3.0 ? shade : 1.0;   // relevo: face virada para o sol mais clara
+  float lightK = kind == 2.0 || kind == 4.0 || kind == 5.0 || kind == 9.0 ? 1.0 : shade;   // relevo: face virada para o sol mais clara
   vCol = mix(col * lightK * flick, vec3(0.8, 1.0, 1.0), fresh * 0.25) + vec3(1.0, 0.15, 0.2) * laser * 1.6;
   vA = fog * near;                                                // some na neblina ao longe e perto da câmera
   gl_PointSize = zc > 0.5 && built > 0.0 ? clamp(px * 0.46 / zc * (1.0 + fresh * 0.5), 1.5, 5.0) : 0.0;
@@ -218,7 +350,7 @@ void main() {
   gl_FragColor = vec4(mix(vec3(0.004, 0.012, 0.028), vCol * (1.0 - d * 0.6), vA), 1.0);   // ponto sólido, borda um pouco mais escura
 }`;
 
-let gl = null, glCanvas = null, prog = null, count = 0, U = {}, failed = false;
+let gl = null, glCanvas = null, prog = null, count = 0, U = {}, failed = false, worldBuf = null, carBuf = null, carCount = 0, locs = [];
 let built = 0, lastT = Infinity, lastSeg = -1;                     // até onde a nuvem já foi construída
 const SCAN = 24;                                                   // segundos de cada mundo escaneado
 function init() {
@@ -233,13 +365,15 @@ function init() {
   prog = gl.createProgram();
   gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
   gl.linkProgram(prog); gl.useProgram(prog);
-  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-  [['pos', 3, 0], ['kind', 1, 3], ['seed', 1, 4], ['shade', 1, 5]].forEach(([name, n, off]) => {
+  locs = [['pos', 3, 0], ['kind', 1, 3], ['seed', 1, 4], ['shade', 1, 5]].map(([name, n, off]) => {
     const loc = gl.getAttribLocation(prog, name);
     gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, n, gl.FLOAT, false, 24, off * 4);
+    return [loc, n, off];
   });
-  for (const u of ['cam', 'rot', 'pitch', 'fy', 'aspect', 'px', 'time', 'front', 'beam']) U[u] = gl.getUniformLocation(prog, u);
+  worldBuf = gl.createBuffer(); carBuf = gl.createBuffer();
+  const car = buildCar(); carCount = car.length / 6;
+  gl.bindBuffer(gl.ARRAY_BUFFER, carBuf); gl.bufferData(gl.ARRAY_BUFFER, car, gl.STATIC_DRAW);
+  for (const u of ['cam', 'rot', 'pitch', 'fy', 'aspect', 'px', 'time', 'front', 'beam', 'back', 'mode', 'model', 'wheel']) U[u] = gl.getUniformLocation(prog, u);
   gl.disable(gl.BLEND); gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS);   // pontos sólidos com profundidade: dá forma aos objetos
 }
 
@@ -258,31 +392,55 @@ export function drone(ctx, w, h, tt, color) {
     lastSeg = seg;
     const data = buildCloud(Math.floor(Math.random() * 1e9));
     count = data.length / 6;
-    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, worldBuf); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
     built = 0;
   }
   lastT = tt;
   const z = t * 11, look = z + 25;
-  const cx = roadX(z) * 0.85 + Math.sin(t * 0.13) * 4;               // segue a estrada, meio de lado
-  const yaw = Math.atan2(roadX(look) - cx, look - z) * 0.8;
-  const alt = 21 + Math.sin(t * 0.21) * 3;
-  const cy = Math.max(ground(cx, z), swell(z)) + alt;
-  gl.uniform3f(U.cam, cx, cy, z);
+  let cx = roadX(z) * 0.85 + Math.sin(t * 0.13) * 4;                 // segue a estrada, meio de lado
+  let yaw = Math.atan2(roadX(look) - cx, look - z) * 0.8;
+  let alt = 21 + Math.sin(t * 0.21) * 3;
+  let cy = Math.max(ground(cx, z), swell(z)) + alt, cz = z;
+  let pitch = 0.3 + Math.sin(t * 0.17) * 0.04, orbit = 0, car = null;
+  if (W.type === 'tr4') {                                          // a TR4 vai 18 m à frente; no meio da varredura o drone dá a volta nela
+    const kz = z + 18, kx = roadX(kz), ky = ground(kx, kz), kyaw = Math.atan2(roadX(kz + 2) - roadX(kz - 2), 4);
+    car = { kx, ky, kz, kyaw };
+    alt = 11 + Math.sin(t * 0.21) * 1.5; cx = roadX(z) * 0.9; cy = Math.max(ground(cx, z), swell(z)) + alt;
+    orbit = Math.min(1, Math.max(0, (t - 10.5) / 2)) * (1 - Math.min(1, Math.max(0, (t - 17.5) / 2)));
+    orbit = orbit * orbit * (3 - 2 * orbit);
+    const a = (t - 10.5) / 9 * Math.PI * 2, ox = kx - 10 * Math.sin(kyaw + a), oz = kz - 10 * Math.cos(kyaw + a), oy = ky + 4.5;
+    cx += (ox - cx) * orbit; cz += (oz - cz) * orbit; cy += (oy - cy) * orbit;
+    yaw = Math.atan2(kx - cx, kz - cz);
+    pitch = Math.atan2(cy - ky - 0.8, Math.hypot(kx - cx, kz - cz)) - 0.1;
+  }
+  gl.uniform3f(U.cam, cx, cy, cz);
   gl.uniform2f(U.rot, Math.cos(yaw), Math.sin(yaw));
-  const pitch = 0.3 + Math.sin(t * 0.17) * 0.04;
   gl.uniform1f(U.pitch, pitch);
   gl.uniform1f(U.fy, 1 / Math.tan(0.36));
   gl.uniform1f(U.aspect, CW / CH);
   gl.uniform1f(U.px, CH);
   gl.uniform1f(U.time, t);
+  gl.uniform1f(U.back, 30 + 110 * orbit);                          // dando a volta o drone olha para trás: mostra o que já passou
   // o laser vai e volta à frente do drone; quando passa além do já varrido, constrói mais nuvem
   const reach = 4 + 116 * (0.5 - 0.5 * Math.cos(t * Math.PI * 2 / 9));
   built = Math.max(built, z + reach);
-  gl.uniform1f(U.front, built - z);
-  gl.uniform1f(U.beam, reach);
-  gl.drawArrays(gl.POINTS, 0, count);
+  gl.uniform1f(U.front, built - cz);
+  gl.uniform1f(U.beam, reach + z - cz);
+  const draw = (buf, n) => {
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    for (const [loc, k, off] of locs) gl.vertexAttribPointer(loc, k, gl.FLOAT, false, 24, off * 4);
+    gl.drawArrays(gl.POINTS, 0, n);
+  };
+  gl.uniform1f(U.mode, 0);
+  draw(worldBuf, count);
+  if (car) {
+    gl.uniform1f(U.mode, 1);
+    gl.uniform4f(U.model, car.kx, car.ky, car.kz, car.kyaw);
+    gl.uniform3f(U.wheel, car.kz / 0.36, Math.sin(t * 7.3) * 0.025 + Math.sin(t * 2.1) * 0.02, Math.sin(t * 3.1) * 0.012);
+    draw(carBuf, carCount);
+  }
   ctx.drawImage(glCanvas, 0, 0, w, h);
-  laserLine(ctx, w, h, { cx, cy, z, yaw, pitch }, z + reach);
+  laserLine(ctx, w, h, { cx, cy, z: cz, yaw, pitch }, z + reach);
   hud(ctx, w, h, t, color, alt, yaw);
 }
 
