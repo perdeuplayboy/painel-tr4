@@ -190,19 +190,19 @@ export function pipes(ctx, w, h, t) {
 }
 
 // ---------- Labirinto de tijolos ----------
-// materiais (atributo tex): 0 tijolo, 1 chão, 2 teto, 3 placa Start, 4 pedra (cinza, brilho em uv.x), 5 rosto, 6 quadro
+// materiais (atributo tex): 0 tijolo, 1 chão, 2 teto, 3 placa Start, 4 pedra (cinza, brilho em uv.x), 5 rosto, 6 quadro, 7 rato
 const MAZE_VS = `
 attribute vec3 pos; attribute vec2 uv; attribute float tex;
 uniform mat4 mvp; uniform float rise;
 varying vec2 vUv; varying float vTex;
 void main() {
   vec3 p = pos;
-  if (tex < 0.5 || (tex > 2.5 && tex < 3.5) || tex > 5.5) p.y *= rise;   // paredes sobem do chão no começo
+  if (tex < 0.5 || (tex > 2.5 && tex < 3.5) || (tex > 5.5 && tex < 6.5)) p.y *= rise;   // paredes sobem do chão no começo
   vUv = uv; vTex = tex; gl_Position = mvp * vec4(p, 1.0);
 }`;
 const MAZE_FS = `
 precision mediump float;
-uniform sampler2D wall, floor, ceil, sign, smile, pic;
+uniform sampler2D wall, floor, ceil, sign, smile, pic, rat;
 varying vec2 vUv; varying float vTex;
 void main() {
   if (vTex < 0.5) gl_FragColor = texture2D(wall, vUv);
@@ -211,7 +211,8 @@ void main() {
   else if (vTex < 3.5) gl_FragColor = texture2D(sign, vUv);
   else if (vTex < 4.5) gl_FragColor = vec4(vec3(vUv.x), 1.0);
   else if (vTex < 5.5) gl_FragColor = texture2D(smile, vUv);
-  else gl_FragColor = texture2D(pic, vUv);
+  else if (vTex < 6.5) gl_FragColor = texture2D(pic, vUv);
+  else { gl_FragColor = texture2D(rat, vUv); if (gl_FragColor.a < 0.5) discard; }
 }`;
 function texture(gl, unit, draw, size = [128, 128]) {
   const c = Object.assign(document.createElement('canvas'), { width: size[0], height: size[1] });
@@ -276,6 +277,26 @@ function smileTex(g, w, h) {                                         // rosto am
   for (const sx of [-1, 1]) { g.beginPath(); g.ellipse(cx + sx * r * 0.42, cy - r * 0.2, r * 0.13, r * 0.08, 0, 0, TAU); g.fill(); }
   g.strokeStyle = 'rgba(40, 40, 210, .9)'; g.lineWidth = r * 0.12; g.lineCap = 'round';
   g.beginPath(); g.ellipse(cx, cy + r * 0.05, r * 0.6, r * 0.38, 0, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke();
+}
+function ratTex(g, w, h) {                                           // ratinho cinza de perfil, olhando para a direita
+  g.clearRect(0, 0, w, h);
+  g.setTransform(w / 192, 0, 0, h / 108, 0, -6 * h / 108);           // desenho ocupa a imagem toda
+  g.strokeStyle = '#8a7f86'; g.lineWidth = 5; g.lineCap = 'round';   // rabo
+  g.beginPath(); g.moveTo(40, 78); g.bezierCurveTo(18, 86, 14, 60, 4, 70); g.stroke();
+  g.fillStyle = '#5c5c62';
+  for (const x of [58, 78, 118, 134]) { g.beginPath(); g.ellipse(x, 98, 7, 4, 0, 0, TAU); g.fill(); }   // patinhas
+  const body = g.createRadialGradient(95, 62, 6, 92, 74, 58);
+  body.addColorStop(0, '#b9b9c0'); body.addColorStop(1, '#6e6e76');
+  g.fillStyle = body;
+  g.beginPath(); g.ellipse(88, 76, 52, 26, 0, 0, TAU); g.fill();       // corpo
+  g.beginPath(); g.moveTo(126, 58); g.quadraticCurveTo(168, 70, 172, 82); g.quadraticCurveTo(150, 96, 124, 92); g.fill();   // focinho
+  g.fillStyle = '#f2a0b4'; g.beginPath(); g.arc(172, 82, 5, 0, TAU); g.fill();            // nariz
+  g.fillStyle = '#9b9ba3'; g.beginPath(); g.ellipse(124, 50, 13, 16, -0.3, 0, TAU); g.fill();   // orelha
+  g.fillStyle = '#e9b3c2'; g.beginPath(); g.ellipse(124, 51, 7, 10, -0.3, 0, TAU); g.fill();
+  g.fillStyle = '#101010'; g.beginPath(); g.arc(146, 70, 4, 0, TAU); g.fill();            // olho
+  g.fillStyle = '#ffffff'; g.beginPath(); g.arc(147.5, 68.5, 1.3, 0, TAU); g.fill();
+  g.strokeStyle = 'rgba(40,40,40,.7)'; g.lineWidth = 1;               // bigodes
+  for (const dy of [-4, 0, 4]) { g.beginPath(); g.moveTo(164, 84); g.lineTo(188, 80 + dy * 2); g.stroke(); }
 }
 const picImg = Object.assign(new Image(), { src: 'img/quadro.webp' });   // imagem que aparece em paredes sorteadas
 const startImg = Object.assign(new Image(), { src: 'img/start.png' });   // placa Start enviada pelo usuário
@@ -347,6 +368,8 @@ function mazeBuild() {                                               // labirint
   }
   Object.assign(M, { N, open, walls, n: v.length / 6, x: sx, z: sz, dir, move: null, steps: 0, walkNext: false,
     ex: far % N, ez: Math.floor(far / N), intro: 0, rocks, roll: 0, rollTo: 0 });
+  const rc = Math.floor(R() * N * N);                                // o rato começa numa casa qualquer
+  M.rat = { x: rc % N, z: Math.floor(rc / N), dir: [0, 1, 2, 3].find(d => open[rc][d]) ?? 0, t: 0 };
 }
 function mazeNext() {                                                // sempre com a mão direita na parede
   if (M.walkNext) { M.walkNext = false; return { kind: 'walk', dur: 0.55, t: 0 }; }   // acabou de virar: anda
@@ -364,6 +387,16 @@ const ICO = (() => {                                                 // icosaedr
   return [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
     [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]].map(f => f.map(i => V[i]));
 })();
+function ratStep(dt) {                                               // o rato anda sozinho: segue em frente e vira ao acaso
+  const r = M.rat;
+  r.t += dt * 0.9;
+  while (r.t >= 1) {
+    r.t -= 1; r.x += STEP[r.dir][0]; r.z += STEP[r.dir][1];
+    const o = M.open[r.z * M.N + r.x], back = (r.dir + 2) % 4;
+    const opts = [0, 1, 2, 3].filter(d => o[d] && d !== back);
+    r.dir = opts.length ? opts[Math.floor(Math.random() * opts.length)] : back;   // beco: dá meia-volta
+  }
+}
 function dynamic(t, eyeAng) {                                        // pedras girando e o rosto, montados a cada quadro
   const v = [], rot = (p, a, b) => {
     const x = p[0] * Math.cos(a) - p[2] * Math.sin(a), z = p[0] * Math.sin(a) + p[2] * Math.cos(a);
@@ -384,6 +417,13 @@ function dynamic(t, eyeAng) {                                        // pedras g
   const dx = Math.cos(a) * s, dz = Math.sin(a) * s;
   const P = [[fx - dx, 0.14, fz - dz], [fx + dx, 0.14, fz + dz], [fx + dx, 0.86, fz + dz], [fx - dx, 0.86, fz - dz]];
   for (const [i, uv] of [[0, [0, 1]], [1, [1, 1]], [2, [1, 0]], [0, [0, 1]], [2, [1, 0]], [3, [0, 0]]]) v.push(...P[i], ...uv, 5);
+  const r = M.rat, rx = r.x + 0.5 + STEP[r.dir][0] * r.t, rz = r.z + 0.5 + STEP[r.dir][1] * r.t;   // rato sempre de frente para a câmera
+  const right = [-Math.sin(eyeAng), Math.cos(eyeAng)], flip = STEP[r.dir][0] * right[0] + STEP[r.dir][1] * right[1] < 0;
+  const hw = 0.3, bob = Math.abs(Math.sin(t * 14)) * 0.015;
+  const RP = [[rx - right[0] * hw, bob, rz - right[1] * hw], [rx + right[0] * hw, bob, rz + right[1] * hw],
+    [rx + right[0] * hw, 0.3 + bob, rz + right[1] * hw], [rx - right[0] * hw, 0.3 + bob, rz - right[1] * hw]];
+  const u0 = flip ? 1 : 0, u1 = flip ? 0 : 1;
+  for (const [i, uv] of [[0, [u0, 1]], [1, [u1, 1]], [2, [u1, 0]], [0, [u0, 1]], [2, [u1, 0]], [3, [u0, 0]]]) v.push(...RP[i], ...uv, 7);
   const gl = M.gl;
   gl.bindBuffer(gl.ARRAY_BUFFER, M.dyn);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.DYNAMIC_DRAW);
@@ -402,7 +442,8 @@ export function maze(ctx, w, h, t) {
         if (startImg.complete && startImg.naturalWidth) start(); else startImg.addEventListener('load', start, { once: true });
         const pic = () => texture(G.gl, 5, g => g.drawImage(picImg, 0, 0, 512, 512), [512, 512]);
         if (picImg.complete && picImg.naturalWidth) pic(); else { texture(G.gl, 5, ceilTex); picImg.addEventListener('load', pic, { once: true }); }
-        ['wall', 'floor', 'ceil', 'sign', 'smile', 'pic'].forEach((n, i) => G.gl.uniform1i(G.u(n), i));
+        texture(G.gl, 6, ratTex, [256, 128]);
+        ['wall', 'floor', 'ceil', 'sign', 'smile', 'pic', 'rat'].forEach((n, i) => G.gl.uniform1i(G.u(n), i));
       }
     } catch (e) { console.warn('labirinto', e); M = { failed: true }; }
   }
@@ -425,6 +466,7 @@ export function maze(ctx, w, h, t) {
       M.move.t = rest / M.move.dur;
     }
   }
+  if (M.intro > 3) ratStep(dt);
   const mv = M.move, e = mv ? Math.min(1, mv.t) : 0;
   let ang = M.dir * Math.PI / 2, px = M.x + 0.5, pz = M.z + 0.5;
   if (mv?.kind === 'turn') ang = (mv.from + (mv.to - mv.from) * e) * Math.PI / 2;
