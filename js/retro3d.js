@@ -246,12 +246,16 @@ void main() {
 }`;
 function texture(gl, unit, draw, size = [128, 128]) {
   const c = Object.assign(document.createElement('canvas'), { width: size[0], height: size[1] });
-  draw(c.getContext('2d'), size[0], size[1]);
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';   // reduzir foto grande sem serrilhar (o globo de LEGO do quadro)
+  draw(g, size[0], size[1]);
   const tx = gl.createTexture();
   gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tx);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
   gl.generateMipmap(gl.TEXTURE_2D);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  const af = gl.getExtension('EXT_texture_filter_anisotropic');       // nítida vista de lado, sem tremer ao andar
+  if (af) gl.texParameterf(gl.TEXTURE_2D, af.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(af.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
   return tx;
 }
@@ -442,7 +446,7 @@ export function maze(ctx, w, h, t) {
         M = { ...G, last: Infinity, buf: G.gl.createBuffer(), dyn: G.gl.createBuffer() };
         mazeImgs.forEach((img, i) => imageTex(G.gl, i, img));
         imageTex(G.gl, 3, startImg, [512, 256]); texture(G.gl, 4, smileTex, [256, 256]);
-        imageTex(G.gl, 5, picImg, [512, 512]);
+        imageTex(G.gl, 5, picImg, [1024, 1024]);                    // foto do quadro com detalhe miúdo: textura maior
         imageTex(G.gl, 6, ratImg, null, true);                       // a imagem do rato vem de cabeça para baixo
         texture(G.gl, 7, logoTex, [512, 128]);
         ['wall', 'floor', 'ceil', 'sign', 'smile', 'pic', 'rat', 'logo'].forEach((n, i) => G.gl.uniform1i(G.u(n), i));
