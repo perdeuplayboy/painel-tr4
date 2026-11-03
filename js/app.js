@@ -643,22 +643,21 @@ $('standby').addEventListener('pointerup', e => {
 });
 $('standby').addEventListener('pointercancel', () => { sbTouch = null; });
 
-// botão de som no standby: liga e desliga o som dos vídeos (vale também para a página Vídeos)
+// botão de som no standby e na página Vídeos: liga e desliga o som dos vídeos (vale para os dois)
 function showSoundBtn() {
-  const b = $('sbSound');
-  b.hidden = !(sb.on && sbPlayer.cur?.kind === 'video');
-  b.classList.toggle('on', !!S.videoSound);
-  $('sbSoundOn').style.display = S.videoSound ? '' : 'none';
-  $('sbSoundOff').style.display = S.videoSound ? 'none' : '';
+  $('sbSound').hidden = !(sb.on && sbPlayer.cur?.kind === 'video');
+  $('pgSound').hidden = !(!sb.on && PAGES[page] === 'video' && pgPlayer.cur?.kind === 'video');
+  for (const id of ['sbSound', 'pgSound']) $(id).classList.toggle('on', !!S.videoSound);
 }
-$('sbSound').addEventListener('pointerdown', e => e.stopPropagation());
-$('sbSound').addEventListener('pointerup', e => {
-  e.stopPropagation();
-  S.videoSound = !S.videoSound; saveSettings();
-  for (const p of [sbPlayer, pgPlayer]) p.video.muted = !S.videoSound;
-  if (S.videoSound) sbPlayer.video.play().catch(() => {});
-  showSoundBtn();
-});
+for (const id of ['sbSound', 'pgSound']) {
+  $(id).addEventListener('pointerdown', e => e.stopPropagation());   // não troca de vídeo nem sai do standby
+  $(id).addEventListener('pointerup', e => {
+    e.stopPropagation();
+    S.videoSound = !S.videoSound; saveSettings();
+    for (const p of [sbPlayer, pgPlayer]) { p.video.muted = !S.videoSound; if (S.videoSound && p.on) p.video.play().catch(() => {}); }
+    showSoundBtn();
+  });
+}
 setInterval(showSoundBtn, 500);
 
 // Página Vídeos: a mesma lista do standby, no centro, com o carro andando

@@ -253,6 +253,8 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 .sb-sound svg { width: 5rem; height: 5rem; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .sb-sound svg path:first-child { fill: #fff; }
 .sb-sound.on { border-color: var(--accent); }
+.sb-sound.pg { left: 3rem; top: 3rem; z-index: 2; }
+.sb-sound:not(.on) .s-on, .sb-sound.on .s-off { display: none; }
 
 /* ---- alertas ---- */
 #alert {
