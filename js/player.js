@@ -40,16 +40,26 @@ export class Player {
     this.video.hidden = this.img.hidden = this.canvas.hidden = true;
   }
 
+  pick(list, avoid) {                                                     // sorteio pelo peso, sem repetir o mesmo seguido
+    const weights = list.map((it, k) => (list.length > 1 && k === avoid ? 0 : it.weight ?? 1));
+    let r = Math.random() * weights.reduce((a, b) => a + b, 0), i = 0;
+    while (i < list.length - 1 && (r -= weights[i]) >= 0) i++;
+    return i;
+  }
+
   next(chosen) {
     if (!this.on) return;
     this.clear();
     const list = this.items();
     if (!chosen && !list.length) { this.cur = null; return; }
-    const weights = list.map((it, k) => (list.length > 1 && k === this.last ? 0 : it.weight ?? 1));   // não repete o mesmo seguido
-    let r = Math.random() * weights.reduce((a, b) => a + b, 0), i = 0;
-    while (i < list.length - 1 && (r -= weights[i]) >= 0) i++;
+    const same = (a, b) => !!a && !!b && a.kind === b.kind && a.anim === b.anim && a.url === b.url;
+    let i = this.up ? list.findIndex(x => same(x, this.up)) : -1;           // o que já tinha sido sorteado como o próximo
+    if (i < 0 || (i === this.last && list.length > 1)) i = this.pick(list, this.last);
     this.last = i;
     const it = this.cur = chosen || list[i];
+    // já sorteia o seguinte e pede o que ele precisa da internet, para ele abrir pronto quando chegar a vez
+    this.up = list.length > 1 ? list[this.pick(list, i)] : null;
+    if (this.up?.kind === 'anim') { try { ANIMS[this.up.anim]?.prep?.(); } catch {} }
     if (it.kind === 'video') {
       this.video.hidden = false;
       this.video.muted = !this.opts.sound?.();                          // som dos vídeos: botão no standby

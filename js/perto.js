@@ -10,6 +10,12 @@ import { kmBetween, online, fmtN, say } from './mundo.js';
 import { foto, falhou, borrado, cover, caixa, linhas, caber, PARA, MESES } from './curiosidades.js';
 
 const TAU = Math.PI * 2, RAD = Math.PI / 180, FAM = 'px system-ui, sans-serif';
+const OVP = ['https://overpass-api.de/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+async function overpass(q, ms = 100000) {                           // OpenStreetMap; o servidor principal vive ocupado, então tenta o espelho
+  let err;
+  for (const u of OVP) { try { const r = await fetch(u + '?data=' + encodeURIComponent(q), { signal: AbortSignal.timeout(ms) }); if (!r.ok) throw new Error(r.status); return await r.json(); } catch (e) { err = e; } }
+  throw err;
+}
 const rumo = (p, o) => ((Math.atan2((o.lon - p.lon) * Math.cos(p.lat * RAD), o.lat - p.lat) / RAD) % 360 + 360) % 360;
 const kmTxt = km => km < 10 ? km.toFixed(1).replace('.', ',') : fmtN(km);
 const SEM = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
@@ -83,12 +89,18 @@ function ondeFica(p, o, L) {
   if (km < 1.5) return 'pertinho daqui';
   return `${kmTxt(km)} km ${PARA[Math.round(rumo(p, q) / 45) % 8]}`;
 }
-let LS = null;
-export function lugares(ctx, w, h, t, color) {
+async function lugaresPrep() {                                     // também chamada antes de a cena entrar, para ela já abrir pronta
   const p = here();
   if (!LG.list) { const c = load('lugares', null); if (c?.v === 1 && c.list) Object.assign(LG, { c: c.c, list: c.list, at: c.at, i: c.list.length ? load('lugares.i', 0) % c.list.length : 0 }); }   // continua de onde parou
   const dist = LG.c ? kmBetween(p, LG.c) : Infinity;
-  if ((dist > 8 || Date.now() - LG.at > 14 * 86400000) && !LG.loading && online() && Date.now() - LG.tried > 120000) loadLugares(p);
+  if ((dist > 8 || Date.now() - LG.at > 14 * 86400000) && !LG.loading && online() && Date.now() - LG.tried > 120000) await loadLugares(p);
+  const o = LG.list?.[LG.i]; if (o?.u) foto(o.u);                   // a foto do próximo lugar
+}
+let LS = null;
+export function lugares(ctx, w, h, t, color) {
+  const p = here();
+  lugaresPrep();
+  const dist = LG.c ? kmBetween(p, LG.c) : Infinity;
   ctx.fillStyle = '#05080a'; ctx.fillRect(0, 0, w, h);
   const L = dist < 40 ? LG.list : null;                             // a lista velha serve enquanto a nova chega, se não estiver longe demais
   if (!L?.length) {
@@ -240,8 +252,7 @@ function nomeRio() {                                                // o rio com
   if (RV.nome !== undefined || RV.nLoading || Date.now() - RV.nTry < 30 * 60000 || !online()) return;
   RV.nLoading = true; RV.nTry = Date.now();
   const { la, lo } = RV.cell, q = `[out:json][timeout:50];way(around:3500,${la.toFixed(3)},${lo.toFixed(3)})[waterway=river][name];out tags;`;
-  const ask = u => fetch(u + '?data=' + encodeURIComponent(q), { signal: AbortSignal.timeout(70000) }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
-  ask('https://overpass-api.de/api/interpreter').catch(() => ask('https://maps.mail.ru/osm/tools/overpass/api/interpreter')).then(j => {   // o principal vive ocupado
+  overpass(q, 70000).then(j => {
     const n = new Map(); for (const e of j.elements || []) { const s = e.tags?.name; if (s) n.set(s, (n.get(s) || 0) + 1); }
     const s = [...n].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
     RV.nome = s && !/^(rio|ribeirão|córrego|arroio|riacho)\b/i.test(s) ? `Rio ${s}` : s; salvaRio();
@@ -262,13 +273,18 @@ function estado(Q, P, max) {                                        // [título,
   if (Q >= P[0]) return ['ABAIXO DO NORMAL', '#7fb0ff'];
   return ['MUITO BAIXO', '#c58cff'];
 }
-let RS = null;
-export function rio(ctx, w, h, t, color) {
+function rioPrep() {
   const p = here();
   if (!RV.cell) { const c = load('rio', null); if (c?.v === 1 && c.cell) Object.assign(RV, { c: c.c, cell: c.cell, hist: c.hist, now: c.now, nome: c.nome ?? undefined }); }
   const longe = !RV.c || kmBetween(p, RV.c) > 5, velho = !RV.now || Date.now() - RV.now.at > 6 * 3600000;
   if ((longe || velho || (!RV.cell?.none && !RV.hist)) && !RV.loading && online() && Date.now() - RV.tried > 120000) loadRio(p);
   if (RV.cell && !RV.cell.none && !longe) nomeRio();
+}
+let RS = null;
+export function rio(ctx, w, h, t, color) {
+  const p = here();
+  rioPrep();
+  const longe = !RV.c || kmBetween(p, RV.c) > 5;
   const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#03090f'); g.addColorStop(1, '#020508');
   ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
   const N = RV.now, hoje = new Date().toLocaleDateString('sv'), i0 = N ? N.t.indexOf(hoje) : -1;
@@ -374,3 +390,156 @@ function grafico(ctx, w, h, t, color, S) {
   ctx.textAlign = 'right'; ctx.globalAlpha = 0.5; ctx.fillText(dm(N.t[n - 1]), gx + gw, gy + gh + h * 0.015);
   ctx.globalAlpha = 1;
 }
+lugares.prep = lugaresPrep;
+rio.prep = rioPrep;
+
+// =====================================================================================
+// TRILHAS E CACHOEIRAS PERTO: as estradas de terra e as trilhas num raio de 15 km do carro e os passeios num raio de
+// 40 km (cachoeiras, mirantes, picos com nome e grutas), tudo do OpenStreetMap. Cada vez que a cena entra, um passeio
+// fica em destaque, do mais perto para o mais longe. A busca é pesada (até 1 minuto e ~1,5 MB), por isso é feita antes
+// de a cena entrar e fica guardada por 30 dias; só busca de novo quando o carro se afasta.
+const TL = { c: null, at: 0, roads: null, km: 0, kt: 0, pc: null, pat: 0, pts: null, loading: false, tried: 0, i: 0 };
+const SURF = 'unpaved|dirt|gravel|ground|sand|earth|compacted|fine_gravel|grass|mud';
+const TIPO = { cachoeira: ['CACHOEIRA', '#6fc3ff'], mirante: ['MIRANTE', '#ffd34d'], pico: ['PICO', '#e0b48a'], gruta: ['GRUTA', '#c58cff'] };
+const PLUR = { cachoeira: 'cachoeiras', mirante: 'mirantes', pico: 'picos', gruta: 'grutas' };
+async function loadTrilhas(p, estradas, passeios) {
+  TL.loading = true; TL.tried = Date.now();
+  try {
+    const at = `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`, cl = Math.cos(p.lat * RAD);
+    const dk = (a, b, c, d) => Math.hypot((c - a) * 111.2, (d - b) * 111.2 * cl);
+    if (estradas) {
+      const j = await overpass(`[out:json][timeout:90];(way(around:15000,${at})[highway=track];way(around:15000,${at})[highway~"^(unclassified|tertiary|residential|secondary)$"][surface~"^(${SURF})$"];);out geom qt;`);
+      const roads = []; let km = 0, kt = 0;
+      for (const e of j.elements || []) {
+        const g = e.geometry; if (!g || g.length < 2) continue;
+        const tr = e.tags?.highway === 'track' ? 1 : 0; let la = Math.round(g[0].lat * 1e4), lo = Math.round(g[0].lon * 1e4), kla = g[0].lat, klo = g[0].lon;
+        const out = [tr, la, lo];                                   // em décimos de milésimo de grau, cada ponto como diferença do anterior
+        for (let i = 1; i < g.length; i++) {
+          const q = g[i], d = dk(g[i - 1].lat, g[i - 1].lon, q.lat, q.lon); km += d; if (tr) kt += d;
+          if (i < g.length - 1 && dk(kla, klo, q.lat, q.lon) < 0.025) continue;   // ponto a menos de 25 m do anterior não muda o desenho
+          const a = Math.round(q.lat * 1e4), b = Math.round(q.lon * 1e4); out.push(a - la, b - lo); la = a; lo = b; kla = q.lat; klo = q.lon;
+        }
+        roads.push(out);
+      }
+      Object.assign(TL, { c: { lat: p.lat, lon: p.lon }, at: Date.now(), roads, km, kt });
+      keep('trilhas', { v: 1, c: TL.c, at: TL.at, roads, km, kt });
+    }
+    if (passeios) {
+      const a40 = `around:40000,${at}`;
+      const j = await overpass(`[out:json][timeout:90];(nwr(${a40})[waterway=waterfall];nwr(${a40})[tourism=viewpoint];node(${a40})[natural=peak][name];nwr(${a40})[natural=cave_entrance];);out center tags qt;`);
+      const pts = [];
+      for (const e of j.elements || []) {
+        const g = e.tags || {}, la = e.lat ?? e.center?.lat, lo = e.lon ?? e.center?.lon; if (!Number.isFinite(la)) continue;
+        const t = g.waterway === 'waterfall' ? 'cachoeira' : g.tourism === 'viewpoint' ? 'mirante' : g.natural === 'peak' ? 'pico' : 'gruta';
+        const n = (g['name:pt'] || g.name || '').trim(), ele = parseFloat(String(g.ele || '').replace(',', '.'));
+        pts.push({ t, n: /^[A-Z]{1,3}\d+$/.test(n) ? '' : n, la, lo, ele: Number.isFinite(ele) && ele > 0 ? Math.round(ele) : null, alt: parseFloat(g.height) || null });
+      }
+      Object.assign(TL, { pc: { lat: p.lat, lon: p.lon }, pat: Date.now(), pts, i: 0 });
+      keep('passeios', { v: 1, c: TL.pc, at: TL.pat, pts }); keep('trilhas.i', 0);
+    }
+  } catch {}
+  TL.loading = false;
+}
+function trilhasPrep() {                                            // também chamada antes de a cena entrar, para ela já abrir pronta
+  const p = here();
+  if (!TL.roads) { const c = load('trilhas', null); if (c?.v === 1 && c.roads) Object.assign(TL, { c: c.c, at: c.at, roads: c.roads, km: c.km, kt: c.kt }); }
+  if (!TL.pts) { const c = load('passeios', null); if (c?.v === 1 && c.pts) Object.assign(TL, { pc: c.c, pat: c.at, pts: c.pts, i: load('trilhas.i', 0) }); }
+  const mes = 30 * 86400000, er = !TL.roads || kmBetween(p, TL.c) > 7 || Date.now() - TL.at > mes, ep = !TL.pts || kmBetween(p, TL.pc) > 15 || Date.now() - TL.pat > mes;
+  if ((er || ep) && !TL.loading && online() && Date.now() - TL.tried > 10 * 60000) loadTrilhas(p, er, ep);
+}
+let TS = null;
+export function trilhas(ctx, w, h, t, color) {
+  const p = here();
+  trilhasPrep();
+  ctx.fillStyle = '#04070a'; ctx.fillRect(0, 0, w, h);
+  if (!TL.roads || kmBetween(p, TL.c) > 12) {
+    if ((!TL.loading && t > 1) || t > 15) return true;
+    hudText(ctx, h, ['TRILHAS E CACHOEIRAS · procurando no mapa…'], w / 2, h * 0.45, 'center'); return;
+  }
+  const nova = !TS || t < TS.last;
+  if (nova || TS.w !== w || TS.roads !== TL.roads || TS.src !== TL.pts) TS = trilhasInit(ctx, w, h, p, nova ? null : TS.f);
+  TS.last = t;
+  const S = TS, x0 = w * 0.1, y0 = h * 0.08, B = h * 0.84, cx = x0 + B / 2, cy = y0 + B / 2, f = S.f;
+  // o mapa: começa bem perto do carro, abre até 15 km e, se o destaque for mais longe, abre até ele
+  const R = 4 + 11 * ease(t / 3) + (f && f.d > 14 ? (f.d * 1.15 - 15) * ease((t - 6) / 2.5) : 0), k = B / 2 / R, lw = Math.max(1, h * 0.0028);
+  ctx.save(); caixa(ctx, x0, y0, B, B, h * 0.03); ctx.clip();
+  ctx.fillStyle = '#060b10'; ctx.fillRect(x0, y0, B, B);
+  ctx.strokeStyle = HUD; ctx.lineWidth = 1; ctx.font = `${Math.max(9, h * 0.028)}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+  for (const r of [5, 10, 15, 25, 40]) {                            // distâncias em volta do carro
+    if (r > R * 1.4 || r * k < h * 0.04) continue;
+    ctx.globalAlpha = 0.12; ctx.beginPath(); ctx.arc(cx, cy, r * k, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 0.35; ctx.fillStyle = HUD; ctx.fillText(`${r} km`, cx + r * k * 0.71 + 4, cy - r * k * 0.71);
+  }
+  ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, B * 0.75 * ease(t / 2.5) + 1, 0, TAU); ctx.clip();   // as estradas aparecem do carro para fora
+  ctx.translate(cx, cy); ctx.scale(k, k); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.strokeStyle = color; ctx.globalAlpha = 0.5; ctx.lineWidth = lw / k; ctx.stroke(S.terra);
+  ctx.strokeStyle = '#ffe2b0'; ctx.globalAlpha = 0.85; ctx.lineWidth = lw * 1.2 / k; ctx.setLineDash([lw * 3 / k, lw * 2.5 / k]); ctx.stroke(S.trilha); ctx.setLineDash([]);
+  ctx.restore();
+  const XY = o => [cx + o.x * k, cy + o.y * k], dot = Math.max(2.5, h * 0.008);
+  for (const o of S.pts) {                                          // os passeios
+    const [x, y] = XY(o); if (x < x0 - dot || x > x0 + B + dot || y < y0 - dot || y > y0 + B + dot) continue;
+    ctx.globalAlpha = o === f ? 1 : 0.75 * ease(t - 1); ctx.fillStyle = TIPO[o.t][1]; ctx.beginPath();
+    if (o.t === 'pico') { ctx.moveTo(x, y - dot * 1.3); ctx.lineTo(x + dot * 1.1, y + dot * 0.8); ctx.lineTo(x - dot * 1.1, y + dot * 0.8); ctx.closePath(); }
+    else if (o.t === 'mirante') { ctx.moveTo(x, y - dot * 1.2); ctx.lineTo(x + dot, y); ctx.lineTo(x, y + dot * 1.2); ctx.lineTo(x - dot, y); ctx.closePath(); }
+    else ctx.arc(x, y, dot, 0, TAU);
+    ctx.fill();
+  }
+  if (f) {                                                          // o destaque: linha reta do carro até ele
+    const [x, y] = XY(f), pr = (t * 0.7) % 1, a = ease(t - 2);
+    ctx.setLineDash([lw * 3, lw * 3]); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = lw; ctx.globalAlpha = 0.45 * a; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.globalAlpha = a * (1 - pr); ctx.beginPath(); ctx.arc(x, y, h * 0.014 + h * 0.045 * pr, 0, TAU); ctx.stroke();
+  }
+  ctx.globalAlpha = 1; ctx.fillStyle = '#ffffff';                    // o carro
+  ctx.beginPath(); ctx.moveTo(cx, cy - h * 0.022); ctx.lineTo(cx + h * 0.014, cy + h * 0.014); ctx.lineTo(cx - h * 0.014, cy + h * 0.014); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  ctx.font = `${Math.max(9, h * 0.034)}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.6;
+  ctx.fillText('N', cx, y0 - 2);
+  // à direita: quanto tem de terra em volta e o passeio da vez
+  const ta = ease((t - 0.5) / 0.8), tx = x0 + B + w * 0.035;
+  say(ctx, h, 'TRILHAS E CACHOEIRAS PERTO', tx, h * 0.08, ta * 0.85);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  for (const op of S.ops) { ctx.font = op.f; ctx.fillStyle = op.c; ctx.globalAlpha = ta * op.a * (op.f2 ? ease((t - op.f2) / 0.8) : 1); ctx.fillText(op.s, tx, op.y); }
+  ctx.globalAlpha = 1;
+}
+function trilhasInit(ctx, w, h, p, f0) {
+  const cl = Math.cos(p.lat * RAD), X = lo => (lo - p.lon) * 111.2 * cl, Y = la => -(la - p.lat) * 111.2;   // km para o leste e para o sul
+  const terra = new Path2D(), trilha = new Path2D(); let near = Infinity, nx = 0, ny = 0;
+  for (const r of TL.roads) {
+    const P = r[0] ? trilha : terra; let la = r[1], lo = r[2];
+    for (let i = 1; i < r.length; i += 2) {
+      if (i > 1) { la += r[i]; lo += r[i + 1]; }
+      const x = X(lo / 1e4), y = Y(la / 1e4), d = Math.hypot(x, y); if (d < near) { near = d; nx = x; ny = y; }
+      i === 1 ? P.moveTo(x, y) : P.lineTo(x, y);
+    }
+  }
+  const pts = (TL.pts || []).map(o => ({ ...o, x: X(o.lo), y: Y(o.la), d: kmBetween(p, { lat: o.la, lon: o.lo }) })).filter(o => o.d <= 42);
+  let f = f0 ? pts.find(o => o.n === f0.n && o.t === f0.t) || null : null;
+  if (!f0) {                                                        // um passeio com nome por vez, do mais perto para o mais longe
+    const com = pts.filter(o => o.n).sort((a, b) => a.d - b.d);
+    if (com.length) { f = com[TL.i % com.length]; TL.i = (TL.i + 1) % com.length; keep('trilhas.i', TL.i); }
+  }
+  const tw = w * 0.96 - (w * 0.1 + h * 0.84 + w * 0.035), ops = [];
+  const dir = (x, y) => PARA[Math.round(((Math.atan2(x, -y) / RAD) % 360 + 360) % 360 / 45) % 8];
+  const conta = Object.keys(TIPO).map(k => [k, pts.filter(o => o.t === k).length]).filter(([, n]) => n).map(([k, n]) => `${n} ${n === 1 ? k : PLUR[k]}`);
+  for (const k of [1, 0.9, 0.8, 0.72]) {                            // diminui as letras se não couber até a altura do relógio
+    ops.length = 0; let y = h * 0.185;
+    const txt = (s, px, peso, c, a, lh, f2) => { let fz = Math.max(9, h * px * k); ctx.font = `${peso}${fz}${FAM}`; const lw = ctx.measureText(s).width; if (lw > tw) fz *= tw / lw; ops.push({ s, y, f: `${peso}${fz}${FAM}`, c, a, f2 }); y += fz * lh; };
+    if (TL.km >= 1) {
+      txt(`${fmtN(TL.km)} km de estrada de terra`, 0.06, '700 ', '#ffffff', 1, 1.2);
+      txt(`num raio de 15 km${TL.kt >= 1 ? ` · ${fmtN(TL.kt)} km são trilhas` : ''}`, 0.04, '', HUD, 0.75, 1.45);
+      txt(near < 0.05 ? 'você está numa estrada de terra' : `a mais perto passa a ${near < 1 ? `${Math.max(1, Math.round(near * 10)) * 100} m` : `${kmTxt(near)} km`}, ${dir(nx, ny)}`, 0.04, '', HUD, 0.9, 1.9);
+    } else txt('nenhuma estrada de terra no mapa num raio de 15 km', 0.04, '', HUD, 0.9, 1.9);
+    if (f) {
+      const [nome, cor] = TIPO[f.t];
+      txt(nome, 0.04, '600 ', cor, 0.95, 1.45, 2);
+      const N = caber(ctx, f.n, tw, h * 0.075 * k, h * 0.045 * k, 2, '600 ');
+      for (const s of N.L) { ops.push({ s, y, f: `600 ${N.f}${FAM}`, c: '#ffffff', a: 1, f2: 2 }); y += N.f * 1.12; }
+      txt([`${kmTxt(f.d)} km ${dir(f.x, f.y)}`, f.ele ? `${fmtN(f.ele)} m de altitude` : '', f.alt ? `queda de ${fmtN(f.alt)} m` : ''].filter(Boolean).join(' · '), 0.042, '', HUD, 0.9, 1.6, 2.3);
+    }
+    if (conta.length) txt(`num raio de 40 km: ${conta.join(' · ')}`, 0.036, '', HUD, 0.7, 1.5, 1);
+    txt('mapa: OpenStreetMap', 0.03, '', HUD, 0.45, 1.3);
+    if (y <= h * 0.7) break;
+  }
+  return { w, roads: TL.roads, src: TL.pts, terra, trilha, pts, f, ops };
+}
+trilhas.prep = trilhasPrep;

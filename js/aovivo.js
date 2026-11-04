@@ -74,9 +74,21 @@ function radarImg(url) {
   }
   return im.complete && im.naturalWidth ? im : null;
 }
+function radarTiles(w, h, p) {                                      // os pedaços do radar que cobrem a tela
+  const M = mapa(w, h, p), z = 7, N = 2 ** z, [laT, loL] = M.inv(0, 0), [laB, loR] = M.inv(w, h);
+  const ty = la => Math.floor((1 - Math.log(Math.tan(la * RAD) + 1 / Math.cos(la * RAD)) / Math.PI) / 2 * N);
+  const tiles = [];
+  for (let x = Math.floor((loL + 180) / 360 * N); x <= Math.floor((loR + 180) / 360 * N); x++) for (let y = ty(laT); y <= ty(laB); y++) tiles.push([x, y]);
+  return { z, N, tiles };
+}
+async function chuvaPrep() {                                        // também chamada antes de a cena entrar: já baixa os quadros
+  if ((!RV.frames || Date.now() - RV.at > 5 * 60000) && !RV.loading && online()) await loadRadar();
+  if (RV.frames && RV.wh) { const { z, tiles } = radarTiles(RV.wh[0], RV.wh[1], here()); for (const f of RV.frames) for (const [x, y] of tiles) radarImg(`${RV.host}${f.path}/256/${z}/${x}/${y}/2/1_1.png`); }
+}
 const tileLon = (x, n) => x / n * 360 - 180, tileLat = (y, n) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) / RAD;
 let RS = null;
 export function chuva(ctx, w, h, t, color) {
+  RV.wh = [w, h];                                                   // o tamanho da tela, para a próxima vez já baixar antes
   if ((!RV.frames || Date.now() - RV.at > 5 * 60000) && !RV.loading && online()) loadRadar();
   ctx.fillStyle = '#03060b'; ctx.fillRect(0, 0, w, h);
   if (!RV.frames || Date.now() - RV.at > 30 * 60000) {
@@ -86,10 +98,7 @@ export function chuva(ctx, w, h, t, color) {
   const p = here(), M = mapa(w, h, p), F = RV.frames, n = F.length;
   const pk = `${w}x${h}:${p.lat},${p.lon}`;
   if (!RS || t < RS.last || RS.pk !== pk) {
-    const z = 7, N = 2 ** z, [laT, loL] = M.inv(0, 0), [laB, loR] = M.inv(w, h);
-    const ty = la => Math.floor((1 - Math.log(Math.tan(la * RAD) + 1 / Math.cos(la * RAD)) / Math.PI) / 2 * N);
-    const tiles = [];
-    for (let x = Math.floor((loL + 180) / 360 * N); x <= Math.floor((loR + 180) / 360 * N); x++) for (let y = ty(laT); y <= ty(laB); y++) tiles.push([x, y]);
+    const { z, N, tiles } = radarTiles(w, h, p);
     const oc = Object.assign(document.createElement('canvas'), { width: Math.round(w / 2), height: Math.round(h / 2) });
     RS = { pk, z, N, tiles, oc, ox: oc.getContext('2d', { willReadFrequently: true }), drawn: '' };
     for (const f of RV.frames) for (const [x, y] of tiles) radarImg(`${RV.host}${f.path}/256/${z}/${x}/${y}/2/1_1.png`);   // já pede todos os quadros
@@ -162,10 +171,14 @@ function windAt(g, la, lo) {                                        // vento (km
   return [mix(g.u), mix(g.v)];
 }
 let VS = null;
-export function vento(ctx, w, h, t, color) {
+function ventoPrep() {
   const p = here(), key = `${p.lat.toFixed(1)},${p.lon.toFixed(1)}`;
   if (VT.key !== key) { VT.key = key; VT.g = null; const c = load('vento', null); if (c?.key === key) { VT.g = c.g; VT.at = c.at; } }
   if ((!VT.g || Date.now() - VT.at > 30 * 60000) && !VT.loading && online()) loadWind(p, key);
+}
+export function vento(ctx, w, h, t, color) {
+  const p = here(), key = `${p.lat.toFixed(1)},${p.lon.toFixed(1)}`;
+  ventoPrep();
   ctx.fillStyle = '#03060b'; ctx.fillRect(0, 0, w, h);
   if (!VT.g || Date.now() - VT.at > 3 * 3600000) {
     if ((!VT.loading && t > 1) || t > 10) return true;
@@ -223,10 +236,14 @@ async function loadAir(p, key) {
   AQ.loading = false;
 }
 let AS = null;
-export function ar(ctx, w, h, t, color) {
+function arPrep() {
   const p = here(), key = `${p.lat.toFixed(1)},${p.lon.toFixed(1)}`;
   if (AQ.key !== key) { AQ.key = key; AQ.d = null; const c = load('ar', null); if (c?.key === key) { AQ.d = c.d; AQ.at = c.at; } }
   if ((!AQ.d || Date.now() - AQ.at > 60 * 60000) && !AQ.loading && online()) loadAir(p, key);
+}
+export function ar(ctx, w, h, t, color) {
+  const p = here(), key = `${p.lat.toFixed(1)},${p.lon.toFixed(1)}`;
+  arPrep();
   const now = Date.now(), sunAlt = altOf(sunEq(now), now, p.lat, p.lon), day = sunAlt > -3;
   const g = ctx.createLinearGradient(0, 0, 0, h);
   if (day) { g.addColorStop(0, '#0a2038'); g.addColorStop(1, '#1d3b5a'); } else { g.addColorStop(0, '#02040b'); g.addColorStop(1, '#0a1428'); }
@@ -360,6 +377,8 @@ function skyEvents(p, now) {
   return [...byDate].sort((a, b) => a.pr - b.pr || a.ms - b.ms).slice(0, 5).sort((a, b) => a.ms - b.ms);
 }
 const fase = (f, wax) => f < 0.03 ? 'lua nova' : f > 0.97 ? 'lua cheia' : f < 0.4 ? (wax ? 'crescente' : 'minguante') : f < 0.6 ? (wax ? 'quarto crescente' : 'quarto minguante') : (wax ? 'crescente quase cheia' : 'minguante, depois da cheia');
+let LUA_IM = null;
+const luaFoto = () => LUA_IM || (LUA_IM = Object.assign(new Image(), { src: LUA_FOTO }));   // baixa uma vez e fica na memória
 let LS = null;
 export function lua(ctx, w, h, t, color) {
   const p = here(), now = Date.now();
@@ -376,7 +395,7 @@ export function lua(ctx, w, h, t, color) {
       im.data[o + 3] = 235 * dark;                                    // o lado escuro ainda aparece um pouco (luz da Terra)
     }
     mx.putImageData(im, 0, 0);
-    const foto = LS?.foto || Object.assign(new Image(), { src: LUA_FOTO });
+    const foto = luaFoto();
     LS = { w, h, f, wax, rise, set, mask: mc, foto, dist: moonDist(now), alt: altOf(moonEq(now), now, p.lat, p.lon), ev: skyEvents(p, now),
       stars: Array.from({ length: 90 }, (_, i) => { const r = rng(i + 5); return [r() * w, r() * h, r()]; }) };
   }
@@ -398,3 +417,7 @@ export function lua(ctx, w, h, t, color) {
     ...LS.ev.map(e => [`${dm(e.ms)} · ${e.s}`, 0.7])];
   lines.forEach(([s, a], i) => { if (h * 0.06 + lh * (i + 1) <= h * 0.71) say(ctx, h, s, x0, h * 0.06 + lh * i, a, i === 2 ? color : HUD); });   // nada embaixo, onde fica o relógio
 }
+chuva.prep = chuvaPrep;
+vento.prep = ventoPrep;
+ar.prep = arPrep;
+lua.prep = luaFoto;

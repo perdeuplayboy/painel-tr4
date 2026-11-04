@@ -135,9 +135,12 @@ async function loadSats() {
   SAT.loading = false;
 }
 let SS = null;
-export function satelites(ctx, w, h, t, color) {
+function satPrep() {                                               // também chamada antes de a cena entrar, para ela já abrir pronta
   if (!SAT.list) { const c = load('satelites', null); if (c?.raw?.length) { SAT.list = c.raw.map(orbit); SAT.at = c.at; } }
   if ((!SAT.list || Date.now() - SAT.at > 12 * 3600000) && !SAT.loading && online()) loadSats();   // o CelesTrak pede no máximo a cada 2 h
+}
+export function satelites(ctx, w, h, t, color) {
+  satPrep();
   const now = Date.now(), p = here();
   if (!SAT.list || now - SAT.at > 5 * 86400000) {                  // órbita de muitos dias atrás já erra demais
     ctx.fillStyle = '#02040c'; ctx.fillRect(0, 0, w, h);
@@ -325,9 +328,13 @@ function globe(ctx, cx, cy, R, l0, p0, color, W) {                  // globo vis
   return (lat, lon) => { const c = Math.cos(lat * RAD), [x, y, z] = P(c * Math.cos(lon * RAD), c * Math.sin(lon * RAD), Math.sin(lat * RAD)); return [cx + x * R, cy - y * R, z]; };
 }
 let QS = null;
-export function terremotos(ctx, w, h, t, color) {
+function quakePrep() {
   if (!EQ.list) { const c = load('terremotos', null); if (c?.list) { EQ.list = c.list; EQ.at = c.at; } }
   if ((!EQ.list || Date.now() - EQ.at > 15 * 60000) && !EQ.loading && online()) loadQuakes();
+  world();
+}
+export function terremotos(ctx, w, h, t, color) {
+  quakePrep();
   const W = world(), now = Date.now();
   ctx.fillStyle = '#02040a'; ctx.fillRect(0, 0, w, h);
   if (!EQ.list || now - EQ.at > 6 * 3600000 || (!W && WM.loading && t < 8)) {
@@ -502,9 +509,14 @@ async function loadEpic() {
 }
 const visto = (o, p) => Math.sin(o.la * RAD) * Math.sin(p.lat * RAD) + Math.cos(o.la * RAD) * Math.cos(p.lat * RAD) * Math.cos((p.lon - o.lo) * RAD);   // > 0: aparece na foto
 let ES = null;
-export function terraFoto(ctx, w, h, t, color) {
+const melhor = (L, p) => L.reduce((a, o) => visto(o, p) > visto(a, p) ? o : a, L[0]);   // a foto em que você aparece melhor
+async function epicPrep() {
   if (!EP.list) { const c = load('epic', null); if (c?.list?.length) Object.assign(EP, { list: c.list, at: c.at }); }
-  if ((!EP.list || Date.now() - EP.at > 3 * 3600000) && !EP.loading && online() && Date.now() - EP.tried > 120000) loadEpic();
+  if ((!EP.list || Date.now() - EP.at > 3 * 3600000) && !EP.loading && online() && Date.now() - EP.tried > 120000) await loadEpic();
+  if (EP.list?.length) epImg(melhor(EP.list, here()).u);            // a primeira foto da cena
+}
+export function terraFoto(ctx, w, h, t, color) {
+  epicPrep();
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
   const L = EP.list;
   if (!L?.length) {
@@ -512,8 +524,7 @@ export function terraFoto(ctx, w, h, t, color) {
     hudText(ctx, h, ['TERRA VISTA DO ESPAÇO · procurando…'], w / 2, h * 0.45, 'center'); return;
   }
   if (!ES || t < ES.last || ES.L !== L) {
-    const p = here(), r = rng(11); let k0 = 0;
-    L.forEach((o, i) => { if (visto(o, p) > visto(L[k0], p)) k0 = i; });   // começa pela foto em que você aparece melhor
+    const p = here(), r = rng(11), k0 = L.indexOf(melhor(L, p));     // começa pela foto em que você aparece melhor
     const meu = L.filter(o => visto(o, p) > 0.3);
     ES = { L, p, k0, cur: -1, prev: -1, t0: 0, first: true, meu: meu.length ? [meu[0].ms, meu[meu.length - 1].ms] : null,
       stars: Array.from({ length: 140 }, () => [r(), r(), r()]) };
@@ -648,10 +659,16 @@ function cities(p) {
   return CID.list;
 }
 let AS = null;
+function avPrep() {
+  if (!avUrl()) return;
+  const p = here();
+  if (Date.now() - AV.at > 10000 && !AV.loading && online()) loadPlanes(p);
+  cities(p); world();
+}
 export function avioes(ctx, w, h, t, color) {
   if (!avUrl()) return true;                                        // sem o intermediário configurado, não tem como
   const p = here(), now = Date.now();
-  if (now - AV.at > 10000 && !AV.loading && online()) loadPlanes(p);
+  avPrep();
   ctx.fillStyle = '#02050a'; ctx.fillRect(0, 0, w, h);
   if (!AV.at || now - AV.at > 120000) {
     if ((!AV.loading && (AV.fail || !online())) || t > 10) return true;
@@ -778,3 +795,8 @@ export function avioes(ctx, w, h, t, color) {
 }
 
 export { world, cities, kmBetween, sunEq, moonEq, altOf, wrap, hhmm, online, fmtN, say };
+satelites.prep = satPrep;
+terremotos.prep = quakePrep;
+terra.prep = world;
+terraFoto.prep = epicPrep;
+avioes.prep = avPrep;

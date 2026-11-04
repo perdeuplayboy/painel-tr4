@@ -131,7 +131,7 @@ async function placeName(p) {
   } catch {}
 }
 let RS = null;
-export function regiao(ctx, w, h, t, color) {
+function regiaoPrep() {                                            // também chamada antes de a cena entrar, para ela já abrir pronta
   const p = here(), key = regionKey(p);
   if (RG.key !== key) {
     RG.key = key; RG.failed = false; RG.grid = null; RG.nome = null;
@@ -139,6 +139,10 @@ export function regiao(ctx, w, h, t, color) {
     if (c?.h?.length === RG.S * RG.S) { RG.grid = Int16Array.from(c.h); RG.km = c.km; RG.nome = c.nome || null; if (!RG.nome && navigator.onLine !== false) placeName(p); }
     else if (navigator.onLine !== false) loadRegion(p); else RG.failed = true;
   }
+}
+export function regiao(ctx, w, h, t, color) {
+  const p = here(), key = regionKey(p);
+  regiaoPrep();
   ctx.fillStyle = '#020407'; ctx.fillRect(0, 0, w, h);
   if (!RG.grid) {
     if (RG.failed || (!RG.loading && t > 1)) return true;          // sem dados e sem internet: passa para a próxima
@@ -210,9 +214,12 @@ async function loadForecast() {
   FC.loading = false;
 }
 let FS = null;
-export function previsao(ctx, w, h, t, color) {
+function previsaoPrep() {
   if (!FC.data) { const c = load('previsao', null); if (c) { FC.data = c.data; FC.at = c.at; } }
   if ((!FC.data || Date.now() - FC.at > 30 * 60000) && !FC.loading && navigator.onLine !== false) loadForecast();
+}
+export function previsao(ctx, w, h, t, color) {
+  previsaoPrep();
   ctx.fillStyle = '#03050a'; ctx.fillRect(0, 0, w, h);
   const ok = FC.data && Date.now() - FC.at < 6 * 3600000;
   if (!ok) { if (!FC.loading || t > 10) return true; hudText(ctx, h, ['PREVISÃO · carregando…'], w / 2, h * 0.45, 'center'); return; }
@@ -448,3 +455,5 @@ export function vida(ctx, w, h, t, color) {
   const title = la <= 0 ? 'JOGO DA VIDA' : LF.formas ? 'JOGO DA VIDA · nasce com 3 vizinhas, vive com 2 ou 3' : 'JOGO DA VIDA · células sorteadas';
   hudText(ctx, h, [title], w / 2, h * 0.035, 'center');
 }
+regiao.prep = regiaoPrep;
+previsao.prep = previsaoPrep;

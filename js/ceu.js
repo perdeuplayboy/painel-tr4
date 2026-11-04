@@ -260,3 +260,4 @@ export function ceu(ctx, w, h, t, color) {
   ctx.globalAlpha = 1;
   hudText(ctx, h, hud, hx, h * 0.08);
 }
+ceu.prep = catalog;                                                 // o catálogo de estrelas, antes de a cena entrar

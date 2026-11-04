@@ -114,10 +114,15 @@ function onde(p, o) {
   return `${perto ? `perto de ${perto.n} · ` : ''}${fmtN(km)} km ${dir}`;
 }
 let BS = null;
-export function bichos(ctx, w, h, t, color) {
+async function bichosPrep() {                                     // também chamada antes de a cena entrar, para ela já abrir pronta
   const p = here(), key = `${p.lat.toFixed(1)},${p.lon.toFixed(1)}`;
   if (BX.key !== key) { const c = load('bichos', null); if (c?.v === 2 && c.key === key && c.list?.length) Object.assign(BX, { key, list: c.list, total: c.total, at: c.at, i: load('bichos.i', 0) % c.list.length }); }   // continua de onde parou
-  if ((BX.key !== key || Date.now() - BX.at > 6 * 3600000) && !BX.loading && online() && Date.now() - BX.tried > 120000) loadBichos(p, key);
+  if ((BX.key !== key || Date.now() - BX.at > 6 * 3600000) && !BX.loading && online() && Date.now() - BX.tried > 120000) await loadBichos(p, key);
+  const o = BX.key === key ? BX.list?.[BX.i] : null; if (o?.u) foto(o.u);   // a foto do próximo bicho
+}
+export function bichos(ctx, w, h, t, color) {
+  const p = here(), key = `${p.lat.toFixed(1)},${p.lon.toFixed(1)}`;
+  bichosPrep();
   ctx.fillStyle = '#05080a'; ctx.fillRect(0, 0, w, h);
   const L = BX.key === key ? BX.list : null;
   if (!L?.length) {
@@ -234,10 +239,15 @@ async function loadHist(day) {
 }
 let HS = null;
 const anoTxt = y => y < 0 ? `${-y} a.C.` : String(y);
-export function historia(ctx, w, h, t, color) {
+async function historiaPrep() {
   const now = new Date(), day = `${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
   if (WK.day !== day) { const c = load('historia', null), ci = load('historia.i', null); if (c?.day === day && c.list?.length) Object.assign(WK, { day, list: c.list, hol: c.hol || [], i: ci?.day === day ? ci.i % c.list.length : 0 }); }   // continua de onde parou
-  if (WK.day !== day && !WK.loading && online() && Date.now() - WK.tried > 120000) loadHist(day);
+  if (WK.day !== day && !WK.loading && online() && Date.now() - WK.tried > 120000) await loadHist(day);
+  const o = WK.day === day ? WK.list?.[WK.i % WK.list.length] : null; if (o?.img) foto(o.img);   // a foto do próximo fato
+}
+export function historia(ctx, w, h, t, color) {
+  const now = new Date(), day = `${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
+  historiaPrep();
   const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#0b0906'); g.addColorStop(1, '#050403');
   ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
   const L = WK.day === day ? WK.list : null;
@@ -299,3 +309,5 @@ export function historia(ctx, w, h, t, color) {
 }
 
 export { foto, falhou, borrado, cover, caixa, linhas, caber, PARA, MESES };
+bichos.prep = bichosPrep;
+historia.prep = historiaPrep;
