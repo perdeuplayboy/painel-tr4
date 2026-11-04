@@ -6,6 +6,10 @@ const TAU = Math.PI * 2, RAD = Math.PI / 180;
 export const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 export const ease = p => (p = clamp(p), p * p * (3 - 2 * p));
 export const HUD = '#d8f6ff';
+// TELA.relogio: a cena está no standby, com o relógio por cima no canto de baixo à direita (o texto não desce até lá)
+export const TELA = { relogio: false };
+// tamanho mínimo das letras de texto corrido, em fração da altura (lido de longe, no painel do carro)
+export const LER = 0.088;
 export const load = (k, d) => { try { const v = localStorage.getItem('tr4.' + k); return v ? JSON.parse(v) : d; } catch { return d; } };
 export const keep = (k, v) => { try { localStorage.setItem('tr4.' + k, JSON.stringify(v)); } catch {} };
 export const here = () => { const p = load('lastPos', null); return p && Number.isFinite(p.lat) ? p : { lat: -23.55, lon: -46.63, padrao: true }; };   // sem GPS ainda: centro de São Paulo
@@ -13,11 +17,38 @@ export function rng(seed) {
   return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
 export function hudText(ctx, h, lines, x, y, align = 'left') {
-  const fs = Math.max(10, h * 0.055);
+  const fs = Math.max(10, h * 0.075);
   ctx.save(); ctx.font = `${fs}px monospace`; ctx.textAlign = align; ctx.textBaseline = 'top';
   ctx.fillStyle = HUD; ctx.globalAlpha = 0.85; ctx.shadowColor = '#000'; ctx.shadowBlur = 6;
   lines.forEach((s, i) => ctx.fillText(s, x, y + i * fs * 1.3));
   ctx.restore();
+}
+
+// Coluna de texto para ler de longe: cada item [texto, opacidade, cor, tamanho (fração de h), peso ou 'mono', linhas no máximo].
+// Diminui a letra até 85% para caber na largura; se ainda não couber, quebra em até `n` linhas e corta com reticências.
+// Para em `fim` (o que não couber fica de fora). Devolve a altura onde parou. Com draw = false, só mede.
+export function coluna(ctx, h, itens, x, y, tw, fim = h * 0.97, draw = true) {
+  ctx.save(); ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
+  for (const it of itens) {
+    if (!it) continue;
+    let [s, a = 0.85, cor = HUD, px = LER, peso = '', n = 2] = it;
+    let f = Math.max(9, h * px); const mono = peso === 'mono', fam = mono ? 'px monospace' : 'px system-ui, sans-serif';
+    if (mono) peso = '';                                            // 'mono': título no estilo do hudText
+    ctx.font = `${peso}${f}${fam}`; const lw = ctx.measureText(s).width;
+    let L = [s];
+    if (lw > tw && lw * 0.85 <= tw) { f *= tw / lw; ctx.font = `${peso}${f}${fam}`; }
+    else if (lw > tw) {
+      L = []; let cur = '';
+      for (const wd of s.split(' ')) { const tr = cur ? `${cur} ${wd}` : wd; if (cur && ctx.measureText(tr).width > tw) { L.push(cur); cur = wd; } else cur = tr; }
+      if (cur) L.push(cur);
+      if (L.length > n) { L = L.slice(0, n); let u = L[n - 1]; while (u.includes(' ') && ctx.measureText(u + '…').width > tw) u = u.slice(0, u.lastIndexOf(' ')); L[n - 1] = u.replace(/[,;:·]\s*$/, '') + '…'; }
+    }
+    if (y + f * L.length * 1.22 > fim + f * 0.2) break;
+    for (const l of L) { if (draw) { ctx.globalAlpha = a; ctx.fillStyle = cor; ctx.fillText(l, x, y); } y += f * 1.22; }
+    y += f * 0.12;
+  }
+  ctx.restore();
+  return y;
 }
 
 // =====================================================================================
@@ -194,7 +225,7 @@ export function regiao(ctx, w, h, t, color) {
   }
   ctx.restore();
   const lugar = p.padrao ? 'sem GPS: centro de São Paulo' : RG.nome || `${Math.abs(p.lat).toFixed(3)}°${p.lat < 0 ? 'S' : 'N'} ${Math.abs(p.lon).toFixed(3)}°${p.lon < 0 ? 'O' : 'L'}`;
-  hudText(ctx, h, [`RELEVO · ${RG.km.toFixed(0)} × ${RG.km.toFixed(0)} km`, lugar, `${RS.lo}–${RS.hi} m · altura ${Math.round(ex)}× maior`], w * 0.13, h * 0.08);
+  hudText(ctx, h, [`RELEVO · ${RG.km.toFixed(0)} × ${RG.km.toFixed(0)} km`, lugar, `${RS.lo} a ${RS.hi} m`], w * 0.03, h * 0.04);
 }
 
 // =====================================================================================
@@ -225,7 +256,7 @@ export function previsao(ctx, w, h, t, color) {
   if (!ok) { if (!FC.loading || t > 10) return true; hudText(ctx, h, ['PREVISÃO · carregando…'], w / 2, h * 0.45, 'center'); return; }
   if (!FS || t < FS.last) FS = { drops: Array.from({ length: 160 }, () => [Math.random(), Math.random(), 0.6 + Math.random() * 0.8]), flash: 0 };
   const dt = clamp(t - (FS.last ?? t), 0, 0.1); FS.last = t;
-  const D = FC.data.slice(0, 13), n = D.length, cw = w / n, top = h * 0.09, skyH = h * 0.34;   // de baixo fica livre: lá fica o relógio e a música
+  const D = FC.data.slice(0, 13), n = D.length, cw = w / n, top = h * 0.105, skyH = h * (TELA.relogio ? 0.3 : 0.4);   // no standby, embaixo fica livre para o relógio
   D.forEach((o, i) => {                                            // céu de cada hora
     const x = i * cw, cl = o.cloud / 100, g = ctx.createLinearGradient(0, top, 0, top + skyH);
     const a = o.day ? [`rgb(${40 - 10 * cl},${90 - 20 * cl},${150 - 40 * cl})`, `rgb(${110 - 30 * cl},${150 - 40 * cl},${190 - 50 * cl})`] : ['#060a18', '#101a34'];
@@ -255,19 +286,20 @@ export function previsao(ctx, w, h, t, color) {
   for (let i = 1; i < n; i++) { ctx.moveTo(i * cw, top); ctx.lineTo(i * cw, top + skyH); } ctx.stroke(); ctx.globalAlpha = 1;
   ctx.strokeStyle = color; ctx.lineWidth = 2.2; ctx.strokeRect(1, top, cw - 2, skyH);   // agora
   const temps = D.map(o => o.temp), lo = Math.min(...temps) - 1, hi = Math.max(...temps) + 1;
-  const ty = v => h * 0.555 + (1 - (v - lo) / (hi - lo)) * h * 0.085;
+  const base = top + skyH + h * 0.15, ty = v => base + (1 - (v - lo) / (hi - lo)) * h * 0.08;
   const prog = ease(t / 4);                                        // a linha da temperatura vai se desenhando
   ctx.strokeStyle = color; ctx.lineWidth = Math.max(1.5, h * 0.007); ctx.beginPath();
   D.forEach((o, i) => { const x = i * cw + cw / 2; if (i / (n - 1) <= prog) i ? ctx.lineTo(x, ty(o.temp)) : ctx.moveTo(x, ty(o.temp)); }); ctx.stroke();
-  const fs = Math.max(10, h * 0.05);
-  ctx.font = `${fs}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = HUD;
+  const fs = Math.max(10, h * 0.075), fr = Math.max(9, h * 0.055);
+  ctx.font = `600 ${fs}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = HUD;
   D.forEach((o, i) => {
     const x = i * cw + cw / 2;
     if (i / (n - 1) <= prog) { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, ty(o.temp), Math.max(2, h * 0.008), 0, TAU); ctx.fill(); }
     ctx.fillStyle = HUD;
     if (i % 2 === 0 && i / (n - 1) <= prog) ctx.fillText(`${Math.round(o.temp)}°`, x, ty(o.temp) - fs * 0.3);
-    ctx.textBaseline = 'top'; ctx.globalAlpha = 0.75; ctx.fillText(i ? `${String(o.hour).padStart(2, '0')}h` : 'agora', x, h * 0.665);
-    if (o.rain >= 30) { ctx.fillStyle = '#9cc4ff'; ctx.fillText(`${o.rain}%`, x, top + skyH + h * 0.008); }
+    ctx.textBaseline = 'top'; ctx.globalAlpha = 0.8;
+    if (i % 2 === 0) ctx.fillText(i ? `${String(o.hour).padStart(2, '0')}h` : 'agora', i ? x : Math.max(x, ctx.measureText('agora').width / 2 + 2), base + h * 0.13);
+    if (o.rain >= 30) { ctx.save(); ctx.font = `${fr}px monospace`; ctx.fillStyle = '#9cc4ff'; ctx.fillText(`${o.rain}%`, x, top + skyH + h * 0.01); ctx.restore(); }
     ctx.globalAlpha = 1; ctx.textBaseline = 'bottom';
   });
   hudText(ctx, h, ['PRÓXIMAS 12 HORAS'], w * 0.5, h * 0.01, 'center');

@@ -4,7 +4,7 @@
 // Selos ao lado da foto: ameaçado de extinção, raro por aqui (poucos registros na região), raro no mundo, endêmico e veio de fora.
 // HOJE NA HISTÓRIA: o que aconteceu neste mesmo dia em outros anos (Wikipédia em português), com a foto do artigo.
 // O que baixa fica guardado; sem dados, a cena termina na hora.
-import { here, load, keep, hudText, HUD, clamp, ease, rng } from './cenas.js';
+import { here, load, keep, hudText, HUD, clamp, ease, rng, TELA, LER } from './cenas.js';
 import { cities, kmBetween, online, fmtN, say } from './mundo.js';
 
 const TAU = Math.PI * 2, RAD = Math.PI / 180;
@@ -39,6 +39,16 @@ function linhas(ctx, s, max) {                                      // quebra o 
   const out = []; let cur = '';
   for (const wd of s.split(' ')) { const tr = cur ? `${cur} ${wd}` : wd; if (cur && ctx.measureText(tr).width > max) { out.push(cur); cur = wd; } else cur = tr; }
   if (cur) out.push(cur); return out;
+}
+function bloco(ctx, s, max, f0, f1, altura, lh = 1.25, peso = '') {   // como o caber, mas põe reticências se o texto não coube inteiro
+  const T = caber(ctx, s, max, f0, f1, 99, peso, altura, lh);
+  ctx.font = `${peso}${T.f}px system-ui, sans-serif`;
+  if (linhas(ctx, s, max).length > T.L.length) {
+    let u = T.L[T.L.length - 1];
+    while (u.includes(' ') && ctx.measureText(u + '…').width > max) u = u.slice(0, u.lastIndexOf(' '));
+    T.L[T.L.length - 1] = u.replace(/[,;:]$/, '') + '…';
+  }
+  return T;
 }
 function caber(ctx, s, max, f0, f1, n, peso = '', altura = Infinity, lh = 1.28) {   // o maior tamanho de letra em que o texto cabe
   for (let f = f0; ; f *= 0.93) {
@@ -152,13 +162,13 @@ function ficha(ctx, w, h, t, color, it, alpha, p, ta) {   // alpha: a foto; ta: 
   ctx.save(); ctx.globalAlpha = alpha; ctx.imageSmoothingEnabled = true;
   ctx.drawImage(borrado(im), -w * 0.05, -h * 0.05, w * 1.1, h * 1.1);   // fundo: a própria foto desfocada e escura
   ctx.fillStyle = 'rgba(3,5,8,0.62)'; ctx.fillRect(0, 0, w, h);
-  const ar = im.naturalWidth / im.naturalHeight, ch = h * 0.84, cw = Math.min(w * 0.46, ch * clamp(ar, 0.72, 1.4)), x0 = w * 0.1, y0 = h * 0.08;
+  const ar = im.naturalWidth / im.naturalHeight, ch = h * 0.92, cw = Math.min(w * 0.38, ch * clamp(ar, 0.72, 1.4)), x0 = w * 0.03, y0 = h * 0.04;
   ctx.save(); caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.clip(); cover(ctx, im, x0, y0, cw, ch, 1.02 + 0.06 * kb); ctx.restore();
   caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.strokeStyle = color; ctx.globalAlpha = alpha * 0.35; ctx.lineWidth = Math.max(1, h * 0.003); ctx.stroke();
-  const tx = x0 + cw + w * 0.035, tw = w * 0.96 - tx;
+  const tx = x0 + cw + w * 0.035, tw = w * 0.97 - tx;
   if (!it.lay || it.lay.w !== w) it.lay = { w, ops: coluna(ctx, w, h, o, p, tw, color) };   // o texto é medido uma vez por foto
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  say(ctx, h, 'VISTOS PERTO DE VOCÊ', tx, h * 0.08, ta * 0.85);
+  say(ctx, h, 'VISTOS PERTO DE VOCÊ', tx, h * 0.04, ta * 0.85);
   for (const op of it.lay.ops) {
     if (!op.selo) { ctx.font = op.f; ctx.fillStyle = op.c; ctx.globalAlpha = ta * op.a; ctx.fillText(op.s, tx, op.y); continue; }
     const { tt, ex, cor, y, f1, f2, w1, w2, rh } = op, pad = rh * 0.32;   // selo: título colorido e a explicação, numa linha
@@ -175,21 +185,22 @@ function ficha(ctx, w, h, t, color, it, alpha, p, ta) {   // alpha: a foto; ta: 
 function coluna(ctx, w, h, o, p, tw, color) {
   const sel = selos(o), nome = o.n ? o.n[0].toUpperCase() + o.n.slice(1) : o.s, fam = 'px system-ui, sans-serif';
   let ops = [];
-  for (const [k, sub] of [[1, true], [1, false], [0.93, false], [0.86, false], [0.8, false], [0.74, false]]) {
-    ops = []; let y = h * 0.155;
+  const fim = h * (TELA.relogio ? 0.7 : 0.97);                   // no standby, daqui para baixo, do lado direito, fica o relógio
+  for (const [k, sub] of [[1, true], [1, false], [0.93, false], [0.86, false]]) {
+    ops = []; let y = h * 0.135;
     const txt = (s, px, peso, c, a, lh) => {                        // uma linha, diminuindo a letra se passar da largura
       let f = Math.max(9, h * px * k); ctx.font = `${peso}${f}${fam}`; const lw = ctx.measureText(s).width; if (lw > tw) f *= tw / lw;
       ops.push({ s, y, f: `${peso}${f}${fam}`, c, a }); y += f * lh;
     };
-    if (sub) { ops.push({ s: `${fmtN(BX.total)} registros num raio de 50 km`, y, f: `${Math.max(9, h * 0.036)}px monospace`, c: HUD, a: 0.5 }); y += h * 0.085; }
-    else y += h * 0.03;
-    txt((GRUPO[o.g] || 'ser vivo').toUpperCase(), 0.042, '600 ', color, 0.95, 1.5);
-    const N = caber(ctx, nome, tw, h * 0.085 * k, h * 0.05 * k, 2, '600 ');
-    for (const s of N.L) { ops.push({ s, y, f: `600 ${N.f}${fam}`, c: '#ffffff', a: 1 }); y += N.f * 1.12; }
-    if (o.n) { y += h * 0.008; txt(o.s, 0.048, 'italic ', HUD, 0.7, 1.35); }
-    y += h * 0.018 * k;
+    if (sub) { ops.push({ s: `${fmtN(BX.total)} registros em 50 km`, y, f: `${Math.max(9, h * 0.05)}${fam}`, c: HUD, a: 0.55 }); y += h * 0.075; }
+    else y += h * 0.02;
+    txt((GRUPO[o.g] || 'ser vivo').toUpperCase(), 0.065, '600 ', color, 0.95, 1.3);
+    const N = caber(ctx, nome, tw, h * 0.13 * k, h * 0.085 * k, 2, '600 ');
+    for (const s of N.L) { ops.push({ s, y, f: `600 ${N.f}${fam}`, c: '#ffffff', a: 1 }); y += N.f * 1.1; }
+    if (o.n) { y += h * 0.005; txt(o.s, 0.065, 'italic ', HUD, 0.7, 1.3); }
+    y += h * 0.015 * k;
     for (const [tt, ex, cor] of sel) {
-      let f1 = h * 0.038 * k, f2 = h * 0.031 * k, w1, w2;
+      let f1 = h * 0.058 * k, f2 = h * 0.05 * k, w1, w2;
       for (let n = 0; n < 8; n++, f1 *= 0.93, f2 *= 0.93) {
         ctx.font = `700 ${f1}${fam}`; w1 = ctx.measureText(tt).width; ctx.font = `${f2}${fam}`; w2 = ctx.measureText(` · ${ex}`).width;
         if (w1 + w2 + f1 * 1.6 * 0.32 * 2.6 <= tw) break;
@@ -197,11 +208,11 @@ function coluna(ctx, w, h, o, p, tw, color) {
       const rh = f1 * 1.6; ops.push({ selo: true, tt, ex, cor, y, f1, f2, w1, w2, rh }); y += rh + h * 0.014;
     }
     if (sel.length) y += h * 0.006;
-    txt(quando(o.d), 0.045, '', HUD, 0.85, 1.38);
-    txt(onde(p, o), 0.045, '', HUD, 0.85, 1.38);
-    y += h * 0.01;
-    txt(`foto: ${o.q || 'iNaturalist'} (${o.l}) · iNaturalist`, 0.032, '', HUD, 0.45, 1.3);
-    if (y <= h * 0.7) break;                                        // daqui para baixo, do lado direito, fica o relógio
+    txt(quando(o.d), LER * k, '', HUD, 0.85, 1.3);
+    txt(onde(p, o), LER * k, '', HUD, 0.85, 1.3);
+    y += h * 0.008;
+    txt(`foto: ${o.q || 'iNaturalist'} (${o.l}) · iNaturalist`, 0.042, '', HUD, 0.45, 1.3);
+    if (y <= fim) break;
   }
   return ops;
 }
@@ -266,39 +277,42 @@ export function historia(ctx, w, h, t, color) {
   if (L.length > 1) { const nx = L[WK.i % L.length]; if (nx.img) foto(nx.img); }   // a foto do próximo já vai chegando
   const { o } = HS.cur, k = t - HS.t0, roll = ease(k / 1.6), fade = ease((k - 1.4) / 0.8), out = 1;
   // cabeçalho, com as datas comemorativas de hoje
-  ctx.font = `${Math.max(10, h * 0.055)}px monospace`;
-  const cabe = s => ctx.measureText(s).width <= w * 0.45;
+  const lx0 = w * 0.05, cw = w * 0.56;
+  ctx.font = `${Math.max(10, h * 0.075)}px monospace`;
+  const cabe = s => ctx.measureText(s).width <= cw;
   let tit = `HOJE NA HISTÓRIA · ${now.getDate()} de ${MESES[now.getMonth()]}`; if (!cabe(tit)) tit = `HOJE NA HISTÓRIA · ${day.split('/').reverse().join('/')}`;
   let dia = ''; for (const s of WK.hol) { const tr = dia ? `${dia} · ${s}` : `hoje: ${s}`; if (cabe(tr)) dia = tr; }
   const hud = [tit, dia || null].filter(Boolean);
-  hudText(ctx, h, hud, w * 0.14, h * 0.08);
-  ctx.font = `${Math.max(9, h * 0.034)}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.35;
-  ctx.fillText('fonte: Wikipédia', w * 0.14, h * 0.08 + hud.length * Math.max(10, h * 0.055) * 1.3 + 2); ctx.globalAlpha = 1;
+  hudText(ctx, h, hud, lx0, h * 0.04);
   // linha do tempo com todos os fatos do dia; os mais antigos ficam apertados à esquerda
-  const lx0 = w * 0.14, lx1 = w * 0.54, ly = h * 0.33, y0 = Math.min(1500, ...L.map(q => q.y)) - 10;
+  const lx1 = lx0 + cw, ly = h * (hud.length > 1 ? 0.3 : 0.2), y0 = Math.min(1500, ...L.map(q => q.y)) - 10;
   const X = y => lx0 + (lx1 - lx0) * (1 - Math.sqrt(clamp((Y - y) / (Y - y0))));
   ctx.strokeStyle = HUD; ctx.globalAlpha = 0.25; ctx.lineWidth = Math.max(1, h * 0.003); ctx.beginPath(); ctx.moveTo(lx0, ly); ctx.lineTo(lx1, ly); ctx.stroke();
-  ctx.font = `${Math.max(8, h * 0.028)}px monospace`; ctx.textAlign = 'center'; ctx.fillStyle = HUD;
-  for (const ty of [1500, 1800, 1900, 1950, 2000]) if (ty > y0 + 40) { const x = X(ty); ctx.globalAlpha = 0.3; ctx.fillRect(x - 0.5, ly - h * 0.012, 1, h * 0.024); ctx.globalAlpha = 0.35; ctx.fillText(String(ty), x, ly + h * 0.02); }
+  ctx.font = `${Math.max(9, h * 0.04)}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = HUD;
+  for (const ty of [1500, 1800, 1900, 2000]) if (ty > y0 + 40) { const x = X(ty); ctx.globalAlpha = 0.3; ctx.fillRect(x - 0.5, ly - h * 0.012, 1, h * 0.024); ctx.globalAlpha = 0.4; ctx.fillText(String(ty), x, ly + h * 0.02); }
   ctx.fillStyle = HUD; ctx.globalAlpha = 0.35;
-  for (const q of L) { ctx.beginPath(); ctx.arc(X(q.y), ly, Math.max(1.5, h * 0.004), 0, TAU); ctx.fill(); }
+  for (const q of L) { ctx.beginPath(); ctx.arc(X(q.y), ly, Math.max(1.5, h * 0.005), 0, TAU); ctx.fill(); }
   const yr = Math.round(Y + (o.y - Y) * roll), mx = X(Y + (o.y - Y) * roll);   // o ano volta de hoje até o do fato
-  ctx.globalAlpha = 1; ctx.fillStyle = color; ctx.beginPath(); ctx.arc(mx, ly, Math.max(3, h * 0.013), 0, TAU); ctx.fill();
-  // o ano rodando até o do fato, e quantos anos faz
+  ctx.globalAlpha = 1; ctx.fillStyle = color; ctx.beginPath(); ctx.arc(mx, ly, Math.max(3, h * 0.016), 0, TAU); ctx.fill();
+  // o ano rodando até o do fato e, ao lado, quantos anos faz
+  const yb = ly + h * 0.27;
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = out;
-  ctx.font = `700 ${h * 0.15}px monospace`; ctx.fillStyle = color; ctx.fillText(anoTxt(yr), lx0, h * 0.54);
-  const n = Y - o.y;
-  ctx.font = `${Math.max(10, h * 0.048)}px system-ui, sans-serif`; ctx.fillStyle = HUD; ctx.globalAlpha = out * fade * 0.8;
-  ctx.fillText(n <= 0 ? 'este ano' : n === 1 ? 'há 1 ano' : `há ${fmtN(n)} anos`, lx0, h * 0.62);
-  // o fato, com a letra do maior tamanho que couber no espaço
-  if (!HS.cur.lay || HS.cur.lay.w !== w) HS.cur.lay = { w, T: caber(ctx, o.txt, w * 0.41, h * 0.05, h * 0.034, 99, '', h * 0.27) };
+  ctx.font = `700 ${h * 0.19}px monospace`; ctx.fillStyle = color; ctx.fillText(anoTxt(yr), lx0, yb);
+  const aw = ctx.measureText(anoTxt(o.y)).width, n = Y - o.y;
+  ctx.font = `${Math.max(10, h * LER)}px system-ui, sans-serif`; ctx.fillStyle = HUD; ctx.globalAlpha = out * fade * 0.85;
+  ctx.fillText(n <= 0 ? 'este ano' : n === 1 ? 'há 1 ano' : `há ${fmtN(n)} anos`, lx0 + aw + h * 0.04, yb);
+  // o fato, com a letra do maior tamanho que couber até embaixo (a coluna da esquerda não chega no relógio do standby)
+  const fy = yb + h * 0.05;
+  if (!HS.cur.lay || HS.cur.lay.w !== w || HS.cur.lay.fy !== fy) HS.cur.lay = { w, fy, T: bloco(ctx, o.txt, cw, h * 0.1, h * LER, h * 0.97 - fy, 1.22) };
   const { T } = HS.cur.lay;
   ctx.font = `${T.f}px system-ui, sans-serif`; ctx.fillStyle = '#f4efe6'; ctx.textBaseline = 'top';
-  T.L.forEach((s, i) => { ctx.globalAlpha = out * ease((k - 1.5 - i * 0.12) / 0.6); ctx.fillText(s, lx0, h * 0.67 + i * T.f * 1.28); });
+  T.L.forEach((s, i) => { ctx.globalAlpha = out * ease((k - 1.5 - i * 0.12) / 0.6); ctx.fillText(s, lx0, fy + i * T.f * 1.22); });
+  ctx.font = `${Math.max(9, h * 0.04)}px monospace`; ctx.textAlign = 'right'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.35;
+  ctx.fillText('Wikipédia', w * 0.96, TELA.relogio ? h * 0.72 : h * 0.92); ctx.textAlign = 'left';
   // a foto do artigo, do lado direito (sem descer até o relógio)
   const im = o.img ? foto(o.img) : null;
   if (im) {
-    const bx = w * 0.62, by = h * 0.1, bw = w * 0.3, bh = h * 0.58, s = Math.min(bw / im.naturalWidth, bh / im.naturalHeight);
+    const bx = w * 0.64, by = h * 0.06, bw = w * 0.32, bh = h * (TELA.relogio ? 0.62 : 0.82), s = Math.min(bw / im.naturalWidth, bh / im.naturalHeight);
     const iw = im.naturalWidth * s, ih = im.naturalHeight * s, ix = bx + (bw - iw) / 2, iy = by + (bh - ih) / 2, z = 1 + 0.05 * clamp(k / 25);
     if (HS.imT === null) HS.imT = k;                               // foto que chegou atrasada aparece aos poucos
     ctx.globalAlpha = out * ease((k - Math.max(0.6, HS.imT)) / 0.8);

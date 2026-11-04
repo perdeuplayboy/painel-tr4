@@ -596,7 +596,7 @@ const playerOpts = {
 
 let asleep = false;                                                   // tela apagada (ver sleepScreen)
 const sb = { on: false, forced: false, engineOffSince: null, stoppedSince: null, suppressUntil: 0, moveTimer: 0 };
-const sbPlayer = new Player($('standby'), mediaItems, playerOpts);
+const sbPlayer = new Player($('standby'), mediaItems, { ...playerOpts, relogio: true });
 
 function moveStandbyClock() {
   const c = $('sbClock');

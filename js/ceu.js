@@ -150,7 +150,7 @@ export function ceu(ctx, w, h, t, color) {
   for (const o of SK.alvos) { const da = Math.abs(wrap(o.az - azC)); if (da < 75) want = Math.max(want, 24 + (clamp(o.alt - 24, 24, 52) - 24) * (1 - da / 75)); }
   SK.pitch = SK.pitch === null ? want : SK.pitch + (want - SK.pitch) * clamp(dt * 0.9);
   cam(w, h, azC, SK.pitch);
-  const sc = Math.max(1, h / 360), fs = Math.max(10, h * 0.042), sfs = Math.max(9, h * 0.034);
+  const sc = Math.max(1, h / 360), fs = Math.max(10, h * 0.055), sfs = Math.max(9, h * 0.045);
   const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#02040b'); g.addColorStop(0.7, '#050a1a'); g.addColorStop(1, '#0b1330');
   ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
   if (SK.sun.alt > -18 && proj(...SK.sun.v)) {                        // fim de tarde: o resto de luz do lado do Sol
@@ -230,8 +230,8 @@ export function ceu(ctx, w, h, t, color) {
   ctx.lineTo(w + 60, h + 60); ctx.lineTo(-60, h + 60); ctx.closePath(); ctx.fill();
   // nomes, do mais importante para o menos, sem um cobrir o outro nem o texto do canto e o relógio
   const hud = [SK.label, SK.vistos.length ? `à vista: ${SK.vistos.join(', ')}` : 'nenhum planeta à vista', SK.p.padrao ? 'sem GPS: centro de São Paulo' : null].filter(Boolean);
-  const hx = w * 0.14, hfs = Math.max(10, h * 0.055); ctx.font = `${hfs}px monospace`;
-  const taken = [[hx - 6, 0, hx + Math.max(...hud.map(s => ctx.measureText(s).width)) + 6, h * 0.08 + hud.length * hfs * 1.3 + 4], [w * 0.55, h * 0.7, w, h]];
+  const hx = w * 0.04, hfs = Math.max(10, h * 0.075); ctx.font = `${hfs}px monospace`;
+  const taken = [[hx - 6, 0, hx + Math.max(...hud.map(s => ctx.measureText(s).width)) + 6, h * 0.04 + hud.length * hfs * 1.3 + 4], [w * 0.55, h * 0.7, w, h]];
   ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
   const put = (s, x, y, f, col, a, bold = false, d = null) => {     // com d: tenta em cima, embaixo, à direita e à esquerda do astro
     ctx.font = `${bold ? '600 ' : ''}${f}px system-ui, sans-serif`;
@@ -258,6 +258,6 @@ export function ceu(ctx, w, h, t, color) {
     ctx.globalAlpha = 0.6; ctx.fillText(n, PX, PY);
   }
   ctx.globalAlpha = 1;
-  hudText(ctx, h, hud, hx, h * 0.08);
+  hudText(ctx, h, hud, hx, h * 0.04);
 }
 ceu.prep = catalog;                                                 // o catálogo de estrelas, antes de a cena entrar

@@ -5,7 +5,7 @@
 // RIO MAIS PERTO: quanta água o rio daqui está levando hoje, comparado com o normal desta época do ano desde 1997, e a
 // previsão para as próximas duas semanas. É a estimativa do modelo de rios GloFAS (Copernicus), pelo Open-Meteo, em
 // quadrados de 5 km; o nome do rio vem do OpenStreetMap, quando ele responde.
-import { here, load, keep, hudText, HUD, clamp, ease } from './cenas.js';
+import { here, load, keep, hudText, HUD, clamp, ease, TELA, LER } from './cenas.js';
 import { kmBetween, online, fmtN, say } from './mundo.js';
 import { foto, falhou, borrado, cover, caixa, linhas, caber, PARA, MESES } from './curiosidades.js';
 
@@ -128,12 +128,12 @@ function cartao(ctx, w, h, t, color, it, A, p, ta, L) {             // A: a foto
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(borrado(im), -w * 0.05, -h * 0.05, w * 1.1, h * 1.1);   // fundo: a própria foto desfocada e escura
     ctx.fillStyle = 'rgba(3,5,8,0.62)'; ctx.fillRect(0, 0, w, h);
-    cw = Math.min(w * 0.46, ch * clamp(im.naturalWidth / im.naturalHeight, 0.72, 1.4));
+    cw = Math.min(w * 0.36, ch * clamp(im.naturalWidth / im.naturalHeight, 0.72, 1.4));
     ctx.save(); caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.clip(); cover(ctx, im, x0, y0, cw, ch, 1.02 + 0.06 * clamp(k / 25)); ctx.restore();
     caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.strokeStyle = color; ctx.globalAlpha = A * 0.35; ctx.lineWidth = Math.max(1, h * 0.003); ctx.stroke();
   } else {
     ctx.fillStyle = '#05080a'; ctx.fillRect(0, 0, w, h);
-    cw = Math.min(w * 0.46, ch);
+    cw = Math.min(w * 0.36, ch);
     radar(ctx, x0 + cw / 2, y0 + ch / 2, Math.min(cw, ch) * 0.46, h, p, o, L, color, k, A);
   }
   const tx = x0 + cw + w * 0.035, tw = w * 0.96 - tx;
@@ -145,38 +145,37 @@ function cartao(ctx, w, h, t, color, it, A, p, ta, L) {             // A: a foto
 }
 // o texto do lado direito: tipo, nome, distância e o começo do artigo, sem descer até o relógio
 function colunaL(ctx, h, o, p, tw, color, L) {
-  const frases = o.x.split(/(?<=[.!?])\s+(?=[A-ZÀ-ÚÇ"“])/), fim = h * 0.65;   // "4.149 habitantes" não é fim de frase; embaixo, o crédito
+  const frases = o.x.split(/(?<=[.!?])\s+(?=[A-ZÀ-ÚÇ"“])/), fim = h * (TELA.relogio ? 0.64 : 0.87);   // "4.149 habitantes" não é fim de frase; embaixo, o crédito
   let ops = [];
   for (const k of [1, 0.85, 0.72]) {                                // nome comprido: diminui o nome antes de cortar o texto
-    ops = []; let y = h * 0.185;
+    ops = []; let y = h * 0.2;
     const txt = (s, px, peso, c, a, lh) => {                        // uma linha, diminuindo a letra se passar da largura
       let f = Math.max(9, h * px); ctx.font = `${peso}${f}${FAM}`; const lw = ctx.measureText(s).width; if (lw > tw) f *= tw / lw;
       ops.push({ s, y, f: `${peso}${f}${FAM}`, c, a }); y += f * lh;
     };
-    txt(o.t.toUpperCase(), 0.042, '600 ', color, 0.95, 1.5);
-    const N = caber(ctx, o.n, tw, h * 0.085 * k, h * 0.05 * k, 2, '600 ');
+    txt(o.t.toUpperCase(), 0.072, '600 ', color, 0.95, 1.3);
+    const N = caber(ctx, o.n, tw, h * 0.15 * k, h * 0.1 * k, 2, '600 ');
     for (const s of N.L) { ops.push({ s, y, f: `600 ${N.f}${FAM}`, c: '#ffffff', a: 1 }); y += N.f * 1.12; }
     y += h * 0.008;
-    txt(ondeFica(p, o, L), 0.045 * Math.sqrt(k), '', HUD, 0.9, 1.55);
+    txt(ondeFica(p, o, L), 0.088 * Math.sqrt(k), '', HUD, 0.9, 1.35);
     // o artigo: as frases inteiras que couberem, de preferência com letra boa de ler
     let T = null, cortou = false, inteiro = null;
     for (let n = frases.length; n >= 1; n--) {
       const s = frases.slice(0, n).join(' ').replace(/\s+/g, ' ').trim();
-      T = caber(ctx, s, tw, h * 0.042, h * 0.03, 99, '', fim - y, 1.3);
+      T = caber(ctx, s, tw, h * 0.095, h * LER, 99, '', fim - y, 1.22);
       ctx.font = `${T.f}${FAM}`; cortou = linhas(ctx, s, tw).length > T.L.length;
-      if (!cortou && T.f >= h * 0.036) { inteiro = null; break; }
+      if (!cortou && T.f >= h * LER) { inteiro = null; break; }
       if (!cortou && !inteiro) inteiro = T;
     }
-    if (inteiro && (cortou || T.f < h * 0.036)) { T = inteiro; cortou = false; }
-    if (cortou && k > 0.72) continue;
+    if (inteiro && (cortou || T.f < h * LER)) { T = inteiro; cortou = false; }
     if (cortou) {                                                   // nem uma frase coube: corta com reticências
       ctx.font = `${T.f}${FAM}`; let s = T.L[T.L.length - 1];
       while (s.includes(' ') && ctx.measureText(s + '…').width > tw) s = s.slice(0, s.lastIndexOf(' '));
       T.L[T.L.length - 1] = s + '…';
     }
-    for (const s of T.L) { ops.push({ s, y, f: `${T.f}${FAM}`, c: '#e8eef2', a: 0.92 }); y += T.f * 1.3; }
-    y += h * 0.014;
-    txt('fonte: Wikipédia', 0.032, '', HUD, 0.45, 1.3);
+    for (const s of T.L) { ops.push({ s, y, f: `${T.f}${FAM}`, c: '#e8eef2', a: 0.92 }); y += T.f * 1.22; }
+    y += h * 0.01;
+    txt('fonte: Wikipédia', 0.05, '', HUD, 0.45, 1.3);
     break;
   }
   return ops;
@@ -295,11 +294,11 @@ export function rio(ctx, w, h, t, color) {
   }
   if (!RS || t < RS.last || RS.w !== w || RS.N !== N || RS.nome !== RV.nome) RS = rioInit(ctx, w, h, p, N, i0);
   RS.last = t;
-  const S = RS, x0 = w * 0.14;
+  const S = RS, x0 = w * 0.05;
   // à esquerda: o nome, quanta água passa agora e o que isso quer dizer
-  say(ctx, h, S.tit, x0, h * 0.08);
-  ctx.font = `${Math.max(9, h * 0.032)}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillStyle = HUD;
-  S.sub.forEach((s, i) => { ctx.globalAlpha = i ? 0.35 : 0.6; ctx.fillText(s, x0, h * 0.08 + Math.max(10, h * 0.055) * 1.35 + i * Math.max(9, h * 0.032) * 1.3); });
+  say(ctx, h, S.tit, x0, h * 0.04);
+  ctx.font = `${Math.max(9, h * 0.055)}px ${FAM.slice(3)}`; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillStyle = HUD;
+  ctx.globalAlpha = 0.65; ctx.fillText(S.sub[0], x0, h * 0.135);
   ctx.globalAlpha = 1;
   for (const op of S.ops) {
     const a = ease((t - op.d) / 0.6);
@@ -323,20 +322,19 @@ function rioInit(ctx, w, h, p, N, i0) {
   // previsão: o que muda na próxima semana
   const fut = []; for (let i = i0 + 1; i <= Math.min(N.t.length - 1, i0 + 7); i++) { const v = Number.isFinite(N.m[i]) ? N.m[i] : N.q[i]; if (Number.isFinite(v)) fut.push([v, N.t[i]]); }
   const hi = fut.reduce((a, b) => b[0] > a[0] ? b : a, [Q, '']), lo = fut.reduce((a, b) => b[0] < a[0] ? b : a, [Q, '']);
-  const prev = hi[0] > Q * 1.25 ? `previsão: deve subir para ${fmtQ(hi[0])} m³/s até ${diaTxt(hi[1])}` : lo[0] < Q * 0.8 ? `previsão: deve baixar para ${fmtQ(lo[0])} m³/s até ${diaTxt(lo[1])}` : 'previsão: deve ficar parecido na próxima semana';
+  const prev = hi[0] > Q * 1.25 ? `deve subir para ${fmtQ(hi[0])} até ${diaTxt(hi[1])}` : lo[0] < Q * 0.8 ? `deve baixar para ${fmtQ(lo[0])} até ${diaTxt(lo[1])}` : 'semana que vem: parecido';
   const [my, mm] = max[1].split('-').map(Number);
-  const tw = w * 0.4, ops = []; let y = h * 0.27;
+  const tw = w * 0.5, ops = []; let y = h * 0.2;
   const txt = (s, px, peso, c, a, lh, d) => {
     let f = Math.max(9, h * px); ctx.font = `${peso}${f}${FAM}`; const lw = ctx.measureText(s).width; if (lw > tw) f *= tw / lw;
     ops.push({ s, y, f: `${peso}${f}${FAM}`, c, a, d }); y += f * lh;
   };
-  txt(`${fmtQ(Q)} m³/s`, 0.13, '700 ', '#ffffff', 1, 1.08, 0.2);
-  txt(`${fmtN(Q * 1000)} litros de água por segundo`, 0.04, '', HUD, 0.75, 1.7, 0.4);
-  { const f = h * 0.04; ctx.font = `700 ${f}${FAM}`; const rh = f * 1.65, cw = ctx.measureText(est).width + rh * 0.84; ops.push({ chip: true, s: est, cor, y, f, cw, rh, d: 0.6 }); y += rh + h * 0.03; }
-  txt(`normal nesta época: ${fmtQ(nP[2])} m³/s`, 0.045, '', HUD, 0.9, 1.45, 0.8);
-  txt(`enche uma piscina olímpica em ${tempoTxt(2500 / Math.max(0.01, Q))}`, 0.045, '', HUD, 0.9, 1.45, 1);
-  txt(prev, 0.045, '', HUD, 0.9, 1.45, 1.2);
-  txt(`maior cheia em ${new Date().getFullYear() - ano0} anos: ${fmtQ(max[0])} m³/s em ${MESES[mm - 1]} de ${my}`, 0.045, '', HUD, 0.9, 1.45, 1.4);
+  txt(`${fmtQ(Q)} m³/s`, 0.17, '700 ', '#ffffff', 1, 1.02, 0.2);
+  { const f = h * 0.06; ctx.font = `700 ${f}${FAM}`; const rh = f * 1.6, cw = ctx.measureText(est).width + rh * 0.84; ops.push({ chip: true, s: est, cor, y, f, cw, rh, d: 0.6 }); y += rh + h * 0.035; }
+  txt(`normal nesta época: ${fmtQ(nP[2])}`, LER, '', HUD, 0.9, 1.3, 0.8);
+  txt(prev, LER, '', HUD, 0.9, 1.3, 1);
+  txt(`enche uma piscina em ${tempoTxt(2500 / Math.max(0.01, Q))}`, LER, '', HUD, 0.9, 1.3, 1.2);
+  txt(`maior cheia: ${fmtQ(max[0])} m³/s em ${my}`, LER, '', HUD, 0.9, 1.3, 1.4);
   // o gráfico: 45 dias para trás e 16 para a frente, com a faixa do normal de cada dia
   const n = N.t.length, norm = N.t.map(s => P[binDe(s)] || nP);
   let top = 0; for (let i = 0; i < n; i++) top = Math.max(top, N.q[i] || 0, N.b[i] || 0, norm[i][3]);
@@ -344,11 +342,11 @@ function rioInit(ctx, w, h, p, N, i0) {
   return { w, N, nome: RV.nome, tit, sub, ops, i0, n, norm, vmax: Math.ceil(top * 1.15 / step) * step, step, cor, Q };
 }
 function grafico(ctx, w, h, t, color, S) {
-  const gx = w * 0.58, gw = w * 0.37, gy = h * 0.16, gh = h * 0.44, { N, n, i0, norm, vmax } = S;
+  const gx = w * 0.63, gw = w * 0.34, gy = h * 0.16, gh = h * (TELA.relogio ? 0.44 : 0.62), { N, n, i0, norm, vmax } = S;
   const X = i => gx + i / (n - 1) * gw, Y = v => gy + gh - clamp(v / vmax) * gh, lw = Math.max(1, h * 0.003);
   const rev = ease(t / 1.8), last = Math.max(1, Math.floor(rev * (n - 1)));   // vai desenhando da esquerda para a direita
-  ctx.font = `${Math.max(9, h * 0.032)}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.55;
-  ctx.fillText('ÁGUA PASSANDO (m³/s)', gx, gy - h * 0.035);
+  ctx.font = `${Math.max(9, h * 0.045)}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.55;
+  ctx.fillText('ÁGUA (m³/s)', gx, gy - h * 0.035);
   ctx.globalAlpha = 0.12; ctx.strokeStyle = HUD; ctx.lineWidth = 1;   // linhas de referência
   ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
   for (let v = 0; v <= vmax + 1e-9; v += S.step) { const y = Y(v); ctx.globalAlpha = 0.12; ctx.beginPath(); ctx.moveTo(gx, y); ctx.lineTo(gx + gw, y); ctx.stroke(); ctx.globalAlpha = 0.4; ctx.fillText(fmtQ(v), gx - h * 0.012, y); }
@@ -356,7 +354,7 @@ function grafico(ctx, w, h, t, color, S) {
   ctx.beginPath(); for (let i = 0; i < n; i++) ctx.lineTo(X(i), Y(norm[i][3])); for (let i = n - 1; i >= 0; i--) ctx.lineTo(X(i), Y(norm[i][1])); ctx.closePath();
   ctx.fillStyle = HUD; ctx.globalAlpha = 0.09; ctx.fill();
   ctx.setLineDash([lw * 2, lw * 3]); ctx.strokeStyle = HUD; ctx.globalAlpha = 0.35; ctx.lineWidth = lw; ctx.beginPath(); for (let i = 0; i < n; i++) ctx.lineTo(X(i), Y(norm[i][2])); ctx.stroke(); ctx.setLineDash([]);
-  ctx.font = `${Math.max(9, h * 0.03)}px system-ui, sans-serif`; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.45;
+  ctx.font = `${Math.max(9, h * 0.045)}px system-ui, sans-serif`; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.45;
   ctx.fillText('normal', gx + h * 0.008, Y(norm[0][3]) - 2);
   // o que já passou: água com correnteza
   const ate = Math.min(i0, last), area = new Path2D(); area.moveTo(X(0), Y(0));
@@ -383,11 +381,12 @@ function grafico(ctx, w, h, t, color, S) {
     ctx.globalAlpha = 1 - pr; ctx.beginPath(); ctx.arc(hx, hy, h * 0.01 + h * 0.035 * pr, 0, TAU); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(hx, hy, Math.max(2.5, h * 0.009), 0, TAU); ctx.fill();
   }
-  ctx.font = `${Math.max(9, h * 0.03)}px monospace`; ctx.textBaseline = 'top'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.5;
+  ctx.font = `${Math.max(9, h * 0.045)}px monospace`; ctx.textBaseline = 'top'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.5;
   const dm = s => `${s.slice(8, 10)}/${s.slice(5, 7)}`;
   ctx.textAlign = 'left'; ctx.fillText(dm(N.t[0]), gx, gy + gh + h * 0.015);
   ctx.textAlign = 'center'; ctx.globalAlpha = 0.85; ctx.fillText('hoje', hx, gy + gh + h * 0.015);
   ctx.textAlign = 'right'; ctx.globalAlpha = 0.5; ctx.fillText(dm(N.t[n - 1]), gx + gw, gy + gh + h * 0.015);
+  if (!TELA.relogio) { ctx.font = `${Math.max(9, h * 0.038)}px ${FAM.slice(3)}`; ctx.globalAlpha = 0.35; ctx.fillText('modelo GloFAS · Open-Meteo', gx + gw, gy + gh + h * 0.09); }
   ctx.globalAlpha = 1;
 }
 lugares.prep = lugaresPrep;
@@ -459,12 +458,12 @@ export function trilhas(ctx, w, h, t, color) {
   const nova = !TS || t < TS.last;
   if (nova || TS.w !== w || TS.roads !== TL.roads || TS.src !== TL.pts) TS = trilhasInit(ctx, w, h, p, nova ? null : TS.f);
   TS.last = t;
-  const S = TS, x0 = w * 0.1, y0 = h * 0.08, B = h * 0.84, cx = x0 + B / 2, cy = y0 + B / 2, f = S.f;
+  const S = TS, x0 = w * 0.03, y0 = h * 0.04, B = h * 0.92, cx = x0 + B / 2, cy = y0 + B / 2, f = S.f;
   // o mapa: começa bem perto do carro, abre até 15 km e, se o destaque for mais longe, abre até ele
   const R = 4 + 11 * ease(t / 3) + (f && f.d > 14 ? (f.d * 1.15 - 15) * ease((t - 6) / 2.5) : 0), k = B / 2 / R, lw = Math.max(1, h * 0.0028);
   ctx.save(); caixa(ctx, x0, y0, B, B, h * 0.03); ctx.clip();
   ctx.fillStyle = '#060b10'; ctx.fillRect(x0, y0, B, B);
-  ctx.strokeStyle = HUD; ctx.lineWidth = 1; ctx.font = `${Math.max(9, h * 0.028)}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+  ctx.strokeStyle = HUD; ctx.lineWidth = 1; ctx.font = `${Math.max(9, h * 0.042)}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
   for (const r of [5, 10, 15, 25, 40]) {                            // distâncias em volta do carro
     if (r > R * 1.4 || r * k < h * 0.04) continue;
     ctx.globalAlpha = 0.12; ctx.beginPath(); ctx.arc(cx, cy, r * k, 0, TAU); ctx.stroke();
@@ -492,11 +491,11 @@ export function trilhas(ctx, w, h, t, color) {
   ctx.globalAlpha = 1; ctx.fillStyle = '#ffffff';                    // o carro
   ctx.beginPath(); ctx.moveTo(cx, cy - h * 0.022); ctx.lineTo(cx + h * 0.014, cy + h * 0.014); ctx.lineTo(cx - h * 0.014, cy + h * 0.014); ctx.closePath(); ctx.fill();
   ctx.restore();
-  ctx.font = `${Math.max(9, h * 0.034)}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.6;
-  ctx.fillText('N', cx, y0 - 2);
+  ctx.font = `${Math.max(9, h * 0.042)}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.6;
+  ctx.fillText('N', cx, y0 + 3);
   // à direita: quanto tem de terra em volta e o passeio da vez
   const ta = ease((t - 0.5) / 0.8), tx = x0 + B + w * 0.035;
-  say(ctx, h, 'TRILHAS E CACHOEIRAS PERTO', tx, h * 0.08, ta * 0.85);
+  say(ctx, h, 'TRILHAS E CACHOEIRAS PERTO', tx, h * 0.04, ta * 0.85);
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   for (const op of S.ops) { ctx.font = op.f; ctx.fillStyle = op.c; ctx.globalAlpha = ta * op.a * (op.f2 ? ease((t - op.f2) / 0.8) : 1); ctx.fillText(op.s, tx, op.y); }
   ctx.globalAlpha = 1;
@@ -518,27 +517,31 @@ function trilhasInit(ctx, w, h, p, f0) {
     const com = pts.filter(o => o.n).sort((a, b) => a.d - b.d);
     if (com.length) { f = com[TL.i % com.length]; TL.i = (TL.i + 1) % com.length; keep('trilhas.i', TL.i); }
   }
-  const tw = w * 0.96 - (w * 0.1 + h * 0.84 + w * 0.035), ops = [];
+  const tw = w * 0.97 - (w * 0.03 + h * 0.92 + w * 0.035), ops = [], fim = h * (TELA.relogio ? 0.7 : 0.97);
   const dir = (x, y) => PARA[Math.round(((Math.atan2(x, -y) / RAD) % 360 + 360) % 360 / 45) % 8];
   const conta = Object.keys(TIPO).map(k => [k, pts.filter(o => o.t === k).length]).filter(([, n]) => n).map(([k, n]) => `${n} ${n === 1 ? k : PLUR[k]}`);
-  for (const k of [1, 0.9, 0.8, 0.72]) {                            // diminui as letras se não couber até a altura do relógio
-    ops.length = 0; let y = h * 0.185;
+  for (const k of [1, 0.9, 0.8]) {                                  // diminui as letras se não couber (no standby, até a altura do relógio)
+    ops.length = 0; let y = h * 0.15;
     const txt = (s, px, peso, c, a, lh, f2) => { let fz = Math.max(9, h * px * k); ctx.font = `${peso}${fz}${FAM}`; const lw = ctx.measureText(s).width; if (lw > tw) fz *= tw / lw; ops.push({ s, y, f: `${peso}${fz}${FAM}`, c, a, f2 }); y += fz * lh; };
     if (TL.km >= 1) {
-      txt(`${fmtN(TL.km)} km de estrada de terra`, 0.06, '700 ', '#ffffff', 1, 1.2);
-      txt(`num raio de 15 km${TL.kt >= 1 ? ` · ${fmtN(TL.kt)} km são trilhas` : ''}`, 0.04, '', HUD, 0.75, 1.45);
-      txt(near < 0.05 ? 'você está numa estrada de terra' : `a mais perto passa a ${near < 1 ? `${Math.max(1, Math.round(near * 10)) * 100} m` : `${kmTxt(near)} km`}, ${dir(nx, ny)}`, 0.04, '', HUD, 0.9, 1.9);
-    } else txt('nenhuma estrada de terra no mapa num raio de 15 km', 0.04, '', HUD, 0.9, 1.9);
+      txt(`${fmtN(TL.km)} km de estrada de terra`, 0.095, '700 ', '#ffffff', 1, 1.15);
+      txt(near < 0.05 ? 'você está numa estrada de terra' : `a mais perto: ${near < 1 ? `${Math.max(1, Math.round(near * 10)) * 100} m` : `${kmTxt(near)} km`}, ${dir(nx, ny)}`, LER, '', HUD, 0.9, 1.5);
+    } else txt('nenhuma estrada de terra perto', LER, '', HUD, 0.9, 1.5);
     if (f) {
       const [nome, cor] = TIPO[f.t];
-      txt(nome, 0.04, '600 ', cor, 0.95, 1.45, 2);
-      const N = caber(ctx, f.n, tw, h * 0.075 * k, h * 0.045 * k, 2, '600 ');
-      for (const s of N.L) { ops.push({ s, y, f: `600 ${N.f}${FAM}`, c: '#ffffff', a: 1, f2: 2 }); y += N.f * 1.12; }
-      txt([`${kmTxt(f.d)} km ${dir(f.x, f.y)}`, f.ele ? `${fmtN(f.ele)} m de altitude` : '', f.alt ? `queda de ${fmtN(f.alt)} m` : ''].filter(Boolean).join(' · '), 0.042, '', HUD, 0.9, 1.6, 2.3);
+      txt(nome, 0.065, '600 ', cor, 0.95, 1.25, 2);
+      const N = caber(ctx, f.n, tw, h * 0.13 * k, h * 0.085 * k, 2, '600 ');
+      for (const s of N.L) { ops.push({ s, y, f: `600 ${N.f}${FAM}`, c: '#ffffff', a: 1, f2: 2 }); y += N.f * 1.1; }
+      txt([`${kmTxt(f.d)} km ${dir(f.x, f.y)}`, f.ele ? `${fmtN(f.ele)} m` : '', f.alt ? `queda de ${fmtN(f.alt)} m` : ''].filter(Boolean).join(' · '), LER, '', HUD, 0.9, 1.45, 2.3);
     }
-    if (conta.length) txt(`num raio de 40 km: ${conta.join(' · ')}`, 0.036, '', HUD, 0.7, 1.5, 1);
-    txt('mapa: OpenStreetMap', 0.03, '', HUD, 0.45, 1.3);
-    if (y <= h * 0.7) break;
+    const resto = y;
+    if (conta.length) txt(`em 40 km: ${conta.join(' · ')}`, 0.065, '', HUD, 0.7, 1.4, 1);
+    txt('mapa: OpenStreetMap', 0.042, '', HUD, 0.45, 1.3);
+    if (y > fim && resto <= fim) {                                  // o que sobra embaixo sai antes de diminuir as letras
+      while (ops.length && ops[ops.length - 1].y >= resto) ops.pop();
+      y = resto;
+    }
+    if (y <= fim) break;
   }
   return { w, roads: TL.roads, src: TL.pts, terra, trilha, pts, f, ops };
 }

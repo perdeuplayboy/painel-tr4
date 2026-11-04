@@ -1,6 +1,7 @@
 // Toca a lista do standby e da página Vídeos, em ordem aleatória: vídeos (até acabar),
 // GIF/WebP animados e animações retrô (ficam um tempo fixo, pois não têm fim).
 import { ANIMS } from './anims.js';
+import { TELA } from './cenas.js';
 
 export class Player {
   // box: elemento onde as mídias entram; items(): [{ kind: 'video'|'image'|'anim', url?, anim?, weight? }] (weight: chance relativa, padrão 1)
@@ -89,6 +90,7 @@ export class Player {
         c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      TELA.relogio = !!this.opts.relogio;                                 // standby: relógio no canto da cena
       if (draw(ctx, w, h, (now - t0) / 1000, this.opts.color()) === true) this.next();   // a animação terminou
     };
     this.raf = requestAnimationFrame(frame);
