@@ -1,4 +1,4 @@
-// Mais animações do standby, desenhadas em canvas 2D: céu de hoje, nível e areia, relevo da região,
+// Mais animações do standby, desenhadas em canvas 2D: céu de hoje, relevo da região,
 // previsão do tempo, cardume e Jogo da Vida. Cada uma recebe (ctx, largura, altura, segundos, cor)
 // e guarda o próprio estado; quando o tempo volta a zero, começa de novo.
 
@@ -8,7 +8,7 @@ const ease = p => (p = clamp(p), p * p * (3 - 2 * p));
 const HUD = '#d8f6ff';
 const load = (k, d) => { try { const v = localStorage.getItem('tr4.' + k); return v ? JSON.parse(v) : d; } catch { return d; } };
 const keep = (k, v) => { try { localStorage.setItem('tr4.' + k, JSON.stringify(v)); } catch {} };
-const here = () => { const p = load('lastPos', null); return p && Number.isFinite(p.lat) ? p : { lat: -23.55, lon: -46.63 }; };   // sem GPS ainda: São Paulo
+const here = () => { const p = load('lastPos', null); return p && Number.isFinite(p.lat) ? p : { lat: -23.55, lon: -46.63, padrao: true }; };   // sem GPS ainda: centro de São Paulo
 function rng(seed) {
   return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
@@ -189,104 +189,6 @@ export function ceu(ctx, w, h, t, color) {
 }
 
 // =====================================================================================
-// NÍVEL E AREIA: a inclinação de verdade do carro (o mesmo sensor do inclinômetro). Dois níveis de bolha
-// (lateral e frontal) e uma caixa de areia presa no carro: a superfície fica sempre nivelada com o chão de verdade,
-// então quando o carro inclina a areia escorre para o lado mais baixo (a inclinação é um pouco aumentada para aparecer).
-// Cada coluna guarda a altura da areia; se o degrau entre vizinhas passa do ângulo de repouso, escorre. Solavanco
-// faz os grãos pularem e a areia assentar.
-const grav = { x: 0, y: 9.8, z: 0, ok: false };
-let jolt = 0;
-addEventListener('devicemotion', e => {
-  const g = e.accelerationIncludingGravity; if (!g || g.x == null) return;
-  if (!grav.ok) Object.assign(grav, { x: g.x, y: g.y, z: g.z, ok: true });
-  grav.x += (g.x - grav.x) * 0.1; grav.y += (g.y - grav.y) * 0.1; grav.z += (g.z - grav.z) * 0.1;
-  const a = e.acceleration; if (a && a.x != null) jolt = Math.max(jolt, Math.hypot(a.x, a.y, a.z));   // solavanco (sem a gravidade)
-});
-function carTilt(t) {
-  if (!grav.ok) return { roll: 9 * Math.sin(t * 0.35), pitch: 5 * Math.sin(t * 0.27 + 1), sim: true };   // sem sensor (PC): balança sozinho
-  const ang = screen.orientation?.angle ?? window.orientation ?? 0;
-  let sx, sy;
-  if (ang === 90) { sx = -grav.y; sy = grav.x; } else if (ang === 270 || ang === -90) { sx = grav.y; sy = -grav.x; } else { sx = grav.x; sy = grav.y; }
-  const z = load('settings', {}).level || { roll: 0, pitch: 0 };
-  return { roll: Math.atan2(sx, sy) / RAD - z.roll, pitch: Math.atan2(-grav.z, sy) / RAD - z.pitch };
-}
-let SA = null;
-export function nivel(ctx, w, h, t, color) {
-  const N = 140, bx0 = w * 0.36, bw = w * 0.56, bh = Math.min(h * 0.58, bw * 0.45), by0 = Math.max(h * 0.1, h * 0.68 - bh);   // acima do relógio
-  const cw = bw / N, dx = cw / bh, gs = Math.max(2, bh / 55);    // largura da coluna (em alturas da caixa) e tamanho do grão
-  if (!SA || t < SA.last || SA.bw !== bw || SA.bh !== bh) {
-    const r = rng(11), tex = document.createElement('canvas'); tex.width = Math.ceil(bw) + 2; tex.height = Math.ceil(bh) + 2;
-    const tc = tex.getContext('2d'), sand = ['#c9a26b', '#b98a52', '#d8b47a', '#a8763f', '#c29a60'];
-    for (let y = 0; y < tex.height; y += gs) for (let x = 0; x < tex.width; x += gs) { tc.fillStyle = sand[Math.floor(r() * 5)]; tc.fillRect(x, y, gs + 0.5, gs + 0.5); }
-    const gr = tc.createLinearGradient(0, 0, 0, tex.height); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.4)');
-    tc.fillStyle = gr; tc.fillRect(0, 0, tex.width, tex.height);
-    SA = { H: new Float32Array(N).fill(0.42), T: new Float32Array(N), mass: 0.42 * N, flow: false, ang: 0, last: t, tex, bw, bh, grains: [], r, shake: 0 };
-  }
-  const dt = clamp(t - SA.last, 0, 0.1); SA.last = t;
-  const { roll, pitch, sim } = carTilt(t), H = SA.H, r = SA.r;
-  SA.ang += (clamp(roll * 1.6, -40, 40) * RAD - SA.ang) * Math.min(1, dt * 4);
-  const surf = x => by0 + bh - H[clamp(Math.floor((x - bx0) / cw), 0, N - 1)] * bh;   // altura da areia (pixels) num ponto
-  const j = sim ? (Math.floor(t / 8) !== Math.floor((t - dt) / 8) ? 6 : 0) : jolt; jolt = 0;   // simulação: um solavanco a cada 8 s
-  if (j > 2.5) {
-    SA.shake = Math.min(1, SA.shake + (j - 2.5) / 4);
-    for (let k = Math.min(70, Math.round((j - 2.5) * 18)); k-- > 0;) {
-      const x = bx0 + r() * bw;
-      SA.grains.push({ x, y: surf(x) - gs, vx: (r() - 0.5) * bh * 0.4, vy: -bh * (0.3 + r() * 0.5) * Math.min(1.5, (j - 2) / 4), hop: true });
-    }
-  }
-  SA.shake = Math.max(0, SA.shake - dt * 1.2);
-  // onde a areia quer ficar: superfície nivelada com o chão de verdade (reta com inclinação m dentro da caixa),
-  // a mesma quantidade de areia, entre o fundo e a tampa
-  const m = Math.tan(SA.ang), xm = (N - 1) / 2, T = SA.T;
-  const fill = c => { let s = 0; for (let i = 0; i < N; i++) s += clamp(c + m * (i - xm) * dx); return s; };
-  let lo = -3, hi = 4; for (let k = 0; k < 28; k++) { const c = (lo + hi) / 2; if (fill(c) < SA.mass) lo = c; else hi = c; }
-  for (let i = 0; i < N; i++) T[i] = clamp((lo + hi) / 2 + m * (i - xm) * dx);
-  const fit = A => { let mean = 0, sxy = 0, sxx = 0; for (let i = 0; i < N; i++) mean += A[i]; mean /= N;
-    for (let i = 0; i < N; i++) { const u = (i - xm) * dx; sxy += u * (A[i] - mean); sxx += u * u; } return sxy / sxx; };
-  const dev = fit(T) - fit(H), rest = 0.07 * (1 - SA.shake);        // ângulo de repouso ~4°: abaixo disso a areia fica parada
-  if (Math.abs(dev) > rest) SA.flow = true; else if (Math.abs(dev) < 0.015) SA.flow = false;
-  if (SA.flow || SA.shake > 0.05) {                                // escorre com velocidade de avalanche (o mesmo passo em todas mantém a areia)
-    let big = 0; for (let i = 0; i < N; i++) big = Math.max(big, Math.abs(T[i] - H[i]));
-    const k = big > 0 ? Math.min(1, dt * (0.6 + SA.shake) / big) : 0;
-    for (let i = 0; i < N; i++) H[i] += (T[i] - H[i]) * k;
-    for (let n = big * k > 0.002 ? Math.round(r() * 3) : 0; n-- > 0 && SA.grains.length < 200;) {   // grãos rolando na avalanche
-      const x = bx0 + r() * bw; SA.grains.push({ x, y: surf(x) - gs, vx: Math.sign(dev) * bh * (0.3 + r() * 0.5), vy: 0, hop: false, life: 0.3 + r() * 0.7 });
-    }
-  }
-  ctx.fillStyle = '#05070b'; ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = '#0a0d12'; ctx.fillRect(bx0, by0, bw, bh);
-  for (let i = 0; i < N; i++) {
-    const hh = H[i] * bh; if (hh < 0.5) continue;
-    const sx = i * cw, sy = bh - hh; ctx.drawImage(SA.tex, sx, sy, cw + 0.6, hh, bx0 + sx, by0 + sy, cw + 0.6, hh);
-  }
-  ctx.strokeStyle = 'rgba(255,236,196,.55)'; ctx.lineWidth = Math.max(1, gs * 0.6); ctx.beginPath();
-  for (let i = 0; i < N; i++) { const x = bx0 + (i + 0.5) * cw, y = by0 + bh - H[i] * bh; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
-  ctx.stroke();
-  const G = bh * 5, gx = Math.sin(SA.ang) * G, gy = Math.cos(SA.ang) * G;
-  ctx.fillStyle = '#e0bf86';
-  SA.grains = SA.grains.filter(g => {
-    if (g.hop) { g.vx += gx * dt; g.vy += gy * dt; g.x += g.vx * dt; g.y += g.vy * dt; if (g.y < by0) { g.y = by0; g.vy = Math.abs(g.vy) * 0.3; } }
-    else { g.x += g.vx * dt; g.y = surf(g.x) - gs * 0.8; g.life -= dt; }
-    if (g.x < bx0 || g.x > bx0 + bw || (g.hop ? g.vy > 0 && g.y >= surf(g.x) : g.life <= 0)) return false;
-    ctx.fillRect(g.x - gs / 2, g.y - gs / 2, gs, gs); return true;
-  });
-  ctx.strokeStyle = color; ctx.globalAlpha = 0.7; ctx.lineWidth = Math.max(1.5, h * 0.008); ctx.strokeRect(bx0 - 2, by0 - 2, bw + 4, bh + 4); ctx.globalAlpha = 1;
-  const vial = (cy, ang, lab) => {                                  // nível de bolha: a bolha foge para o lado mais alto
-    const vx = w * 0.06, vw = w * 0.24, vh = h * 0.16;
-    ctx.fillStyle = '#0e1a12'; ctx.strokeStyle = '#7fb08a'; ctx.lineWidth = Math.max(1, h * 0.006);
-    ctx.beginPath(); ctx.roundRect(vx, cy - vh / 2, vw, vh, vh / 2); ctx.fill(); ctx.stroke();
-    ctx.strokeStyle = 'rgba(200,255,210,.5)'; ctx.beginPath(); for (const o of [-0.09, 0.09]) { ctx.moveTo(vx + vw / 2 + o * vw, cy - vh * 0.4); ctx.lineTo(vx + vw / 2 + o * vw, cy + vh * 0.4); } ctx.stroke();
-    const bxp = vx + vw / 2 + clamp(-ang / 15, -1, 1) * (vw / 2 - vh * 0.7);
-    const gr = ctx.createRadialGradient(bxp - vh * 0.12, cy - vh * 0.12, 1, bxp, cy, vh * 0.42); gr.addColorStop(0, '#f6fff0'); gr.addColorStop(1, '#8fdc9c');
-    ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(bxp, cy, vh * 0.55, vh * 0.32, 0, 0, TAU); ctx.fill();
-    ctx.fillStyle = HUD; ctx.font = `${h * 0.06}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
-    ctx.fillText(`${lab} ${Math.abs(ang).toFixed(1).replace('.', ',')}°`, vx, cy - vh * 0.65);
-  };
-  vial(h * 0.42, roll, 'LATERAL'); vial(h * 0.78, pitch, 'FRONTAL');
-  if (sim) hudText(ctx, h, ['SIMULAÇÃO'], w * 0.06, h * 0.17);
-}
-
-// =====================================================================================
 // SUA REGIÃO EM 3D: o relevo de verdade em volta do carro (mapas de elevação abertos da AWS, Terrarium),
 // em linhas que escondem o que está atrás, girando devagar, com a posição do carro marcada.
 // Precisa de internet uma vez por lugar; depois fica guardado. Sem dados, a animação termina na hora.
@@ -312,16 +214,29 @@ async function loadRegion(p) {
     }
     RG.grid = H; RG.km = span * 40075 * Math.cos(la) / n;
     keep(regionKey(p), { h: Array.from(H), km: RG.km });
+    placeName(p);
   } catch { RG.failed = true; }
   RG.loading = false;
+}
+// nome do lugar (bairro e cidade) pelo OpenStreetMap, uma vez por lugar; fica guardado junto do relevo
+async function placeName(p) {
+  if (p.padrao || RG.asked === RG.key) return; RG.asked = RG.key;
+  try {
+    const q = `format=jsonv2&zoom=14&accept-language=pt-BR&lat=${p.lat.toFixed(4)}&lon=${p.lon.toFixed(4)}`;
+    const a = (await (await fetch('https://nominatim.openstreetmap.org/reverse?' + q, { signal: AbortSignal.timeout(10000) })).json()).address || {};
+    const parts = [a.suburb || a.neighbourhood || a.quarter || a.hamlet || a.village, a.city || a.town || a.municipality].filter(Boolean);
+    RG.nome = [...new Set(parts)].join(', ') || null;
+    const k = regionKey(p), c = load(k, null); if (c && RG.nome) keep(k, { ...c, nome: RG.nome });
+  } catch {}
 }
 let RS = null;
 export function regiao(ctx, w, h, t, color) {
   const p = here(), key = regionKey(p);
   if (RG.key !== key) {
-    RG.key = key; RG.failed = false; RG.grid = null;
+    RG.key = key; RG.failed = false; RG.grid = null; RG.nome = null;
     const c = load(key, null);
-    if (c?.h?.length === RG.S * RG.S) { RG.grid = Int16Array.from(c.h); RG.km = c.km; } else if (navigator.onLine !== false) loadRegion(p); else RG.failed = true;
+    if (c?.h?.length === RG.S * RG.S) { RG.grid = Int16Array.from(c.h); RG.km = c.km; RG.nome = c.nome || null; if (!RG.nome && navigator.onLine !== false) placeName(p); }
+    else if (navigator.onLine !== false) loadRegion(p); else RG.failed = true;
   }
   ctx.fillStyle = '#020407'; ctx.fillRect(0, 0, w, h);
   if (!RG.grid) {
@@ -334,23 +249,26 @@ export function regiao(ctx, w, h, t, color) {
   RS.last = t;
   const S = RG.S, H = RG.grid, half = (S - 1) / 2, size = RG.km * 1000;
   const ex = clamp(size * 0.09 / Math.max(1, RS.hi - RS.lo), 2, 12);   // exagero do relevo: lugar plano também aparece
-  const ang = t * 0.12 + 0.6, ca = Math.cos(ang), sa = Math.sin(ang), tiltK = 0.6, f = w * 0.55;
+  const ang = t * 0.1, ca = Math.cos(ang), sa = Math.sin(ang), tiltK = 0.6, f = w * 0.55;   // começa com o norte lá no fundo, como um mapa
   const center = H[Math.round(half) * S + Math.round(half)];
-  const proj = (i, j) => {                                         // malha em metros, girando em volta do carro, vista de cima em ângulo
-    const x = (i - half) / (S - 1) * size, z = (j - half) / (S - 1) * size, y = (H[j * S + i] - center) * ex;
+  const at = (x, z, y) => {                                        // x para o leste, z para o norte, y para cima (metros)
     const xr = x * ca - z * sa, zr = x * sa + z * ca, dist = size * 1.3 + zr * Math.cos(tiltK) - y * Math.sin(tiltK);
     const yv = y * Math.cos(tiltK) + zr * Math.sin(tiltK);           // o que está longe sobe na tela, como o chão visto do alto
     return [w / 2 + xr / dist * f, h * 0.5 - yv / dist * f, dist];
   };
+  // malha em metros, girando em volta do carro. A linha j=0 do mapa é a do norte.
+  const proj = (i, j) => at((i - half) / (S - 1) * size, (half - j) / (S - 1) * size, (H[j * S + i] - center) * ex);
   // linhas na direção mais de frente para a câmera, de trás para a frente, cada uma tampando o que está atrás
   const alongI = Math.abs(ca) > Math.abs(sa), order = [];
   for (let k = 0; k < S; k++) order.push(k);
   const depth = k => alongI ? proj(Math.round(half), k)[2] : proj(k, Math.round(half))[2];
   order.sort((a, b) => depth(b) - depth(a));
-  const span = Math.max(1, RS.hi - RS.lo);
+  const span = Math.max(1, RS.hi - RS.lo), base = (i, j) => at((i - half) / (S - 1) * size, (half - j) / (S - 1) * size, (RS.lo - center) * ex);
   for (const k of order) {
     const pts = []; for (let m = 0; m < S; m++) pts.push(alongI ? proj(m, k) : proj(k, m));
-    ctx.beginPath(); ctx.moveTo(pts[0][0], h); pts.forEach(([x, y]) => ctx.lineTo(x, y)); ctx.lineTo(pts[S - 1][0], h); ctx.closePath();
+    // tampa só até o pé da fatia (na altitude mais baixa): o que está atrás e mais baixo não passa daí, e pinta bem menos tela
+    const [b0, b1] = alongI ? [base(0, k), base(S - 1, k)] : [base(k, 0), base(k, S - 1)];
+    ctx.beginPath(); pts.forEach(([x, y], m) => m ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.lineTo(b1[0], b1[1] + 2); ctx.lineTo(b0[0], b0[1] + 2); ctx.closePath();
     ctx.fillStyle = '#020407'; ctx.fill();
     const fog = clamp(1.25 - pts[0][2] / (size * 1.6), 0.15, 1);
     ctx.beginPath(); pts.forEach(([x, y], m) => m ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
@@ -362,8 +280,16 @@ export function regiao(ctx, w, h, t, color) {
   ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy - h * 0.16); ctx.stroke();
   ctx.globalAlpha = 1 - pr; ctx.beginPath(); ctx.ellipse(cx, cy, h * 0.12 * pr, h * 0.04 * pr, 0, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
   ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(cx, cy - h * 0.16, h * 0.018, 0, TAU); ctx.fill();
-  hudText(ctx, h, ['VOCÊ', `${center} m`], cx + h * 0.04, cy - h * 0.2);
-  hudText(ctx, h, ['RELEVO DA REGIÃO', `${RG.km.toFixed(0)} km · ${RS.lo}–${RS.hi} m`], w * 0.11, h * 0.08);
+  hudText(ctx, h, [p.padrao ? 'CENTRO' : 'VOCÊ', `${center} m`], cx + h * 0.04, cy - h * 0.2);
+  const fs = Math.max(11, h * 0.07);                               // pontos cardeais na beira do mapa
+  ctx.save(); ctx.font = `bold ${fs}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.shadowColor = '#000'; ctx.shadowBlur = 6;
+  for (const [txt, x, z] of [['N', 0, 1], ['S', 0, -1], ['L', 1, 0], ['O', -1, 0]]) {
+    const [px, py] = at(x * size * 0.58, z * size * 0.58, 0);
+    ctx.fillStyle = txt === 'N' ? '#ff6a5a' : HUD; ctx.globalAlpha = txt === 'N' ? 1 : 0.8; ctx.fillText(txt, px, py);
+  }
+  ctx.restore();
+  const lugar = p.padrao ? 'sem GPS: centro de São Paulo' : RG.nome || `${Math.abs(p.lat).toFixed(3)}°${p.lat < 0 ? 'S' : 'N'} ${Math.abs(p.lon).toFixed(3)}°${p.lon < 0 ? 'O' : 'L'}`;
+  hudText(ctx, h, [`RELEVO · ${RG.km.toFixed(0)} × ${RG.km.toFixed(0)} km`, lugar, `${RS.lo}–${RS.hi} m · altura ${Math.round(ex)}× maior`], w * 0.13, h * 0.08);
 }
 
 // =====================================================================================
@@ -502,37 +428,78 @@ export function cardume(ctx, w, h, t, color) {
 // =====================================================================================
 // JOGO DA VIDA (Conway, 1970): cada quadradinho é uma célula. Ela nasce se tiver 3 vizinhas vivas e continua viva
 // com 2 ou 3; com menos morre de solidão, com mais morre sufocada. Dessa regra só aparecem formas que andam,
-// piscam e até fabricam outras. Começa com formas conhecidas (com o nome escrito no começo): um canhão que
-// dispara planadores, um pulsar, um oscilador e uma nave que cruza o caminho dos planadores. Quando tudo para,
-// recomeça sorteado; depois volta às formas. As bordas não dão a volta: o que sai da tela some.
-const LIFE_PAT = {
-  canhao: ['........................O', '......................O.O', '............OO......OO............OO', '...........O...O....OO............OO',
-    'OO........O.....O...OO', 'OO........O...O.OO....O.O', '..........O.....O.......O', '...........O...O', '............OO'],
-  pulsar: ['..OOO...OOO..', '', 'O....O.O....O', 'O....O.O....O', 'O....O.O....O', '..OOO...OOO..', '', '..OOO...OOO..',
-    'O....O.O....O', 'O....O.O....O', 'O....O.O....O', '', '..OOO...OOO..'],
-  oscilador: ['..O....O..', 'OO.OOOO.OO', '..O....O..'],
-  nave: ['.O..O', 'O....', 'O...O', 'OOOO.'],
+// piscam e até fabricam outras. Cada rodada é sorteada: quase sempre um punhado de formas conhecidas (com o nome
+// escrito no começo) em lugares e sentidos sorteados; às vezes manchas de células ao acaso. Quando tudo para,
+// ou depois de um minuto, sorteia outra. As bordas não dão a volta: o que sai da tela some.
+const LIFE = {
+  canhao: { nome: 'canhão de planadores', rows: ['........................O', '......................O.O', '............OO......OO............OO',
+    '...........O...O....OO............OO', 'OO........O.....O...OO', 'OO........O...O.OO....O.O', '..........O.....O.......O', '...........O...O', '............OO'] },
+  semente: { nome: 'semente: vira caos', rows: ['.OO', 'OO.', '.O.'] },
+  bolota: { nome: 'bolota: cresce muito', rows: ['.O.....', '...O...', 'OO..OOO'] },
+  pulsar: { nome: 'pulsar', ext: 1, max: 1, rows: ['..OOO...OOO..', '', 'O....O.O....O', 'O....O.O....O', 'O....O.O....O', '..OOO...OOO..', '',
+    '..OOO...OOO..', 'O....O.O....O', 'O....O.O....O', 'O....O.O....O', '', '..OOO...OOO..'] },
+  oscilador: { nome: 'oscilador', ext: 3, max: 1, rows: ['..O....O..', 'OO.OOOO.OO', '..O....O..'] },
+  galaxia: { nome: 'galáxia', ext: 2, max: 1, rows: ['OOOOOO.OO', 'OOOOOO.OO', '.......OO', 'OO.....OO', 'OO.....OO', 'OO.....OO', 'OO.......', 'OO.OOOOOO', 'OO.OOOOOO'] },
+  nave: { nome: 'nave', ext: 1, v: [-0.5, 0], rows: ['.O..O', 'O....', 'O...O', 'OOOO.'] },
+  naveMedia: { nome: 'nave média', ext: 2, v: [-0.5, 0], rows: ['...O..', '.O...O', 'O.....', 'O....O', 'OOOOO.'] },
+  naveGrande: { nome: 'nave grande', ext: 2, v: [-0.5, 0], rows: ['...OO..', '.O....O', 'O......', 'O.....O', 'OOOOOO.'] },
+  planador: { nome: 'planador', v: [0.25, 0.25], rows: ['.O.', '..O', 'OOO'] },
+  sapo: { nome: 'sapo', ext: 1, rows: ['.OOO', 'OOO.'] },
+  farol: { nome: 'farol', rows: ['OO..', 'OO..', '..OO', '..OO'] },
 };
-const LIFE_NAME = { canhao: ['canhão de planadores', 18, -1.6], pulsar: ['pulsar', -4.5, 5.8], oscilador: ['oscilador', 5, -1.8], nave: ['nave', 2.5, -1.4] };
+const LIFE_EXTRAS = ['pulsar', 'pulsar', 'oscilador', 'oscilador', 'galaxia', 'galaxia', 'nave', 'nave', 'naveMedia', 'naveGrande', 'planador', 'planador', 'sapo', 'farol'];
+function flipPat(rows, fx, fy) {
+  const wd = Math.max(...rows.map(r => r.length));
+  let r = rows.map(q => q.padEnd(wd, '.'));
+  if (fx) r = r.map(q => [...q].reverse().join(''));
+  return fy ? r.reverse() : r;
+}
+function lifeStart(L, t) {
+  const { C, R } = L, a = new Uint8Array(C * R), occ = new Uint8Array(C * R), rnd = Math.random, items = [];
+  const x0 = Math.round(C * 0.07), x1 = Math.round(C * 0.93), y0 = 3, y1 = R - 2;   // longe dos cantos arredondados da moldura
+  const block = (x, y, bw, bh) => { for (let v = Math.max(0, y); v < Math.min(R, y + bh); v++) for (let u = Math.max(0, x); u < Math.min(C, x + bw); u++) occ[v * C + u] = 1; };
+  const free = (x, y, bw, bh) => { for (let v = y; v < y + bh; v++) for (let u = x; u < x + bw; u++) if (u < 0 || v < 0 || u >= C || v >= R || occ[v * C + u]) return false; return true; };
+  block(Math.round(C * 0.54), Math.round(R * 0.68), Math.round(C * 0.32), R);   // relógio e música ficam aqui
+  const put = k => {
+    const P = LIFE[k], e = P.ext || 0, m = e + 2, bw = Math.max(...P.rows.map(q => q.length)), bh = P.rows.length;
+    for (let tries = 0; tries < 40; tries++) {
+      const x = x0 + Math.floor(rnd() * Math.max(1, x1 - x0 - bw)), y = y0 + Math.floor(rnd() * Math.max(1, y1 - y0 - bh));
+      if (!free(x - m, y - m, bw + 2 * m, bh + 2 * m)) continue;
+      const cx = x + bw / 2, cy = y + bh / 2;
+      // quem anda vai para o lado que tem mais espaço; o canhão atira para o lado mais largo
+      const fx = k === 'canhao' ? cx > C / 2 : P.v ? (P.v[0] < 0 ? cx < C / 2 : cx > C / 2) : rnd() < 0.5;
+      const fy = k === 'canhao' ? cy > R / 2 : P.v && P.v[1] ? cy > R / 2 : rnd() < 0.5;
+      flipPat(P.rows, fx, fy).forEach((q, v) => { for (let u = 0; u < q.length; u++) if (q[u] === 'O') a[(y + v) * C + x + u] = 1; });
+      block(x - m, y - m, bw + 2 * m, bh + 2 * m);
+      items.push({ nome: P.nome, x, y, w: bw, h: bh, e, v: P.v ? [fx ? -P.v[0] : P.v[0], fy ? -P.v[1] : P.v[1]] : null });
+      return true;
+    }
+    return false;
+  };
+  const formas = rnd() < 0.75;
+  if (formas) {
+    put(C >= 45 && rnd() < 0.6 ? 'canhao' : rnd() < 0.5 ? 'semente' : 'bolota');
+    const used = {};
+    for (let n = 3 + Math.floor(rnd() * 3), tries = 0; n > 0 && tries < 40; tries++) {
+      const k = LIFE_EXTRAS[Math.floor(rnd() * LIFE_EXTRAS.length)];
+      if (LIFE[k].max && used[k]) continue;
+      if (put(k)) { used[k] = 1; n--; }
+    }
+  } else {                                                         // manchas de células ao acaso (ou a tela toda)
+    const blobs = rnd() < 0.3 ? 0 : 1 + Math.floor(rnd() * 4);
+    if (!blobs) for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) a[y * C + x] = rnd() < 0.28 ? 1 : 0;
+    for (let b = 0; b < blobs; b++) {
+      const r0 = 3 + rnd() * 6, bx = x0 + r0 + rnd() * Math.max(1, x1 - x0 - 2 * r0), by = y0 + r0 + rnd() * Math.max(1, y1 - y0 - 2 * r0);
+      for (let y = Math.floor(by - r0); y <= by + r0; y++) for (let x = Math.floor(bx - r0); x <= bx + r0; x++)
+        if (x >= 0 && y >= 0 && x < C && y < R && (x - bx) ** 2 + (y - by) ** 2 < r0 * r0 && rnd() < 0.4) a[y * C + x] = 1;
+    }
+  }
+  Object.assign(L, { a, gen: 0, pops: [], since: t, formas, items });
+}
 let LF = null;
-function lifeLayout(C, R) {
-  // o pulsar ocupa até 15×15; a nave passa duas linhas abaixo dele (mais perto, um mexe no outro) e cruza a fila de planadores uns 9 s depois
-  const P = { canhao: [Math.round(C * 0.12), 5], pulsar: [C - 24, 2], oscilador: [Math.round(C * 0.08), R - 7], nave: [C - 8, 18] };
-  if (C < 70) delete P.pulsar;
-  return P;
-}
-function lifeStart(L, mode, t) {
-  const { C, R } = L, a = new Uint8Array(C * R);
-  if (mode === 0) {
-    const P = lifeLayout(C, R);
-    for (const k in P) LIFE_PAT[k].forEach((s, y) => { for (let x = 0; x < s.length; x++) {
-      const u = P[k][0] + x, v = P[k][1] + y; if (s[x] === 'O' && u >= 0 && u < C && v >= 0 && v < R) a[v * C + u] = 1; } });
-  } else for (let y = 2; y < R - 2; y++) for (let x = 2; x < C - 2; x++) a[y * C + x] = Math.random() < 0.3 ? 1 : 0;
-  Object.assign(L, { a, mode, gen: 0, pops: [], since: t });
-}
 export function vida(ctx, w, h, t, color) {
   const cs = Math.max(4, h / 30), C = Math.floor(w / cs), R = Math.floor(h / cs);
-  if (!LF || t < LF.last || LF.C !== C || LF.R !== R) { LF = { C, R, fade: new Float32Array(C * R), acc: 0, last: t }; lifeStart(LF, 0, t); }
+  if (!LF || t < LF.last || LF.C !== C || LF.R !== R) { LF = { C, R, fade: new Float32Array(C * R), acc: 0, last: t }; lifeStart(LF, t); }
   const dt = clamp(t - LF.last, 0, 0.1); LF.last = t; LF.acc += dt;
   while (LF.acc > 0.1) {
     LF.acc -= 0.1; LF.gen++;
@@ -549,7 +516,7 @@ export function vida(ctx, w, h, t, color) {
     LF.a = b;
     LF.pops.push(pop); if (LF.pops.length > 80) LF.pops.shift();
     const still = LF.pops.length === 80 && Math.max(...LF.pops) - Math.min(...LF.pops) < 6;
-    if (still || pop < 4 || t - LF.since > 75) lifeStart(LF, 1 - LF.mode, t);
+    if (still || pop < 4 || t - LF.since > 60) lifeStart(LF, t);
   }
   ctx.fillStyle = '#04060a'; ctx.fillRect(0, 0, w, h);
   const ox = (w - C * cs) / 2, oy = (h - R * cs) / 2, g = Math.max(1, cs * 0.1), sz = cs - 2 * g;
@@ -564,17 +531,19 @@ export function vida(ctx, w, h, t, color) {
     const age = LF.a[i]; if (!age) continue;
     ctx.fillStyle = age === 1 ? '#ffffff' : HUD; ctx.fillRect(ox + (i % C) * cs + g, oy + ((i / C) | 0) * cs + g, sz, sz);
   }
-  const shown = t - LF.since, la = LF.mode === 0 ? clamp((14 - shown) / 3) : 0;
-  if (la > 0) {                                                    // nomes das formas nos primeiros segundos
-    const P = lifeLayout(C, R), fs = Math.max(9, h * 0.045);
-    ctx.save(); ctx.globalAlpha = la * 0.9; ctx.fillStyle = color; ctx.font = `${fs}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const shown = t - LF.since, la = clamp((12 - shown) / 3);
+  if (la > 0 && LF.formas) {                                       // nomes das formas nos primeiros segundos
+    const fs = Math.max(9, h * 0.045);
+    ctx.save(); ctx.fillStyle = color; ctx.font = `${fs}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
-    for (const k in P) {
-      const [txt, ax, ay] = LIFE_NAME[k], nave = k === 'nave', mx = nave ? -LF.gen / 2 : 0;   // a nave anda meia casa por geração
-      ctx.globalAlpha = la * 0.9 * (nave ? clamp((8.5 - shown) / 1.5) : 1);   // e some antes de bater nos planadores
-      ctx.fillText(txt, ox + (P[k][0] + ax + mx) * cs, oy + (P[k][1] + ay) * cs);
+    for (const it of LF.items) {
+      const mv = it.v ? clamp((8.5 - shown) / 1.5) : 1; if (mv <= 0) continue;   // quem anda: o nome some antes de trombar
+      const gx = it.v ? it.v[0] * LF.gen : 0, gy = it.v ? it.v[1] * LF.gen : 0;
+      let ly = it.y - it.e - 1.6; if (ly < 3) ly = it.y + it.h + it.e + 0.3;
+      ctx.globalAlpha = la * 0.9 * mv; ctx.fillText(it.nome, ox + (it.x + it.w / 2 + gx) * cs, oy + (ly + gy) * cs);
     }
     ctx.restore();
   }
-  hudText(ctx, h, [la > 0 ? 'JOGO DA VIDA · nasce com 3 vizinhas, vive com 2 ou 3' : 'JOGO DA VIDA'], w / 2, h * 0.035, 'center');
+  const title = la <= 0 ? 'JOGO DA VIDA' : LF.formas ? 'JOGO DA VIDA · nasce com 3 vizinhas, vive com 2 ou 3' : 'JOGO DA VIDA · células sorteadas';
+  hudText(ctx, h, [title], w / 2, h * 0.035, 'center');
 }
