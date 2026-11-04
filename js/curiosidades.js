@@ -1,7 +1,7 @@
 // Cenas de curiosidades com dados ao vivo:
 // BICHOS VISTOS PERTO: fotos de bichos e plantas que pessoas fotografaram num raio de 50 km do carro (iNaturalist),
 // com o nome em português, quando e onde foram vistos e o crédito da foto. Só entram fotos com licença aberta.
-// Selos na foto: ameaçado de extinção, raro por aqui (poucos registros na região), raro no mundo, endêmico e veio de fora.
+// Selos embaixo da foto: ameaçado de extinção, raro por aqui (poucos registros na região), raro no mundo, endêmico e veio de fora.
 // HOJE NA HISTÓRIA: o que aconteceu neste mesmo dia em outros anos (Wikipédia em português), com a foto do artigo.
 // O que baixa fica guardado; sem dados, a cena termina na hora.
 import { here, load, keep, hudText, HUD, clamp, ease, rng } from './cenas.js';
@@ -149,22 +149,25 @@ function ficha(ctx, w, h, t, color, it, alpha, p, ta) {   // alpha: a foto; ta: 
   ctx.save(); ctx.globalAlpha = alpha; ctx.imageSmoothingEnabled = true;
   ctx.drawImage(borrado(im), -w * 0.05, -h * 0.05, w * 1.1, h * 1.1);   // fundo: a própria foto desfocada e escura
   ctx.fillStyle = 'rgba(3,5,8,0.62)'; ctx.fillRect(0, 0, w, h);
-  const ar = im.naturalWidth / im.naturalHeight, ch = h * 0.84, cw = Math.min(w * 0.46, ch * clamp(ar, 0.72, 1.4)), x0 = w * 0.1, y0 = h * 0.08;
+  // selos de raridade numa faixa embaixo da foto (a foto encolhe um pouco para não cobrir o bicho)
+  const sel = it.sel || (it.sel = selos(o)), rh = h * 0.068, gap = h * 0.014;
+  const ar = im.naturalWidth / im.naturalHeight, ch = h * 0.84 - sel.length * (rh + gap), cw = Math.min(w * 0.46, ch * clamp(ar, 0.72, 1.4)), x0 = w * 0.1, y0 = h * 0.08;
   ctx.save(); caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.clip(); cover(ctx, im, x0, y0, cw, ch, 1.02 + 0.06 * kb); ctx.restore();
   caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.strokeStyle = color; ctx.globalAlpha = alpha * 0.35; ctx.lineWidth = Math.max(1, h * 0.003); ctx.stroke();
-  let py = y0 + h * 0.025;                                          // selos de raridade, colados no alto da foto
-  for (const [tt, sub, cor] of it.sel || (it.sel = selos(o))) {
-    const f1 = Math.max(10, h * 0.042), f2 = Math.max(9, h * 0.034), pad = h * 0.02, px = x0 + h * 0.025;
-    ctx.font = `700 ${f1}px system-ui, sans-serif`; const w1 = ctx.measureText(tt).width;
-    ctx.font = `${f2}px system-ui, sans-serif`; const w2 = ctx.measureText(sub).width;
-    const pw = Math.min(cw - h * 0.05, Math.max(w1, w2) + pad * 2.2), ph = f1 + f2 * 1.15 + pad * 1.4;
-    ctx.globalAlpha = alpha * 0.8; ctx.fillStyle = '#05070a'; caixa(ctx, px, py, pw, ph, ph * 0.22); ctx.fill();
-    ctx.globalAlpha = alpha; ctx.fillStyle = cor; ctx.fillRect(px + pad * 0.45, py + ph * 0.2, Math.max(2, h * 0.006), ph * 0.6);
-    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.font = `700 ${f1}px system-ui, sans-serif`; ctx.fillText(tt, px + pad * 1.2, py + pad * 0.7);
-    ctx.font = `${f2}px system-ui, sans-serif`; ctx.fillStyle = '#ffffff'; ctx.globalAlpha = alpha * 0.85; ctx.fillText(sub, px + pad * 1.2, py + pad * 0.7 + f1 * 1.15);
-    py += ph + h * 0.015;
-  }
+  sel.forEach(([tt, sub, cor], k) => {
+    const py = y0 + ch + gap + k * (rh + gap), pad = h * 0.022, max = w * 0.54 - x0 - pad * 2.6;
+    let f1 = h * 0.04, f2 = h * 0.034, w1, w2;
+    for (let n = 0; n < 6; n++, f1 *= 0.93, f2 *= 0.93) {          // título e explicação numa linha só, diminuindo se não couber
+      ctx.font = `700 ${f1}px system-ui, sans-serif`; w1 = ctx.measureText(tt).width;
+      ctx.font = `${f2}px system-ui, sans-serif`; w2 = ctx.measureText(` · ${sub}`).width;
+      if (w1 + w2 <= max) break;
+    }
+    ctx.globalAlpha = alpha * 0.82; ctx.fillStyle = '#05070a'; caixa(ctx, x0, py, w1 + w2 + pad * 2.6, rh, rh * 0.3); ctx.fill();
+    ctx.globalAlpha = alpha; ctx.fillStyle = cor; ctx.fillRect(x0 + pad * 0.55, py + rh * 0.22, Math.max(2, h * 0.006), rh * 0.56);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = `700 ${f1}px system-ui, sans-serif`; ctx.fillText(tt, x0 + pad * 1.4, py + rh * 0.53);
+    ctx.font = `${f2}px system-ui, sans-serif`; ctx.fillStyle = '#ffffff'; ctx.globalAlpha = alpha * 0.85; ctx.fillText(` · ${sub}`, x0 + pad * 1.4 + w1, py + rh * 0.53);
+  });
   const tx = x0 + cw + w * 0.035, tw = w * 0.96 - tx;
   if (!it.lay || it.lay.w !== w) {                                  // o texto é medido uma vez por foto
     const nome = o.n ? o.n[0].toUpperCase() + o.n.slice(1) : o.s, N = caber(ctx, nome, tw, h * 0.085, h * 0.05, 2, '600 ');
