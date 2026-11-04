@@ -3,16 +3,16 @@
 // e guarda o próprio estado; quando o tempo volta a zero, começa de novo.
 
 const TAU = Math.PI * 2, RAD = Math.PI / 180;
-const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
-const ease = p => (p = clamp(p), p * p * (3 - 2 * p));
-const HUD = '#d8f6ff';
-const load = (k, d) => { try { const v = localStorage.getItem('tr4.' + k); return v ? JSON.parse(v) : d; } catch { return d; } };
-const keep = (k, v) => { try { localStorage.setItem('tr4.' + k, JSON.stringify(v)); } catch {} };
-const here = () => { const p = load('lastPos', null); return p && Number.isFinite(p.lat) ? p : { lat: -23.55, lon: -46.63, padrao: true }; };   // sem GPS ainda: centro de São Paulo
-function rng(seed) {
+export const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+export const ease = p => (p = clamp(p), p * p * (3 - 2 * p));
+export const HUD = '#d8f6ff';
+export const load = (k, d) => { try { const v = localStorage.getItem('tr4.' + k); return v ? JSON.parse(v) : d; } catch { return d; } };
+export const keep = (k, v) => { try { localStorage.setItem('tr4.' + k, JSON.stringify(v)); } catch {} };
+export const here = () => { const p = load('lastPos', null); return p && Number.isFinite(p.lat) ? p : { lat: -23.55, lon: -46.63, padrao: true }; };   // sem GPS ainda: centro de São Paulo
+export function rng(seed) {
   return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
-function hudText(ctx, h, lines, x, y, align = 'left') {
+export function hudText(ctx, h, lines, x, y, align = 'left') {
   const fs = Math.max(10, h * 0.055);
   ctx.save(); ctx.font = `${fs}px monospace`; ctx.textAlign = align; ctx.textBaseline = 'top';
   ctx.fillStyle = HUD; ctx.globalAlpha = 0.85; ctx.shadowColor = '#000'; ctx.shadowBlur = 6;
@@ -24,7 +24,7 @@ function hudText(ctx, h, lines, x, y, align = 'left') {
 // CÉU DE HOJE: estrelas, constelações, Via Láctea, planetas e a Lua na fase certa, calculados pela hora e
 // pelo lugar do carro. De dia mostra o céu das 21h30 de hoje. A vista gira de nordeste até oeste, do horizonte ao zênite.
 // Estrelas: [ascensão reta (graus), declinação (graus), magnitude, cor opcional]
-const ST = {
+export const ST = {
   sirius: [101.287, -16.716, -1.46], canopus: [95.988, -52.696, -0.74], acen: [219.90, -60.835, -0.27, '#ffe9c4'], arcturus: [213.915, 19.182, -0.05, '#ffd29a'],
   vega: [279.234, 38.784, 0.03], capella: [79.172, 45.998, 0.08, '#fff2c8'], rigel: [78.634, -8.202, 0.13, '#cfe0ff'], procyon: [114.825, 5.225, 0.34],
   achernar: [24.429, -57.237, 0.46, '#cfe0ff'], betelgeuse: [88.793, 7.407, 0.5, '#ffb070'], hadar: [210.956, -60.373, 0.61, '#cfe0ff'], altair: [297.696, 8.868, 0.77],
@@ -73,7 +73,7 @@ function helio(el, T) {
 }
 const EPS = 23.43928 * RAD;
 function eclToEq(x, y, z) { const ye = y * Math.cos(EPS) - z * Math.sin(EPS), ze = y * Math.sin(EPS) + z * Math.cos(EPS); return [((Math.atan2(ye, x) / RAD) + 360) % 360, Math.atan2(ze, Math.hypot(x, ye)) / RAD]; }
-function skyAt(date, lat, lon) {
+export function skyAt(date, lat, lon) {
   const d = date.getTime() / 86400000 + 2440587.5 - 2451545.0, T = d / 36525;
   const lst = ((280.46061837 + 360.98564736629 * d + lon) % 360 + 360) % 360, phi = lat * RAD;
   const altaz = (ra, dec) => {

@@ -4,6 +4,7 @@
 
 import { drone } from './lidar.js';
 import { ceu, regiao, previsao, cardume, vida } from './cenas.js';
+import { satelites, terremotos, terra } from './mundo.js';
 import { pipes, maze } from './retro3d.js';
 import { loadJohnnyFiles, extraURL, extrasReady } from './store.js';
 
@@ -449,11 +450,12 @@ joni.untilDone = true;
 export const ANIMS = {
   equalizer, road, warp, topo, scope,
   pipes, maze, rain, ocean, drone, compass, glow, johnny, joni,
-  ceu, regiao, previsao, cardume, vida,
+  ceu, regiao, previsao, cardume, vida, satelites, terremotos, terra,
 };
 export const ANIM_NAMES = {
   equalizer: 'Equalizador', road: 'Estrada retrô', warp: 'Hiperespaço', topo: 'Mapa topográfico', scope: 'Osciloscópio',
   pipes: 'Canos 3D', maze: 'Labirinto de tijolos', rain: 'Chuva de dados', ocean: 'Oceano digital', drone: 'Escaneamento por drone',
   compass: 'Bússola giroscópica', glow: 'Brilho ciano', johnny: 'Johnny Castaway', joni: 'Aventuras do Joni',
   ceu: 'Céu de hoje', regiao: 'Relevo da região', previsao: 'Previsão do tempo', cardume: 'Cardume', vida: 'Jogo da Vida',
+  satelites: 'Satélites sobre você', terremotos: 'Terremotos do mundo', terra: 'Terra dia e noite',
 };
