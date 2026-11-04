@@ -964,7 +964,7 @@ const FIELDS = {
   sRollLimit: 'rollLimit', sPitchLimit: 'pitchLimit',
   sScreenW: 'screenW', sOffX: 'offX', sOffY: 'offY', sMask: 'mask', sOutline: 'outline',
   sVoice: 'voice', sTheme: 'theme', sNightDim: 'nightDim', sSpotifyId: 'spotifyClient',
-  sAnims: 'anims', sClipSec: 'clipSec', sSleepMin: 'sleepMin', sSleepUnplug: 'sleepUnplug', sCenaRelogio: 'cenaRelogio', sMapTilt: 'mapTilt',
+  sAnims: 'anims', sClipSec: 'clipSec', sSleepUnplug: 'sleepUnplug', sCenaRelogio: 'cenaRelogio', sMapTilt: 'mapTilt',
 };
 
 function renderAnims() {
@@ -1343,7 +1343,7 @@ async function keepAwake() {
 
 // Apagar a tela: o painel cobre tudo de preto e solta a trava de tela acesa; o Android apaga a tela pelo
 // tempo de desligar dele (5 s no G42). Acende de novo pelo botão de ligar ou quando a energia volta.
-let lastTouch = Date.now(), holdTimer = 0, holdAt = null;
+let holdTimer = 0, holdAt = null;
 function sleepScreen() {
   if (asleep) return;
   asleep = true;
@@ -1354,13 +1354,12 @@ function sleepScreen() {
 }
 function wakeScreen() {
   if (!asleep) return;
-  asleep = false; lastTouch = Date.now();
+  asleep = false;
   $('sleep').hidden = true;
   keepAwake(); pageVideo();
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { wakeScreen(); keepAwake(); } });
 addEventListener('pointerdown', e => {
-  lastTouch = Date.now();
   if (asleep) { wakeScreen(); return; }
   if (e.target.closest('#wing-left, #settings, #fitter, .sound-box')) return;   // o relógio é para as configurações
   holdAt = [e.clientX, e.clientY];
@@ -1368,15 +1367,14 @@ addEventListener('pointerdown', e => {
 }, true);
 addEventListener('pointermove', e => { if (holdAt && Math.hypot(e.clientX - holdAt[0], e.clientY - holdAt[1]) > 30) { clearTimeout(holdTimer); holdAt = null; } }, true);
 for (const ev of ['pointerup', 'pointercancel']) addEventListener(ev, () => { clearTimeout(holdTimer); holdAt = null; }, true);
-setInterval(() => { if (!asleep && S.sleepMin > 0 && Date.now() - lastTouch > S.sleepMin * 60000) sleepScreen(); }, 10000);
-// energia do carro: parou de carregar (ignição desligada) por 10 s, apaga a tela; a energia voltou, acende
+// energia do carro: parou de carregar (ignição desligada) por 1 minuto, apaga a tela; a energia voltou, acende
 // (o Android acende a tela sozinho ao ligar o carregador). Só reage à mudança: abrir o app na bateria não apaga.
 navigator.getBattery?.().then(b => {
   let timer = 0;
   b.addEventListener('chargingchange', () => {
     clearTimeout(timer);
     if (b.charging) { wakeScreen(); return; }
-    if (S.sleepUnplug !== false) timer = setTimeout(() => { if (!b.charging) sleepScreen(); }, 10000);
+    if (S.sleepUnplug !== false) timer = setTimeout(() => { if (!b.charging) sleepScreen(); }, 60000);
   });
 }).catch(() => {});
 

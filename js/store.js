@@ -29,9 +29,8 @@ export const DEFAULTS = {
   videoSound: false,        // som dos vídeos do standby/página Vídeos (botão no ícone)
   videoVolume: 0.7,         // volume quando o som está ligado (barra que abre no ícone)
   mapTilt: true,            // mapa inclinado em perspectiva
-  sleepMin: 20,             // apaga a tela depois de tantos minutos sem toque (0 = nunca)
   cenaRelogio: true,        // relógio e temperaturas junto das cenas (página Vídeos e standby); desligado, a cena ganha o espaço
-  sleepUnplug: true,        // apaga a tela 10 s depois que a energia do carro cai (o celular para de carregar)
+  sleepUnplug: true,        // apaga a tela 1 minuto depois que a energia do carro cai (o celular para de carregar)
   animOff: [],              // animações desligadas uma a uma
   mediaOff: [],             // (antigo) vídeos desligados um a um; hoje é por pasta
   folderOff: [],            // pastas de vídeos/GIFs desligadas (pasta nova entra ligada)
