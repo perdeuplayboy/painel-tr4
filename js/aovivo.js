@@ -258,8 +258,10 @@ export function ar(ctx, w, h, t, color) {
     AS = { w, h, pm, P: Array.from({ length: n }, () => [r() * w, r() * h * 0.85, r() * TAU, 0.6 + r() * 1.6]), hills: Array.from({ length: 41 }, (_, i) => 0.6 + 0.4 * Math.abs(Math.sin(i * 0.9 + 1)) * r()) };
   }
   const dt = clamp(t - (AS.last ?? t), 0, 0.1); AS.last = t;
-  if (day && sunAlt > 0) {                                          // sol, mais alto quanto mais alto ele está
-    const sx = w * 0.2, sy = h * (0.75 - 0.6 * clamp(sunAlt / 70)), sr = Math.max(5, h * 0.05);
+  const gx = w * 0.2, gy = h * 0.47, gr = h * 0.3, a0 = Math.PI * 0.75, a1 = Math.PI * 2.25, av = clamp((d.us_aqi ?? 0) / 300);   // mostrador do índice
+  const x0 = w * 0.42, gw = Math.max(3, h * 0.035);
+  if (day && sunAlt > 0) {                                          // sol, mais alto quanto mais alto ele está, no vão entre o mostrador e o texto
+    const vao = x0 - (gx + gr + gw / 2), sx = gx + gr + gw / 2 + vao / 2, sy = h * (0.75 - 0.6 * clamp(sunAlt / 70)), sr = Math.max(5, Math.min(h * 0.05, vao * 0.3));
     const gl = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr * 4); gl.addColorStop(0, 'rgba(255,220,120,.5)'); gl.addColorStop(1, 'rgba(255,220,120,0)');
     ctx.fillStyle = gl; ctx.fillRect(sx - sr * 4, sy - sr * 4, sr * 8, sr * 8); ctx.fillStyle = '#ffd35a'; ctx.beginPath(); ctx.arc(sx, sy, sr, 0, TAU); ctx.fill();
   }
@@ -270,14 +272,13 @@ export function ar(ctx, w, h, t, color) {
     ctx.globalAlpha = 0.45; ctx.fillRect(q[0], q[1], q[3] * Math.max(1, h / 250), q[3] * Math.max(1, h / 250));
   }
   ctx.globalAlpha = 1;
-  const gx = w * 0.2, gy = h * 0.47, gr = h * 0.3, a0 = Math.PI * 0.75, a1 = Math.PI * 2.25, av = clamp((d.us_aqi ?? 0) / 300);   // mostrador do índice
-  ctx.lineCap = 'round'; ctx.lineWidth = Math.max(3, h * 0.035); ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.beginPath(); ctx.arc(gx, gy, gr, a0, a1); ctx.stroke();
+  ctx.lineCap = 'round'; ctx.lineWidth = gw; ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.beginPath(); ctx.arc(gx, gy, gr, a0, a1); ctx.stroke();
   ctx.strokeStyle = cat[2]; ctx.beginPath(); ctx.arc(gx, gy, gr, a0, a0 + (a1 - a0) * Math.max(0.02, av)); ctx.stroke(); ctx.lineCap = 'butt';
   ctx.fillStyle = cat[2]; ctx.font = `bold ${h * 0.2}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(fmtN(d.us_aqi ?? 0), gx, gy);
   ctx.fillStyle = HUD; ctx.globalAlpha = 0.6; ctx.font = `${Math.max(10, h * 0.05)}px monospace`; ctx.fillText('índice do ar', gx, gy + gr * 0.55); ctx.globalAlpha = 1;
   ctx.fillStyle = '#010205'; ctx.beginPath(); ctx.moveTo(0, h);        // morros
   AS.hills.forEach((v, i) => ctx.lineTo(i / 40 * w, h * (0.9 - v * 0.08))); ctx.lineTo(w, h); ctx.closePath(); ctx.fill();
-  const x0 = w * 0.42, uv = d.uv_index ?? 0, uvn = UVN.find(u => uv < u[0])[1];
+  const uv = d.uv_index ?? 0, uvn = UVN.find(u => uv < u[0])[1];
   const lines = [`poeira fina (PM2,5): ${fmtN(pm)} µg/m³ · grossa: ${fmtN(d.pm10 ?? 0)}`, `ozônio ${fmtN(d.ozone ?? 0)} · dióxido de nitrogênio ${fmtN(d.nitrogen_dioxide ?? 0)}`,
     day ? `sol (UV) agora: ${uv.toFixed(0)}, ${uvn}${uv >= 6 ? ' · use protetor' : ''}` : `sol (UV): 0 · é noite`];
   if (d.uvMax != null && d.uvMax > 0) lines.push(`UV mais forte hoje: ${d.uvMax.toFixed(0)}, ${UVN.find(u => d.uvMax < u[0])[1]}, às ${d.uvMaxH}h`);
