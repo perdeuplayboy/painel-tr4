@@ -594,20 +594,21 @@ export function avioes(ctx, w, h, t, color) {
     }
   }
   const CL = cities(p);
-  if (CL) {                                                         // cidades dentro dos 50 km, as maiores primeiro, sem trombar
+  if (CL) {                                                         // até 12 cidades dentro dos 50 km, sem trombar
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = HUD;
+    // vale mais a cidade grande e a que está perto: uma pequena a 5 km conta mais do que uma igual a 45 km
+    const pick = CL.map(c => ({ c, d: kmBetween(p, c) })).filter(o => o.d <= 50).sort((a, b) => b.c.pop / (1 + b.d / 10) - a.c.pop / (1 + a.d / 10));
     let nc = 0;
-    for (const c of CL) {
-      if (nc >= 40) break;
-      if (kmBetween(p, c) > 50) continue;
-      const big = c.pop >= 20000, cfs = fs * (big ? 0.85 : 0.72); ctx.font = `${cfs}px monospace`;   // as menores em letra menor
+    for (const { c } of pick) {
+      if (nc >= 12) break;
+      const big = c.pop >= 50000, cfs = fs * (big ? 0.82 : 0.72); ctx.font = `${cfs}px monospace`;
       const [x, y] = P(c.lat, c.lon), tw = ctx.measureText(c.n).width, dr = Math.max(1.2, h * (big ? 0.006 : 0.0045));
       for (const [x0, y0] of [[x + dr + 3, y], [x - dr - 3 - tw, y], [x - tw / 2, y - cfs * 0.95], [x - tw / 2, y + cfs * 0.95]]) {   // do lado, em cima ou embaixo
         const bx = [x0 - 2, y0 - cfs * 0.55, x0 + tw + 2, y0 + cfs * 0.55];
         if (x0 < w * 0.05 || !free(bx)) continue;
         taken.push(bx, [x - dr - 1, y - dr - 1, x + dr + 1, y + dr + 1]); nc++;
-        ctx.globalAlpha = big ? 0.5 : 0.35; ctx.beginPath(); ctx.arc(x, y, dr, 0, TAU); ctx.fill();
-        ctx.globalAlpha = big ? 0.6 : 0.42; ctx.fillText(c.n, x0, y0); break;
+        ctx.globalAlpha = big ? 0.45 : 0.3; ctx.beginPath(); ctx.arc(x, y, dr, 0, TAU); ctx.fill();
+        ctx.globalAlpha = big ? 0.5 : 0.36; ctx.fillText(c.n, x0, y0); break;
       }
     }
     ctx.globalAlpha = 1;
