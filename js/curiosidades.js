@@ -116,7 +116,7 @@ function onde(p, o) {
 let BS = null;
 export function bichos(ctx, w, h, t, color) {
   const p = here(), key = `${p.lat.toFixed(1)},${p.lon.toFixed(1)}`;
-  if (BX.key !== key) { const c = load('bichos', null); if (c?.v === 2 && c.key === key && c.list?.length) Object.assign(BX, { key, list: c.list, total: c.total, at: c.at, i: 0 }); }
+  if (BX.key !== key) { const c = load('bichos', null); if (c?.v === 2 && c.key === key && c.list?.length) Object.assign(BX, { key, list: c.list, total: c.total, at: c.at, i: load('bichos.i', 0) % c.list.length }); }   // continua de onde parou
   if ((BX.key !== key || Date.now() - BX.at > 6 * 3600000) && !BX.loading && online() && Date.now() - BX.tried > 120000) loadBichos(p, key);
   ctx.fillStyle = '#05080a'; ctx.fillRect(0, 0, w, h);
   const L = BX.key === key ? BX.list : null;
@@ -124,28 +124,26 @@ export function bichos(ctx, w, h, t, color) {
     if ((!BX.loading && t > 1) || t > 12) return true;
     hudText(ctx, h, ['BICHOS VISTOS PERTO · procurando…'], w / 2, h * 0.45, 'center'); return;
   }
-  if (!BS || t < BS.last) BS = { cur: null, prev: null, t0: 0 };
+  if (!BS || t < BS.last) BS = { cur: null, t0: 0 };
   BS.last = t;
-  const D = 5.5;
-  if (!BS.cur || t - BS.t0 > D) {                                   // a próxima entra quando a atual cumpriu o tempo e a foto já chegou
+  if (!BS.cur) {                                                    // um bicho por vez: fica a cena inteira, e o próximo vem na próxima vez
     for (let k = 0; k < Math.min(6, L.length); k++) {
       const j = (BX.i + k) % L.length, o = L[j];
       if (falhou(o.u)) continue;
       const im = foto(o.u); if (!im) continue;
-      BS.prev = BS.cur; BS.cur = { o, im, lay: null }; BS.t0 = t; BX.i = (j + 1) % L.length; break;
+      BS.cur = { o, im, lay: null }; BS.t0 = t; BX.i = (j + 1) % L.length; keep('bichos.i', BX.i); break;
     }
   }
-  for (let k = 0; k < 3; k++) foto(L[(BX.i + k) % L.length].u);    // já vai pedindo as próximas
+  for (let k = 0; k < 3; k++) foto(L[(BX.i + k) % L.length].u);    // a foto do próximo já vai chegando
   if (!BS.cur) {
     if (t > 12) return true;
     hudText(ctx, h, ['BICHOS VISTOS PERTO · carregando as fotos…'], w / 2, h * 0.45, 'center'); return;
   }
   const a = ease((t - BS.t0) / 0.8);
-  if (BS.prev && a < 1) ficha(ctx, w, h, t, color, BS.prev, 1, p, 1 - clamp(a * 2));
   ficha(ctx, w, h, t, color, BS.cur, a, p, clamp(a * 2 - 1));
 }
-function ficha(ctx, w, h, t, color, it, alpha, p, ta) {   // alpha: a foto; ta: o texto (o velho some antes de o novo aparecer)
-  const { o, im } = it, kb = clamp((t - BS.t0 + (it === BS.prev ? 5.5 : 0)) / 6.5);
+function ficha(ctx, w, h, t, color, it, alpha, p, ta) {   // alpha: a foto; ta: o texto (entra depois da foto)
+  const { o, im } = it, kb = clamp((t - BS.t0) / 25);              // a foto chega mais perto devagar, a cena inteira
   ctx.save(); ctx.globalAlpha = alpha; ctx.imageSmoothingEnabled = true;
   ctx.drawImage(borrado(im), -w * 0.05, -h * 0.05, w * 1.1, h * 1.1);   // fundo: a própria foto desfocada e escura
   ctx.fillStyle = 'rgba(3,5,8,0.62)'; ctx.fillRect(0, 0, w, h);
