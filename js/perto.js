@@ -73,7 +73,7 @@ async function loadLugares(p) {
     if (cid.length && km(cid[0]) < 4) list.push(cid.shift());
     while (cid.length || out.length) { for (let n = 0; n < 2 && out.length; n++) list.push(out.shift()); if (cid.length) list.push(cid.shift()); }
     Object.assign(LG, { c: { lat: p.lat, lon: p.lon }, list: list.slice(0, 30), at: Date.now(), i: 0 });
-    keep('lugares', { v: 1, c: LG.c, at: LG.at, list: LG.list });
+    keep('lugares', { v: 1, c: LG.c, at: LG.at, list: LG.list }); keep('lugares.i', 0);   // lista nova: começa por onde você está
   } catch {}
   LG.loading = false;
 }
@@ -86,7 +86,7 @@ function ondeFica(p, o, L) {
 let LS = null;
 export function lugares(ctx, w, h, t, color) {
   const p = here();
-  if (!LG.list) { const c = load('lugares', null); if (c?.v === 1 && c.list) Object.assign(LG, { c: c.c, list: c.list, at: c.at, i: 0 }); }
+  if (!LG.list) { const c = load('lugares', null); if (c?.v === 1 && c.list) Object.assign(LG, { c: c.c, list: c.list, at: c.at, i: c.list.length ? load('lugares.i', 0) % c.list.length : 0 }); }   // continua de onde parou
   const dist = LG.c ? kmBetween(p, LG.c) : Infinity;
   if ((dist > 8 || Date.now() - LG.at > 14 * 86400000) && !LG.loading && online() && Date.now() - LG.tried > 120000) loadLugares(p);
   ctx.fillStyle = '#05080a'; ctx.fillRect(0, 0, w, h);
@@ -95,23 +95,21 @@ export function lugares(ctx, w, h, t, color) {
     if ((!LG.loading && t > 1) || t > 15) return true;
     hudText(ctx, h, ['LUGARES PERTO · procurando…'], w / 2, h * 0.45, 'center'); return;
   }
-  if (!LS || t < LS.last) LS = { cur: null, prev: null, t0: 0 };
+  if (!LS || t < LS.last) LS = { cur: null, t0: 0 };
   LS.last = t;
-  const D = 8;
-  if (!LS.cur || t - LS.t0 > D) {                                   // o próximo lugar: espera a foto chegar (ou desiste dela)
-    let pick = -1;
-    for (let k = 0; k < Math.min(6, L.length); k++) { const j = (LG.i + k) % L.length, o = L[j]; if (!o.u || falhou(o.u) || foto(o.u)) { pick = j; break; } }
-    if (pick < 0 && (!LS.cur ? t > 3 : t - LS.t0 > D + 3)) pick = LG.i % L.length;
-    if (pick >= 0) { const o = L[pick]; LS.prev = LS.cur; LS.cur = { o, im: o.u ? foto(o.u) : null, lay: null }; LS.t0 = t; LG.i = (pick + 1) % L.length; }
+  if (!LS.cur) {                                                    // um lugar por vez: fica a cena inteira, e o próximo vem na próxima vez
+    let pick = -1;                                                  // espera a foto chegar (ou desiste dela e mostra o radar)
+    for (let k = 0; k < Math.min(6, L.length); k++) { const j = (LG.i + k) % L.length, o = L[j]; if (!o.u || falhou(o.u) || foto(o.u)) { pick = j; break; } if (t < 3) break; }   // 3 s pela foto da vez; depois, o próximo que estiver pronto
+    if (pick < 0 && t > 5) pick = LG.i % L.length;
+    if (pick >= 0) { const o = L[pick]; LS.cur = { o, im: o.u ? foto(o.u) : null, lay: null }; LS.t0 = t; LG.i = (pick + 1) % L.length; keep('lugares.i', LG.i); }
   }
-  for (let k = 0; k < 3; k++) { const o = L[(LG.i + k) % L.length]; if (o.u) foto(o.u); }   // já vai pedindo as próximas
-  if (!LS.cur) { hudText(ctx, h, ['LUGARES PERTO · carregando as fotos…'], w / 2, h * 0.45, 'center'); return; }
+  for (let k = 0; k < 3; k++) { const o = L[(LG.i + k) % L.length]; if (o.u) foto(o.u); }   // a foto do próximo já vai chegando
+  if (!LS.cur) { hudText(ctx, h, ['LUGARES PERTO · carregando a foto…'], w / 2, h * 0.45, 'center'); return; }
   const a = ease((t - LS.t0) / 0.8);
-  if (LS.prev && a < 1) cartao(ctx, w, h, t, color, LS.prev, 1, p, 1 - clamp(a * 2), L);
   cartao(ctx, w, h, t, color, LS.cur, a, p, clamp(a * 2 - 1), L);
 }
 function cartao(ctx, w, h, t, color, it, A, p, ta, L) {             // A: a foto (ou o radar); ta: o texto
-  const { o, im } = it, k = t - LS.t0 + (it === LS.prev ? 8 : 0), x0 = w * 0.1, y0 = h * 0.08, ch = h * 0.84;
+  const { o, im } = it, k = t - LS.t0, x0 = w * 0.1, y0 = h * 0.08, ch = h * 0.84;
   let cw;
   ctx.save(); ctx.globalAlpha = A;
   if (im) {
@@ -119,7 +117,7 @@ function cartao(ctx, w, h, t, color, it, A, p, ta, L) {             // A: a foto
     ctx.drawImage(borrado(im), -w * 0.05, -h * 0.05, w * 1.1, h * 1.1);   // fundo: a própria foto desfocada e escura
     ctx.fillStyle = 'rgba(3,5,8,0.62)'; ctx.fillRect(0, 0, w, h);
     cw = Math.min(w * 0.46, ch * clamp(im.naturalWidth / im.naturalHeight, 0.72, 1.4));
-    ctx.save(); caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.clip(); cover(ctx, im, x0, y0, cw, ch, 1.02 + 0.06 * clamp(k / 9)); ctx.restore();
+    ctx.save(); caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.clip(); cover(ctx, im, x0, y0, cw, ch, 1.02 + 0.06 * clamp(k / 25)); ctx.restore();
     caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.strokeStyle = color; ctx.globalAlpha = A * 0.35; ctx.lineWidth = Math.max(1, h * 0.003); ctx.stroke();
   } else {
     ctx.fillStyle = '#05080a'; ctx.fillRect(0, 0, w, h);

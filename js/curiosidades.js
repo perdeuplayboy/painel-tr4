@@ -130,7 +130,7 @@ export function bichos(ctx, w, h, t, color) {
     for (let k = 0; k < Math.min(6, L.length); k++) {
       const j = (BX.i + k) % L.length, o = L[j];
       if (falhou(o.u)) continue;
-      const im = foto(o.u); if (!im) continue;
+      const im = foto(o.u); if (!im) { if (t < 3) break; continue; }   // 3 s pela foto da vez; depois, o próximo que estiver pronto
       BS.cur = { o, im, lay: null }; BS.t0 = t; BX.i = (j + 1) % L.length; keep('bichos.i', BX.i); break;
     }
   }
@@ -228,7 +228,7 @@ async function loadHist(day) {
     items.sort((a, b) => a.pr - b.pr || ord.get(a) - ord.get(b));   // destaques e Brasil primeiro; tragédias por último
     const datas = (hol.holidays || []).map(x => x.text.replace(/\.$/, '').trim()).filter(s => /^Dia /.test(s) && !s.includes(' - ') && s.length < 40).slice(0, 2);
     Object.assign(WK, { day, list: items, hol: datas, i: 0 });
-    keep('historia', { day, list: items, hol: datas });
+    keep('historia', { day, list: items, hol: datas }); keep('historia.i', { day, i: 0 });
   } catch {}
   WK.loading = false;
 }
@@ -236,7 +236,7 @@ let HS = null;
 const anoTxt = y => y < 0 ? `${-y} a.C.` : String(y);
 export function historia(ctx, w, h, t, color) {
   const now = new Date(), day = `${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
-  if (WK.day !== day) { const c = load('historia', null); if (c?.day === day && c.list?.length) Object.assign(WK, { day, list: c.list, hol: c.hol || [], i: 0 }); }
+  if (WK.day !== day) { const c = load('historia', null), ci = load('historia.i', null); if (c?.day === day && c.list?.length) Object.assign(WK, { day, list: c.list, hol: c.hol || [], i: ci?.day === day ? ci.i % c.list.length : 0 }); }   // continua de onde parou
   if (WK.day !== day && !WK.loading && online() && Date.now() - WK.tried > 120000) loadHist(day);
   const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#0b0906'); g.addColorStop(1, '#050403');
   ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
@@ -245,15 +245,16 @@ export function historia(ctx, w, h, t, color) {
     if ((!WK.loading && t > 1) || t > 12) return true;
     hudText(ctx, h, ['HOJE NA HISTÓRIA · procurando…'], w / 2, h * 0.45, 'center'); return;
   }
-  if (!HS || t < HS.last) HS = { cur: null, from: null, t0: 0 };
+  if (!HS || t < HS.last) HS = { cur: null, t0: 0, imT: null };
   HS.last = t;
-  const D = 7.5, Y = now.getFullYear();
-  if (!HS.cur || t - HS.t0 > D) {                                   // o próximo fato (espera a foto chegar, se tiver)
-    const o = L[WK.i % L.length], ok = !o.img || foto(o.img) || falhou(o.img) || t - HS.t0 > D + 3;
-    if (ok || !HS.cur) { HS.from = HS.cur ? HS.cur.o.y : Y; HS.cur = { o, lay: null }; HS.t0 = t; WK.i = (WK.i + 1) % L.length; }
+  const Y = now.getFullYear();
+  if (!HS.cur) {                                                    // um fato por vez: fica a cena inteira, e o próximo vem na próxima vez
+    const o = L[WK.i % L.length];
+    if (!o.img || foto(o.img) || falhou(o.img) || t > 3) { HS.cur = { o, lay: null }; HS.t0 = t; WK.i = (WK.i + 1) % L.length; keep('historia.i', { day, i: WK.i }); }
+    else return;                                                    // a foto ainda está chegando (já vem pedida da vez anterior)
   }
-  if (L.length > 1) { const nx = L[WK.i % L.length]; if (nx.img) foto(nx.img); }
-  const { o } = HS.cur, k = t - HS.t0, roll = ease(k / 1.3), fade = ease((k - 1.1) / 0.8), out = 1 - ease((k - D + 0.4) / 0.4);
+  if (L.length > 1) { const nx = L[WK.i % L.length]; if (nx.img) foto(nx.img); }   // a foto do próximo já vai chegando
+  const { o } = HS.cur, k = t - HS.t0, roll = ease(k / 1.6), fade = ease((k - 1.4) / 0.8), out = 1;
   // cabeçalho, com as datas comemorativas de hoje
   ctx.font = `${Math.max(10, h * 0.055)}px monospace`;
   const cabe = s => ctx.measureText(s).width <= w * 0.45;
@@ -271,7 +272,7 @@ export function historia(ctx, w, h, t, color) {
   for (const ty of [1500, 1800, 1900, 1950, 2000]) if (ty > y0 + 40) { const x = X(ty); ctx.globalAlpha = 0.3; ctx.fillRect(x - 0.5, ly - h * 0.012, 1, h * 0.024); ctx.globalAlpha = 0.35; ctx.fillText(String(ty), x, ly + h * 0.02); }
   ctx.fillStyle = HUD; ctx.globalAlpha = 0.35;
   for (const q of L) { ctx.beginPath(); ctx.arc(X(q.y), ly, Math.max(1.5, h * 0.004), 0, TAU); ctx.fill(); }
-  const yr = Math.round(HS.from + (o.y - HS.from) * roll), mx = X(HS.from + (o.y - HS.from) * roll);
+  const yr = Math.round(Y + (o.y - Y) * roll), mx = X(Y + (o.y - Y) * roll);   // o ano volta de hoje até o do fato
   ctx.globalAlpha = 1; ctx.fillStyle = color; ctx.beginPath(); ctx.arc(mx, ly, Math.max(3, h * 0.013), 0, TAU); ctx.fill();
   // o ano rodando até o do fato, e quantos anos faz
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = out;
@@ -283,13 +284,14 @@ export function historia(ctx, w, h, t, color) {
   if (!HS.cur.lay || HS.cur.lay.w !== w) HS.cur.lay = { w, T: caber(ctx, o.txt, w * 0.41, h * 0.05, h * 0.034, 99, '', h * 0.27) };
   const { T } = HS.cur.lay;
   ctx.font = `${T.f}px system-ui, sans-serif`; ctx.fillStyle = '#f4efe6'; ctx.textBaseline = 'top';
-  T.L.forEach((s, i) => { ctx.globalAlpha = out * ease((k - 1.2 - i * 0.12) / 0.6); ctx.fillText(s, lx0, h * 0.67 + i * T.f * 1.28); });
+  T.L.forEach((s, i) => { ctx.globalAlpha = out * ease((k - 1.5 - i * 0.12) / 0.6); ctx.fillText(s, lx0, h * 0.67 + i * T.f * 1.28); });
   // a foto do artigo, do lado direito (sem descer até o relógio)
   const im = o.img ? foto(o.img) : null;
   if (im) {
     const bx = w * 0.62, by = h * 0.1, bw = w * 0.3, bh = h * 0.58, s = Math.min(bw / im.naturalWidth, bh / im.naturalHeight);
-    const iw = im.naturalWidth * s, ih = im.naturalHeight * s, ix = bx + (bw - iw) / 2, iy = by + (bh - ih) / 2, z = 1 + 0.04 * clamp(k / D);
-    ctx.globalAlpha = out * ease((k - 0.6) / 0.8);
+    const iw = im.naturalWidth * s, ih = im.naturalHeight * s, ix = bx + (bw - iw) / 2, iy = by + (bh - ih) / 2, z = 1 + 0.05 * clamp(k / 25);
+    if (HS.imT === null) HS.imT = k;                               // foto que chegou atrasada aparece aos poucos
+    ctx.globalAlpha = out * ease((k - Math.max(0.6, HS.imT)) / 0.8);
     ctx.save(); caixa(ctx, ix, iy, iw, ih, h * 0.02); ctx.clip(); ctx.drawImage(im, ix - iw * (z - 1) / 2, iy - ih * (z - 1) / 2, iw * z, ih * z); ctx.restore();
     caixa(ctx, ix, iy, iw, ih, h * 0.02); ctx.strokeStyle = color; ctx.globalAlpha *= 0.35; ctx.lineWidth = Math.max(1, h * 0.003); ctx.stroke();
   }
