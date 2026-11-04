@@ -451,13 +451,15 @@ export function terra(ctx, w, h, t, color) {
 // =====================================================================================
 // AVIÕES PASSANDO AGORA: o radar dos aviões em volta do carro, pelos sinais que os próprios aviões transmitem (ADS-B,
 // rede aberta adsb.lol). Os sites de aviões não deixam o painel ler direto, então passa por um intermediário seu
-// (Cloudflare Worker, código em cloudflare/avioes.js). A rota de cada voo vem do adsbdb. Entre uma leitura e outra
+// (Cloudflare Worker, código em cloudflare/avioes.js). A rota de cada voo vem do adsbdb e as cidades em volta, do
+// OpenStreetMap. Entre uma leitura e outra
 // (a cada 10 s) cada avião segue no rumo e na velocidade que informou, para andar liso na tela.
 const AV_PADRAO = 'https://tr4-avioes.perdeuplayboy.workers.dev';  // o intermediário no Cloudflare
 const AV = { list: [], at: 0, loading: false, fail: 0, routes: null, asking: 0, trail: new Map(), tAt: 0 };
 const PLANE_D = 'M0,-10L1.5,-7L1.5,-2L9,3L9,5L1.5,2.5L1.2,7L4,9L4,10.5L0,9.5L-4,10.5L-4,9L-1.2,7L-1.5,2.5L-9,5L-9,3L-1.5,-2L-1.5,-7Z';   // avião visto de cima
 let PLANE = null;
 const CAT = { A1: 0.65, A2: 0.8, A3: 1, A4: 1.1, A5: 1.3 };
+const AV_FONTE = 'dados: adsb.lol, adsbdb, OpenStreetMap';
 const avUrl = () => load('avioesUrl', null) || AV_PADRAO;
 function predict(a, ms) {                                           // onde o avião está agora, seguindo rumo e velocidade
   const km = a.gs * 1.852 * clamp((ms - a.at) / 3600000, 0, 60 / 3600), tr = a.trk * RAD;
@@ -494,6 +496,23 @@ function route(cs) {                                                // de onde v
     }).catch(() => { delete AV.routes[cs]; });
   }
   return null;
+}
+// cidades em volta (OpenStreetMap, pelo Overpass): busca uma vez por região de ~10 km e fica guardado
+const CID = { key: '', list: null, loading: false, failAt: 0 };
+function cities(p) {
+  const key = `cidades.${p.lat.toFixed(1)},${p.lon.toFixed(1)}`;
+  if (CID.key === key || CID.loading || Date.now() - CID.failAt < 120000) return CID.key === key ? CID.list : null;
+  CID.key = key; CID.list = load(key, null);
+  if (!CID.list && online()) {
+    CID.loading = true;
+    const q = `[out:json][timeout:40];node(around:65000,${p.lat.toFixed(2)},${p.lon.toFixed(2)})["place"~"^(city|town)$"];out body;`;
+    fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(q), { signal: AbortSignal.timeout(60000) }).then(r => r.json()).then(j => {
+      const list = j.elements.filter(e => e.tags?.name).map(e => ({ n: e.tags.name, lat: e.lat, lon: e.lon, pop: +(e.tags.population || '').replace(/\D/g, '') || (e.tags.place === 'city' ? 50000 : 0) }))
+        .sort((a, b) => b.pop - a.pop).slice(0, 60);
+      keep(key, list); if (CID.key === key) CID.list = list;
+    }).catch(() => { CID.key = ''; CID.failAt = Date.now(); }).finally(() => { CID.loading = false; });
+  }
+  return CID.list;
 }
 let AS = null;
 export function avioes(ctx, w, h, t, color) {
@@ -560,7 +579,7 @@ export function avioes(ctx, w, h, t, color) {
   const near = flying[0], who = a => a.cs || a.reg || a.hex.toUpperCase();
   const hud = ['AVIÕES AGORA', `${n50} no raio de 50 km`, near ? `mais perto: ${who(near)} a ${fmtN(near.km)} km` : 'nenhum voando por perto', p.padrao ? 'sem GPS: centro de São Paulo' : null].filter(Boolean);
   const hfs = Math.max(10, h * 0.055), hx = w * 0.64; ctx.font = `${hfs}px monospace`;
-  const taken = [[hx - 6, 0, hx + Math.max(...hud.map(s => ctx.measureText(s).width)) + 6, h * 0.08 + hud.length * hfs * 1.3 + 4], [w * 0.55, h * 0.7, w, h], ...marks];   // texto do canto, relógio e marcas
+  const taken = [[hx - 6, 0, hx + Math.max(...hud.map(s => ctx.measureText(s).width)) + 6, h * 0.08 + (hud.length + 1) * hfs * 1.3 + 4], [w * 0.55, h * 0.7, w, h], ...marks];   // texto do canto (com a fonte dos dados), relógio e marcas
   const free = b => !taken.some(o => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]);
   ctx.font = `${fs}px monospace`;
   let labels = 0;
@@ -576,6 +595,24 @@ export function avioes(ctx, w, h, t, color) {
       if (x0 < w * 0.06 || x0 + tw > w * 0.97 || y0 < h * 0.04 || y0 + th > h * 0.96 || !free(b)) continue;
       taken.push(b); a.label = [lines, x0, y0]; labels++; break;
     }
+  }
+  const CL = cities(p);
+  if (CL) {                                                         // cidades dentro dos 50 km, as maiores primeiro, sem trombar
+    ctx.font = `${fs * 0.85}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = HUD;
+    let nc = 0;
+    for (const c of CL) {
+      if (nc >= 16) break;
+      if (kmBetween(p, c) > 50) continue;
+      const [x, y] = P(c.lat, c.lon), tw = ctx.measureText(c.n).width, dr = Math.max(1.2, h * 0.006);
+      for (const side of [1, -1]) {
+        const x0 = side > 0 ? x + dr + 3 : x - dr - 3 - tw, b = [x0 - 2, y - fs * 0.5, x0 + tw + 2, y + fs * 0.5];
+        if (x0 < w * 0.05 || !free(b)) continue;
+        taken.push(b); nc++;
+        ctx.globalAlpha = 0.4; ctx.beginPath(); ctx.arc(x, y, dr, 0, TAU); ctx.fill();
+        ctx.globalAlpha = 0.5; ctx.fillText(c.n, x0, y); break;
+      }
+    }
+    ctx.globalAlpha = 1;
   }
   for (const a of AV.list) {
     const [x, y] = a.xy; if (x < -20 || x > w + 20 || y < -20 || y > h + 20) continue;
@@ -594,5 +631,6 @@ export function avioes(ctx, w, h, t, color) {
   }
   ctx.globalAlpha = 1;
   hudText(ctx, h, hud, hx, h * 0.08);
-  say(ctx, h, 'dados: adsb.lol · adsbdb', w * 0.13, h * 0.86, 0.35);
+  ctx.font = `${Math.max(9, h * 0.04)}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.35;
+  ctx.fillText(AV_FONTE, hx, h * 0.08 + hud.length * hfs * 1.3 + 2); ctx.globalAlpha = 1;   // fonte dos dados embaixo do texto, longe do radar
 }
