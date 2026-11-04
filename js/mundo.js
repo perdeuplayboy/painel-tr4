@@ -497,18 +497,19 @@ function route(cs) {                                                // de onde v
   }
   return null;
 }
-// cidades em volta (OpenStreetMap, pelo Overpass): busca uma vez por região de ~10 km e fica guardado
+// cidades em volta (OpenStreetMap, pelo Overpass): busca uma vez por região de ~10 km e fica guardado. Entram as
+// marcadas como cidade e as "vilas" com população cadastrada (no interior, quase toda sede de município pequeno é vila).
 const CID = { key: '', list: null, loading: false, failAt: 0 };
 function cities(p) {
-  const key = `cidades.${p.lat.toFixed(1)},${p.lon.toFixed(1)}`;
+  const key = `cidades2.${p.lat.toFixed(1)},${p.lon.toFixed(1)}`;
   if (CID.key === key || CID.loading || Date.now() - CID.failAt < 120000) return CID.key === key ? CID.list : null;
   CID.key = key; CID.list = load(key, null);
   if (!CID.list && online()) {
     CID.loading = true;
-    const q = `[out:json][timeout:40];node(around:65000,${p.lat.toFixed(2)},${p.lon.toFixed(2)})["place"~"^(city|town)$"];out body;`;
+    const q = `[out:json][timeout:40];node(around:65000,${p.lat.toFixed(2)},${p.lon.toFixed(2)})["place"~"^(city|town|village)$"];out body;`;
     fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(q), { signal: AbortSignal.timeout(60000) }).then(r => r.json()).then(j => {
-      const list = j.elements.filter(e => e.tags?.name).map(e => ({ n: e.tags.name, lat: e.lat, lon: e.lon, pop: +(e.tags.population || '').replace(/\D/g, '') || (e.tags.place === 'city' ? 50000 : 0) }))
-        .sort((a, b) => b.pop - a.pop).slice(0, 60);
+      const list = j.elements.filter(e => e.tags?.name && (e.tags.place !== 'village' || e.tags.population)).map(e => ({ n: e.tags.name, lat: e.lat, lon: e.lon, pop: +(e.tags.population || '').replace(/\D/g, '') || (e.tags.place === 'city' ? 50000 : 0) }))
+        .sort((a, b) => b.pop - a.pop).slice(0, 90);
       keep(key, list); if (CID.key === key) CID.list = list;
     }).catch(() => { CID.key = ''; CID.failAt = Date.now(); }).finally(() => { CID.loading = false; });
   }
@@ -540,12 +541,8 @@ export function avioes(ctx, w, h, t, color) {
   ctx.strokeStyle = color; ctx.lineWidth = lw;                      // círculos de 10, 25 e 50 km
   for (const r of [10, 25, 50]) { ctx.globalAlpha = r === 50 ? 0.3 : 0.18; ctx.beginPath(); ctx.arc(cx, cy, r * k, 0, TAU); ctx.stroke(); }
   const marks = [];                                                 // o que os nomes dos aviões não podem cobrir
-  ctx.globalAlpha = 0.5; ctx.fillStyle = HUD; ctx.font = `${fs * 0.85}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  for (const r of [10, 25, 50]) {
-    const x = cx - r * k * 0.71 - 3, y = cy + r * k * 0.71, s = `${r} km`, tw = ctx.measureText(s).width;   // embaixo à esquerda de cada círculo
-    ctx.textAlign = 'right'; ctx.fillText(s, x, y); marks.push([x - tw - 2, y - fs * 0.5, x + 2, y + fs * 0.5]);
-  }
-  ctx.textAlign = 'center'; ctx.fillStyle = '#ff6a5a'; ctx.globalAlpha = 0.9; ctx.fillText('N', cx, cy - 50 * k + fs * 0.6);
+  ctx.font = `${fs * 0.85}px monospace`; ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center'; ctx.fillStyle = '#ff6a5a'; ctx.globalAlpha = 0.9; ctx.fillText('N', cx, cy - 50 * k + fs * 0.6); marks.push([cx - fs * 0.5, cy - 50 * k + fs * 0.1, cx + fs * 0.5, cy - 50 * k + fs * 1.1]);
   ctx.globalAlpha = 1;
   for (const a of AV.list) {                                        // posição de agora, sem pulo quando chega leitura nova
     let [la, lo] = predict(a, now);
@@ -598,22 +595,34 @@ export function avioes(ctx, w, h, t, color) {
   }
   const CL = cities(p);
   if (CL) {                                                         // cidades dentro dos 50 km, as maiores primeiro, sem trombar
-    ctx.font = `${fs * 0.85}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = HUD;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = HUD;
     let nc = 0;
     for (const c of CL) {
-      if (nc >= 16) break;
+      if (nc >= 40) break;
       if (kmBetween(p, c) > 50) continue;
-      const [x, y] = P(c.lat, c.lon), tw = ctx.measureText(c.n).width, dr = Math.max(1.2, h * 0.006);
-      for (const side of [1, -1]) {
-        const x0 = side > 0 ? x + dr + 3 : x - dr - 3 - tw, b = [x0 - 2, y - fs * 0.5, x0 + tw + 2, y + fs * 0.5];
-        if (x0 < w * 0.05 || !free(b)) continue;
-        taken.push(b); nc++;
-        ctx.globalAlpha = 0.4; ctx.beginPath(); ctx.arc(x, y, dr, 0, TAU); ctx.fill();
-        ctx.globalAlpha = 0.5; ctx.fillText(c.n, x0, y); break;
+      const big = c.pop >= 20000, cfs = fs * (big ? 0.85 : 0.72); ctx.font = `${cfs}px monospace`;   // as menores em letra menor
+      const [x, y] = P(c.lat, c.lon), tw = ctx.measureText(c.n).width, dr = Math.max(1.2, h * (big ? 0.006 : 0.0045));
+      for (const [x0, y0] of [[x + dr + 3, y], [x - dr - 3 - tw, y], [x - tw / 2, y - cfs * 0.95], [x - tw / 2, y + cfs * 0.95]]) {   // do lado, em cima ou embaixo
+        const bx = [x0 - 2, y0 - cfs * 0.55, x0 + tw + 2, y0 + cfs * 0.55];
+        if (x0 < w * 0.05 || !free(bx)) continue;
+        taken.push(bx, [x - dr - 1, y - dr - 1, x + dr + 1, y + dr + 1]); nc++;
+        ctx.globalAlpha = big ? 0.5 : 0.35; ctx.beginPath(); ctx.arc(x, y, dr, 0, TAU); ctx.fill();
+        ctx.globalAlpha = big ? 0.6 : 0.42; ctx.fillText(c.n, x0, y0); break;
       }
     }
     ctx.globalAlpha = 1;
   }
+  ctx.font = `${fs * 0.8}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.45;
+  for (const r of [10, 25, 50]) {                                   // distâncias em cima do círculo, onde sobrar espaço
+    const s = `${r} km`, tw = ctx.measureText(s).width;
+    for (const ang of [225, 315, 135, 45, 270, 180]) {
+      const x = cx + Math.cos(ang * RAD) * r * k - tw / 2, y = cy - Math.sin(ang * RAD) * r * k, bx = [x - 2, y - fs * 0.45, x + tw + 2, y + fs * 0.45];
+      if (!free(bx)) continue;
+      taken.push(bx); ctx.fillStyle = '#02050a'; ctx.globalAlpha = 0.8; ctx.fillRect(bx[0], bx[1], bx[2] - bx[0], bx[3] - bx[1]);
+      ctx.fillStyle = HUD; ctx.globalAlpha = 0.45; ctx.fillText(s, x, y); break;
+    }
+  }
+  ctx.globalAlpha = 1;
   for (const a of AV.list) {
     const [x, y] = a.xy; if (x < -20 || x > w + 20 || y < -20 || y > h + 20) continue;
     const s = h * 0.0045 * (CAT[a.cat] || 1);
