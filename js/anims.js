@@ -5,6 +5,7 @@
 import { drone } from './lidar.js';
 import { ceu, regiao, previsao, cardume, vida } from './cenas.js';
 import { satelites, terremotos, terra, avioes } from './mundo.js';
+import { chuva, vento, lua, ar } from './aovivo.js';
 import { pipes, maze } from './retro3d.js';
 import { loadJohnnyFiles, extraURL, extrasReady } from './store.js';
 
@@ -451,6 +452,7 @@ export const ANIMS = {
   equalizer, road, warp, topo, scope,
   pipes, maze, rain, ocean, drone, compass, glow, johnny, joni,
   ceu, regiao, previsao, cardume, vida, satelites, terremotos, terra, avioes,
+  chuva, vento, lua, ar,
 };
 export const ANIM_NAMES = {
   equalizer: 'Equalizador', road: 'Estrada retrô', warp: 'Hiperespaço', topo: 'Mapa topográfico', scope: 'Osciloscópio',
@@ -458,4 +460,5 @@ export const ANIM_NAMES = {
   compass: 'Bússola giroscópica', glow: 'Brilho ciano', johnny: 'Johnny Castaway', joni: 'Aventuras do Joni',
   ceu: 'Céu de hoje', regiao: 'Relevo da região', previsao: 'Previsão do tempo', cardume: 'Cardume', vida: 'Jogo da Vida',
   satelites: 'Satélites sobre você', terremotos: 'Terremotos do mundo', terra: 'Terra dia e noite', avioes: 'Aviões passando agora',
+  chuva: 'Radar de chuva', vento: 'Vento agora', lua: 'Lua de hoje', ar: 'Qualidade do ar',
 };

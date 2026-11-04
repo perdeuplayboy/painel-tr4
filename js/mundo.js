@@ -671,3 +671,5 @@ export function avioes(ctx, w, h, t, color) {
   ctx.font = `${Math.max(9, h * 0.04)}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.35;
   ctx.fillText(AV_FONTE, hx, h * 0.08 + hud.length * hfs * 1.3 + 2); ctx.globalAlpha = 1;   // fonte dos dados embaixo do texto, longe do radar
 }
+
+export { world, cities, kmBetween, sunEq, moonEq, altOf, wrap, hhmm, online, fmtN, say };
