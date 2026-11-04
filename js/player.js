@@ -3,6 +3,8 @@
 import { ANIMS } from './anims.js';
 import { TELA } from './cenas.js';
 
+const BAG = 'tr4.baralho';                                            // o que ainda falta passar nesta rodada
+
 export class Player {
   // box: elemento onde as mídias entram; items(): [{ kind: 'video'|'image'|'anim', url?, anim?, weight? }] (weight: chance relativa, padrão 1)
   // opts: { clipMs(): tempo de GIF/animação, color(): cor das animações }
@@ -41,11 +43,24 @@ export class Player {
     this.video.hidden = this.img.hidden = this.canvas.hidden = true;
   }
 
-  pick(list, avoid) {                                                     // sorteio pelo peso, sem repetir o mesmo seguido
-    const weights = list.map((it, k) => (list.length > 1 && k === avoid ? 0 : it.weight ?? 1));
-    let r = Math.random() * weights.reduce((a, b) => a + b, 0), i = 0;
-    while (i < list.length - 1 && (r -= weights[i]) >= 0) i++;
-    return i;
+  // Baralho: cada item passa uma vez, em ordem embaralhada, antes de algum repetir. Fica guardado no aparelho
+  // (o painel reabre a cada vez que o carro liga) e é o mesmo para o standby e a página Vídeos.
+  // weight < 1: entra só em parte das rodadas (o Johnny, que tem muitas cenas, entra em 1 de cada 4).
+  pick(list, avoid) {
+    if (list.length < 2) return 0;
+    const key = it => `${it.kind}|${it.anim || it.url}`, keys = list.map(key), ex = keys[avoid];
+    let bag = []; try { bag = JSON.parse(localStorage.getItem(BAG) || '[]'); } catch {}
+    bag = bag.filter(k => keys.includes(k));
+    if (bag.length > 1 && bag[0] === ex) bag.push(bag.shift());
+    if (!bag.length) {                                                    // acabou a rodada: embaralha uma nova
+      bag = keys.filter((k, j) => Math.random() < (list[j].weight ?? 1));
+      if (bag.length < 2) bag = [...keys];
+      for (let j = bag.length - 1; j > 0; j--) { const r = Math.floor(Math.random() * (j + 1)); [bag[j], bag[r]] = [bag[r], bag[j]]; }
+      if (bag[0] === ex) bag.push(bag.shift());                         // o que acabou de passar não abre a rodada
+    }
+    const k = bag.shift();
+    try { localStorage.setItem(BAG, JSON.stringify(bag)); } catch {}
+    return keys.indexOf(k);
   }
 
   next(chosen) {
