@@ -596,7 +596,7 @@ const playerOpts = {
 
 let asleep = false;                                                   // tela apagada (ver sleepScreen)
 const sb = { on: false, forced: false, engineOffSince: null, stoppedSince: null, suppressUntil: 0, moveTimer: 0 };
-const sbPlayer = new Player($('standby'), mediaItems, { ...playerOpts, relogio: true });
+const sbPlayer = new Player($('standby'), mediaItems, { ...playerOpts, relogio: () => S.cenaRelogio });
 
 function moveStandbyClock() {
   const c = $('sbClock');
@@ -682,6 +682,8 @@ setInterval(showSoundBtn, 500);
 const pgPlayer = new Player($('videoPage'), mediaItems, playerOpts);
 function pageVideo() {
   $('pgVideoEmpty').hidden = !pgPlayer.empty;
+  $('screen').classList.toggle('semrelogio', !S.cenaRelogio && PAGES[page] === 'video');   // a cena ocupa o lugar do relógio
+  $('sbClock').hidden = !S.cenaRelogio;
   if (PAGES[page] === 'video' && !sb.on && !asleep && $('settings').hidden) pgPlayer.start(); else pgPlayer.stop();
   if (pgPlayer.on && !pgPlayer.cur && !pgPlayer.empty) pgPlayer.next();     // lista era vazia e ganhou itens
 }
@@ -962,7 +964,7 @@ const FIELDS = {
   sRollLimit: 'rollLimit', sPitchLimit: 'pitchLimit',
   sScreenW: 'screenW', sOffX: 'offX', sOffY: 'offY', sMask: 'mask', sOutline: 'outline',
   sVoice: 'voice', sTheme: 'theme', sNightDim: 'nightDim', sSpotifyId: 'spotifyClient',
-  sAnims: 'anims', sClipSec: 'clipSec', sSleepMin: 'sleepMin', sSleepUnplug: 'sleepUnplug', sMapTilt: 'mapTilt',
+  sAnims: 'anims', sClipSec: 'clipSec', sSleepMin: 'sleepMin', sSleepUnplug: 'sleepUnplug', sCenaRelogio: 'cenaRelogio', sMapTilt: 'mapTilt',
 };
 
 function renderAnims() {

@@ -90,7 +90,7 @@ export class Player {
         c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      TELA.relogio = !!this.opts.relogio;                                 // standby: relógio no canto da cena
+      const rel = this.opts.relogio; TELA.relogio = !!(typeof rel === 'function' ? rel() : rel);   // standby: relógio no canto da cena
       if (draw(ctx, w, h, (now - t0) / 1000, this.opts.color()) === true) this.next();   // a animação terminou
     };
     this.raf = requestAnimationFrame(frame);

@@ -72,6 +72,8 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 
 /* ---- área central e páginas ---- */
 #center { position: absolute; left: 23rem; right: 10rem; top: 3.5rem; bottom: 2.5rem; }
+#screen.semrelogio #wing-left { display: none; }
+#screen.semrelogio #center { left: 11rem; }   /* sem o relógio: a cena vai até perto da ponta arredondada */
 .page { position: absolute; inset: 0; display: none; flex-direction: column; }
 .page.on { display: flex; }
 .page h2 {
