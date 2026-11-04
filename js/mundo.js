@@ -453,7 +453,7 @@ export function terra(ctx, w, h, t, color) {
 // rede aberta adsb.lol). Os sites de aviões não deixam o painel ler direto, então passa por um intermediário seu
 // (Cloudflare Worker, código em cloudflare/avioes.js). A rota de cada voo vem do adsbdb. Entre uma leitura e outra
 // (a cada 10 s) cada avião segue no rumo e na velocidade que informou, para andar liso na tela.
-const AV_PADRAO = '';                                               // endereço do intermediário (…workers.dev)
+const AV_PADRAO = 'https://tr4-avioes.perdeuplayboy.workers.dev';  // o intermediário no Cloudflare
 const AV = { list: [], at: 0, loading: false, fail: 0, routes: null, asking: 0, trail: new Map(), tAt: 0 };
 const PLANE_D = 'M0,-10L1.5,-7L1.5,-2L9,3L9,5L1.5,2.5L1.2,7L4,9L4,10.5L0,9.5L-4,10.5L-4,9L-1.2,7L-1.5,2.5L-9,5L-9,3L-1.5,-2L-1.5,-7Z';   // avião visto de cima
 let PLANE = null;
