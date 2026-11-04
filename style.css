@@ -281,6 +281,8 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 #screen.cfg #shift { visibility: hidden; }   /* nas pontas da janela, em volta das configurações, só preto */
 #settings header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; position: sticky; top: 0; z-index: 1; background: #0b0d10; padding: 6px 0; }
 #settings h1 { font-size: 20px; font-weight: 600; }
+#settings .hbtns { display: flex; gap: 6px; }
+#settings .hbtns .pill { padding: 8px 14px; }
 #settings h3 { font-size: 15px; color: var(--accent); margin: 18px 0 8px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
 #settings section { max-width: 760px; margin: 0 auto; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
 #settings label { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; }

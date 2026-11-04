@@ -1231,6 +1231,17 @@ for (const [id, key] of Object.entries(FIELDS)) {
 }
 
 $('btnClose').addEventListener('click', closeSettings);
+// botões do topo, para não precisar tirar a capa do painel
+$('btnUpdate').addEventListener('click', async e => {             // baixa a versão nova do site e recarrega
+  e.target.textContent = 'atualizando…';
+  try { await (await navigator.serviceWorker?.getRegistration())?.update(); } catch {}
+  location.reload();
+});
+$('btnSleep').addEventListener('click', () => { closeSettings(); sleepScreen(); });   // um toque na tela acende de novo
+$('btnQuit').addEventListener('click', e => {
+  window.close();                                                   // o Android deixa o app instalado se fechar
+  setTimeout(() => { e.target.textContent = 'use o botão início'; }, 400);   // se não deixou
+});
 $('btnConnect').addEventListener('click', pickAdapter);
 $('btnEngine').addEventListener('click', () => { src.setEngine?.(!src.engineOn); updateSettingsInfo(); });
 $('sFolder').addEventListener('change', async e => {         // pasta inteira: só os vídeos e GIFs dela
