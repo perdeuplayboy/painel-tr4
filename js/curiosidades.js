@@ -1,7 +1,7 @@
 // Cenas de curiosidades com dados ao vivo:
 // BICHOS VISTOS PERTO: fotos de bichos e plantas que pessoas fotografaram num raio de 50 km do carro (iNaturalist),
 // com o nome em português, quando e onde foram vistos e o crédito da foto. Só entram fotos com licença aberta.
-// Selos embaixo da foto: ameaçado de extinção, raro por aqui (poucos registros na região), raro no mundo, endêmico e veio de fora.
+// Selos ao lado da foto: ameaçado de extinção, raro por aqui (poucos registros na região), raro no mundo, endêmico e veio de fora.
 // HOJE NA HISTÓRIA: o que aconteceu neste mesmo dia em outros anos (Wikipédia em português), com a foto do artigo.
 // O que baixa fica guardado; sem dados, a cena termina na hora.
 import { here, load, keep, hudText, HUD, clamp, ease, rng } from './cenas.js';
@@ -149,46 +149,58 @@ function ficha(ctx, w, h, t, color, it, alpha, p, ta) {   // alpha: a foto; ta: 
   ctx.save(); ctx.globalAlpha = alpha; ctx.imageSmoothingEnabled = true;
   ctx.drawImage(borrado(im), -w * 0.05, -h * 0.05, w * 1.1, h * 1.1);   // fundo: a própria foto desfocada e escura
   ctx.fillStyle = 'rgba(3,5,8,0.62)'; ctx.fillRect(0, 0, w, h);
-  // selos de raridade numa faixa embaixo da foto (a foto encolhe um pouco para não cobrir o bicho)
-  const sel = it.sel || (it.sel = selos(o)), rh = h * 0.068, gap = h * 0.014;
-  const ar = im.naturalWidth / im.naturalHeight, ch = h * 0.84 - sel.length * (rh + gap), cw = Math.min(w * 0.46, ch * clamp(ar, 0.72, 1.4)), x0 = w * 0.1, y0 = h * 0.08;
+  const ar = im.naturalWidth / im.naturalHeight, ch = h * 0.84, cw = Math.min(w * 0.46, ch * clamp(ar, 0.72, 1.4)), x0 = w * 0.1, y0 = h * 0.08;
   ctx.save(); caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.clip(); cover(ctx, im, x0, y0, cw, ch, 1.02 + 0.06 * kb); ctx.restore();
   caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.strokeStyle = color; ctx.globalAlpha = alpha * 0.35; ctx.lineWidth = Math.max(1, h * 0.003); ctx.stroke();
-  sel.forEach(([tt, sub, cor], k) => {
-    const py = y0 + ch + gap + k * (rh + gap), pad = h * 0.022, max = w * 0.54 - x0 - pad * 2.6;
-    let f1 = h * 0.04, f2 = h * 0.034, w1, w2;
-    for (let n = 0; n < 6; n++, f1 *= 0.93, f2 *= 0.93) {          // título e explicação numa linha só, diminuindo se não couber
-      ctx.font = `700 ${f1}px system-ui, sans-serif`; w1 = ctx.measureText(tt).width;
-      ctx.font = `${f2}px system-ui, sans-serif`; w2 = ctx.measureText(` · ${sub}`).width;
-      if (w1 + w2 <= max) break;
-    }
-    ctx.globalAlpha = alpha * 0.82; ctx.fillStyle = '#05070a'; caixa(ctx, x0, py, w1 + w2 + pad * 2.6, rh, rh * 0.3); ctx.fill();
-    ctx.globalAlpha = alpha; ctx.fillStyle = cor; ctx.fillRect(x0 + pad * 0.55, py + rh * 0.22, Math.max(2, h * 0.006), rh * 0.56);
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.font = `700 ${f1}px system-ui, sans-serif`; ctx.fillText(tt, x0 + pad * 1.4, py + rh * 0.53);
-    ctx.font = `${f2}px system-ui, sans-serif`; ctx.fillStyle = '#ffffff'; ctx.globalAlpha = alpha * 0.85; ctx.fillText(` · ${sub}`, x0 + pad * 1.4 + w1, py + rh * 0.53);
-  });
   const tx = x0 + cw + w * 0.035, tw = w * 0.96 - tx;
-  if (!it.lay || it.lay.w !== w) {                                  // o texto é medido uma vez por foto
-    const nome = o.n ? o.n[0].toUpperCase() + o.n.slice(1) : o.s, N = caber(ctx, nome, tw, h * 0.085, h * 0.05, 2, '600 ');
-    it.lay = { w, N, gr: (GRUPO[o.g] || 'ser vivo').toUpperCase(), q: quando(o.d), ond: onde(p, o) };
-  }
-  const { N, gr, q, ond } = it.lay;
-  ctx.globalAlpha = ta; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  if (!it.lay || it.lay.w !== w) it.lay = { w, ops: coluna(ctx, w, h, o, p, tw, color) };   // o texto é medido uma vez por foto
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   say(ctx, h, 'VISTOS PERTO DE VOCÊ', tx, h * 0.08, ta * 0.85);
-  ctx.font = `${Math.max(9, h * 0.036)}px monospace`; ctx.fillStyle = HUD; ctx.globalAlpha = ta * 0.5;
-  ctx.fillText(`${fmtN(BX.total)} registros num raio de 50 km`, tx, h * 0.155);
-  let y = h * 0.24;
-  ctx.font = `600 ${Math.max(10, h * 0.042)}px system-ui, sans-serif`; ctx.fillStyle = color; ctx.globalAlpha = ta * 0.95; ctx.fillText(gr, tx, y); y += h * 0.065;
-  ctx.font = `600 ${N.f}px system-ui, sans-serif`; ctx.fillStyle = '#ffffff'; ctx.globalAlpha = ta;
-  for (const s of N.L) { ctx.fillText(s, tx, y); y += N.f * 1.12; }
-  if (o.n) { ctx.font = `italic ${Math.max(10, h * 0.048)}px system-ui, sans-serif`; ctx.fillStyle = HUD; ctx.globalAlpha = ta * 0.7; ctx.fillText(o.s, tx, y + h * 0.008); y += h * 0.075; }
-  y += h * 0.02;
-  ctx.font = `${Math.max(10, h * 0.045)}px system-ui, sans-serif`; ctx.fillStyle = HUD; ctx.globalAlpha = ta * 0.85;
-  for (const s of [q, ond]) { if (y + h * 0.05 > h * 0.66) break; ctx.fillText(s, tx, y); y += h * 0.062; }
-  ctx.font = `${Math.max(9, h * 0.032)}px system-ui, sans-serif`; ctx.globalAlpha = ta * 0.45;
-  ctx.fillText(`foto: ${o.q || 'iNaturalist'} (${o.l}) · iNaturalist`, tx, Math.min(y + h * 0.02, h * 0.64));
+  for (const op of it.lay.ops) {
+    if (!op.selo) { ctx.font = op.f; ctx.fillStyle = op.c; ctx.globalAlpha = ta * op.a; ctx.fillText(op.s, tx, op.y); continue; }
+    const { tt, ex, cor, y, f1, f2, w1, w2, rh } = op, pad = rh * 0.32;   // selo: título colorido e a explicação, numa linha
+    ctx.globalAlpha = ta * 0.85; ctx.fillStyle = '#05070a'; caixa(ctx, tx, y, w1 + w2 + pad * 2.6, rh, rh * 0.3); ctx.fill();
+    ctx.globalAlpha = ta; ctx.fillStyle = cor; ctx.fillRect(tx + pad * 0.55, y + rh * 0.22, Math.max(2, h * 0.006), rh * 0.56);
+    ctx.textBaseline = 'middle';
+    ctx.font = `700 ${f1}px system-ui, sans-serif`; ctx.fillText(tt, tx + pad * 1.4, y + rh * 0.53);
+    ctx.font = `${f2}px system-ui, sans-serif`; ctx.fillStyle = '#ffffff'; ctx.globalAlpha = ta * 0.85; ctx.fillText(` · ${ex}`, tx + pad * 1.4 + w1, y + rh * 0.53);
+    ctx.textBaseline = 'top';
+  }
   ctx.restore();
+}
+// o texto do lado direito da foto, com os selos de raridade; se não couber até a altura do relógio, aperta as letras
+function coluna(ctx, w, h, o, p, tw, color) {
+  const sel = selos(o), nome = o.n ? o.n[0].toUpperCase() + o.n.slice(1) : o.s, fam = 'px system-ui, sans-serif';
+  let ops = [];
+  for (const [k, sub] of [[1, true], [1, false], [0.93, false], [0.86, false], [0.8, false], [0.74, false]]) {
+    ops = []; let y = h * 0.155;
+    const txt = (s, px, peso, c, a, lh) => {                        // uma linha, diminuindo a letra se passar da largura
+      let f = Math.max(9, h * px * k); ctx.font = `${peso}${f}${fam}`; const lw = ctx.measureText(s).width; if (lw > tw) f *= tw / lw;
+      ops.push({ s, y, f: `${peso}${f}${fam}`, c, a }); y += f * lh;
+    };
+    if (sub) { ops.push({ s: `${fmtN(BX.total)} registros num raio de 50 km`, y, f: `${Math.max(9, h * 0.036)}px monospace`, c: HUD, a: 0.5 }); y += h * 0.085; }
+    else y += h * 0.03;
+    txt((GRUPO[o.g] || 'ser vivo').toUpperCase(), 0.042, '600 ', color, 0.95, 1.5);
+    const N = caber(ctx, nome, tw, h * 0.085 * k, h * 0.05 * k, 2, '600 ');
+    for (const s of N.L) { ops.push({ s, y, f: `600 ${N.f}${fam}`, c: '#ffffff', a: 1 }); y += N.f * 1.12; }
+    if (o.n) { y += h * 0.008; txt(o.s, 0.048, 'italic ', HUD, 0.7, 1.35); }
+    y += h * 0.018 * k;
+    for (const [tt, ex, cor] of sel) {
+      let f1 = h * 0.038 * k, f2 = h * 0.031 * k, w1, w2;
+      for (let n = 0; n < 8; n++, f1 *= 0.93, f2 *= 0.93) {
+        ctx.font = `700 ${f1}${fam}`; w1 = ctx.measureText(tt).width; ctx.font = `${f2}${fam}`; w2 = ctx.measureText(` · ${ex}`).width;
+        if (w1 + w2 + f1 * 1.6 * 0.32 * 2.6 <= tw) break;
+      }
+      const rh = f1 * 1.6; ops.push({ selo: true, tt, ex, cor, y, f1, f2, w1, w2, rh }); y += rh + h * 0.014;
+    }
+    if (sel.length) y += h * 0.006;
+    txt(quando(o.d), 0.045, '', HUD, 0.85, 1.38);
+    txt(onde(p, o), 0.045, '', HUD, 0.85, 1.38);
+    y += h * 0.01;
+    txt(`foto: ${o.q || 'iNaturalist'} (${o.l}) · iNaturalist`, 0.032, '', HUD, 0.45, 1.3);
+    if (y <= h * 0.7) break;                                        // daqui para baixo, do lado direito, fica o relógio
+  }
+  return ops;
 }
 
 // =====================================================================================
