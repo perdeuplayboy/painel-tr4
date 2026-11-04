@@ -1,6 +1,7 @@
 // Cenas com o mundo de verdade, pela internet (o que baixa fica guardado no aparelho):
 // satélites passando sobre o carro agora (órbitas do CelesTrak), terremotos das últimas 24 horas num globo (USGS)
-// e a Terra com o dia e a noite deste instante (mapa do Natural Earth). Sem dados, a cena termina na hora.
+// e a Terra com o dia e a noite deste instante (mapa do Natural Earth), mais os aviões em volta (ADS-B, por um
+// intermediário no Cloudflare). Sem dados, a cena termina na hora.
 import { here, load, keep, hudText, skyAt, ST, HUD, rng, clamp, ease } from './cenas.js';
 
 const TAU = Math.PI * 2, RAD = Math.PI / 180, RE = 6378.137;
@@ -445,4 +446,153 @@ export function terra(ctx, w, h, t, color) {
   const aqui = altOf(sun, sim, S.p.lat, S.p.lon) > -0.833 ? 'aqui é dia' : 'aqui é noite';
   const sol = S.rise && S.set ? `o sol nasce ${hhmm(S.rise)} e se põe ${hhmm(S.set)}` : null;
   hudText(ctx, h, [`TERRA · ${quando}`, sol ? `${aqui} · ${sol}` : aqui], w * 0.14, h * 0.08);
+}
+
+// =====================================================================================
+// AVIÕES PASSANDO AGORA: o radar dos aviões em volta do carro, pelos sinais que os próprios aviões transmitem (ADS-B,
+// rede aberta adsb.lol). Os sites de aviões não deixam o painel ler direto, então passa por um intermediário seu
+// (Cloudflare Worker, código em cloudflare/avioes.js). A rota de cada voo vem do adsbdb. Entre uma leitura e outra
+// (a cada 10 s) cada avião segue no rumo e na velocidade que informou, para andar liso na tela.
+const AV_PADRAO = '';                                               // endereço do intermediário (…workers.dev)
+const AV = { list: [], at: 0, loading: false, fail: 0, routes: null, asking: 0, trail: new Map(), tAt: 0 };
+const PLANE_D = 'M0,-10L1.5,-7L1.5,-2L9,3L9,5L1.5,2.5L1.2,7L4,9L4,10.5L0,9.5L-4,10.5L-4,9L-1.2,7L-1.5,2.5L-9,5L-9,3L-1.5,-2L-1.5,-7Z';   // avião visto de cima
+let PLANE = null;
+const CAT = { A1: 0.65, A2: 0.8, A3: 1, A4: 1.1, A5: 1.3 };
+const avUrl = () => load('avioesUrl', null) || AV_PADRAO;
+function predict(a, ms) {                                           // onde o avião está agora, seguindo rumo e velocidade
+  const km = a.gs * 1.852 * clamp((ms - a.at) / 3600000, 0, 60 / 3600), tr = a.trk * RAD;
+  return [a.lat + km * Math.cos(tr) / 110.57, a.lon + km * Math.sin(tr) / (111.32 * Math.cos(a.lat * RAD))];
+}
+async function loadPlanes(p) {
+  AV.loading = true;
+  try {
+    const j = await (await fetch(`${avUrl()}?lat=${p.lat.toFixed(3)}&lon=${p.lon.toFixed(3)}&r=80`, { signal: AbortSignal.timeout(10000) })).json();
+    const now = Date.now(), old = new Map(AV.list.map(a => [a.hex, a]));
+    AV.list = (j.ac || j.aircraft || []).filter(a => Number.isFinite(a.lat) && Number.isFinite(a.lon) && (a.seen_pos ?? 0) < 60).map(a => {
+      const ground = a.alt_baro === 'ground', prev = old.get(a.hex);
+      return { hex: a.hex, cs: (a.flight || '').trim(), reg: a.r || '', type: a.t || '', cat: a.category || '', lat: a.lat, lon: a.lon,
+        at: now - (a.seen_pos || 0) * 1000, gs: a.gs || 0, trk: a.track ?? a.true_heading ?? 0, ground,
+        alt: ground ? 0 : (a.alt_geom ?? a.alt_baro ?? 0) * 0.3048, vs: a.baro_rate ?? a.geom_rate ?? 0,
+        from: prev?.shown || null, fromAt: now };                   // de onde estava desenhado, para não dar pulo
+    });
+    AV.at = now; AV.fail = 0;
+  } catch { AV.fail++; }
+  AV.loading = false;
+}
+function route(cs) {                                                // de onde vem e para onde vai (fica guardado por 3 dias)
+  if (!AV.routes) AV.routes = load('rotas', {});
+  if (!cs || !/^[A-Z]{3}\d/.test(cs)) return null;                  // só voos de companhia (GLO1234), não prefixos de avião
+  const r = AV.routes[cs];
+  if (r && Date.now() - r.at < 3 * 86400000) return r.v;
+  if (Date.now() - AV.asking > 1200 && online()) {
+    AV.asking = Date.now(); AV.routes[cs] = { at: Date.now(), v: null };
+    fetch(`https://api.adsbdb.com/v0/callsign/${encodeURIComponent(cs)}`, { signal: AbortSignal.timeout(8000) }).then(x => x.json()).then(j => {
+      const f = j?.response?.flightroute, ap = a => a && { code: a.iata_code || a.icao_code, city: a.municipality, lat: a.latitude, lon: a.longitude };
+      AV.routes[cs] = { at: Date.now(), v: f ? { from: ap(f.origin), to: ap(f.destination) } : null };
+      const keys = Object.keys(AV.routes).sort((a, b) => AV.routes[b].at - AV.routes[a].at);
+      keep('rotas', Object.fromEntries(keys.slice(0, 400).map(k => [k, AV.routes[k]])));
+    }).catch(() => { delete AV.routes[cs]; });
+  }
+  return null;
+}
+let AS = null;
+export function avioes(ctx, w, h, t, color) {
+  if (!avUrl()) return true;                                        // sem o intermediário configurado, não tem como
+  const p = here(), now = Date.now();
+  if (now - AV.at > 10000 && !AV.loading && online()) loadPlanes(p);
+  ctx.fillStyle = '#02050a'; ctx.fillRect(0, 0, w, h);
+  if (!AV.at || now - AV.at > 120000) {
+    if ((!AV.loading && (AV.fail || !online())) || t > 10) return true;
+    hudText(ctx, h, ['AVIÕES · procurando…'], w / 2, h * 0.45, 'center'); return;
+  }
+  const W = world();
+  const cx = w * 0.34, cy = h * 0.5, k = h * 0.44 / 50;             // 50 km até a borda de cima
+  const kx = 111.32 * Math.cos(p.lat * RAD) * k, ky = 110.57 * k, P = (la, lo) => [cx + (lo - p.lon) * kx, cy - (la - p.lat) * ky];
+  if (!AS || AS.w !== w || AS.h !== h || AS.lat !== p.lat || AS.lon !== p.lon || (W && !AS.coast)) {
+    AS = { w, h, lat: p.lat, lon: p.lon, coast: null };
+    if (W) {                                                        // litoral e fronteiras por perto, de fundo
+      const coast = new Path2D(), near = ({ ll }) => { for (let q = 0; q < ll.length; q += 2) if (Math.abs(ll[q + 1] - p.lat) < 4 && Math.abs(wrap(ll[q] - p.lon)) < 8) return true; return false; };
+      for (const r of [...W.land.filter(near), ...W.borders.filter(near)]) { const ll = r.ll; for (let q = 0; q < ll.length; q += 2) { const [x, y] = P(ll[q + 1], ll[q]); q ? coast.lineTo(x, y) : coast.moveTo(x, y); } }
+      AS.coast = coast;
+    }
+  }
+  if (AS.coast) { ctx.strokeStyle = color; ctx.globalAlpha = 0.3; ctx.lineWidth = Math.max(1, h * 0.004); ctx.stroke(AS.coast); ctx.globalAlpha = 1; }
+  const fs = Math.max(10, h * 0.05), lw = Math.max(1, h * 0.004);
+  ctx.strokeStyle = color; ctx.lineWidth = lw;                      // círculos de 10, 25 e 50 km
+  for (const r of [10, 25, 50]) { ctx.globalAlpha = r === 50 ? 0.3 : 0.18; ctx.beginPath(); ctx.arc(cx, cy, r * k, 0, TAU); ctx.stroke(); }
+  const marks = [];                                                 // o que os nomes dos aviões não podem cobrir
+  ctx.globalAlpha = 0.5; ctx.fillStyle = HUD; ctx.font = `${fs * 0.85}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  for (const r of [10, 25, 50]) {
+    const x = cx - r * k * 0.71 - 3, y = cy + r * k * 0.71, s = `${r} km`, tw = ctx.measureText(s).width;   // embaixo à esquerda de cada círculo
+    ctx.textAlign = 'right'; ctx.fillText(s, x, y); marks.push([x - tw - 2, y - fs * 0.5, x + 2, y + fs * 0.5]);
+  }
+  ctx.textAlign = 'center'; ctx.fillStyle = '#ff6a5a'; ctx.globalAlpha = 0.9; ctx.fillText('N', cx, cy - 50 * k + fs * 0.6);
+  ctx.globalAlpha = 1;
+  for (const a of AV.list) {                                        // posição de agora, sem pulo quando chega leitura nova
+    let [la, lo] = predict(a, now);
+    if (a.from && now - a.fromAt < 1500) { const q = 1 - ease((now - a.fromAt) / 1500), [la0, lo0] = predict(a, a.fromAt); la += (a.from[0] - la0) * q; lo += (a.from[1] - lo0) * q; }
+    a.shown = [la, lo]; a.xy = P(la, lo); a.km = kmBetween(p, { lat: la, lon: lo }); a.label = null;
+  }
+  if (now - AV.tAt > 2500) {                                        // rastro dos últimos 2 minutos
+    AV.tAt = now; const seen = new Set();
+    for (const a of AV.list) { seen.add(a.hex); const tr = AV.trail.get(a.hex) || []; tr.push(a.shown); if (tr.length > 48) tr.shift(); AV.trail.set(a.hex, tr); }
+    for (const k2 of [...AV.trail.keys()]) if (!seen.has(k2)) AV.trail.delete(k2);
+  }
+  const airports = new Map();
+  for (const a of AV.list) {
+    const tr = AV.trail.get(a.hex);
+    if (tr?.length > 1) {
+      ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.globalAlpha = a.ground ? 0.12 : 0.35; ctx.beginPath();
+      tr.forEach(([la, lo], i) => { const [x, y] = P(la, lo); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.lineTo(...a.xy); ctx.stroke();
+    }
+    if (a.km < 70 && !a.ground) { a.route = route(a.cs); for (const ap of [a.route?.from, a.route?.to]) if (ap?.lat != null) airports.set(ap.code, ap); }
+  }
+  ctx.globalAlpha = 1;
+  for (const ap of airports.values()) {                             // aeroportos das rotas que caem no mapa
+    const [x, y] = P(ap.lat, ap.lon); if (x < 0 || x > w || y < 0 || y > h) continue;
+    ctx.fillStyle = HUD; ctx.globalAlpha = 0.6; ctx.fillRect(x - 2.5, y - 2.5, 5, 5);
+    ctx.font = `${fs * 0.85}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(ap.code, x + 6, y);
+    marks.push([x - 4, y - fs * 0.5, x + 8 + ctx.measureText(ap.code).width, y + fs * 0.5]);
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(cx, cy, Math.max(2, h * 0.012), 0, TAU); ctx.fill();   // o carro
+  const n50 = AV.list.filter(a => a.km <= 50 && !a.ground).length, flying = AV.list.filter(a => !a.ground).sort((a, b) => a.km - b.km);
+  const near = flying[0], who = a => a.cs || a.reg || a.hex.toUpperCase();
+  const hud = ['AVIÕES AGORA', `${n50} no raio de 50 km`, near ? `mais perto: ${who(near)} a ${fmtN(near.km)} km` : 'nenhum voando por perto', p.padrao ? 'sem GPS: centro de São Paulo' : null].filter(Boolean);
+  const hfs = Math.max(10, h * 0.055), hx = w * 0.64; ctx.font = `${hfs}px monospace`;
+  const taken = [[hx - 6, 0, hx + Math.max(...hud.map(s => ctx.measureText(s).width)) + 6, h * 0.08 + hud.length * hfs * 1.3 + 4], [w * 0.55, h * 0.7, w, h], ...marks];   // texto do canto, relógio e marcas
+  const free = b => !taken.some(o => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]);
+  ctx.font = `${fs}px monospace`;
+  let labels = 0;
+  for (const a of flying) {                                         // nome, altura e rota dos mais perto, sem trombar
+    if (labels >= 6 || a.km > 90) break;
+    const [x, y] = a.xy; if (x < 0 || x > w || y < 0 || y > h) continue;
+    const vs = a.vs > 300 ? ' ↑' : a.vs < -300 ? ' ↓' : '', rt = a.route;
+    const lines = [`${who(a)}${a.type ? ' · ' + a.type : ''}`, `${fmtN(a.alt)} m${vs} · ${fmtN(a.gs * 1.852)} km/h`];
+    if (rt?.from?.city && rt?.to?.city) lines.push(`${rt.from.city} → ${rt.to.city}`.slice(0, 34));
+    const tw = Math.max(...lines.map(s => ctx.measureText(s).width)), th = lines.length * fs * 1.15, r = h * 0.04;
+    for (const [dx, dy] of [[1, -1], [1, 1], [-1, -1], [-1, 1]]) {
+      const x0 = dx > 0 ? x + r : x - r - tw, y0 = dy < 0 ? y - r - th : y + r, b = [x0 - 2, y0 - 2, x0 + tw + 2, y0 + th + 2];
+      if (x0 < w * 0.06 || x0 + tw > w * 0.97 || y0 < h * 0.04 || y0 + th > h * 0.96 || !free(b)) continue;
+      taken.push(b); a.label = [lines, x0, y0]; labels++; break;
+    }
+  }
+  for (const a of AV.list) {
+    const [x, y] = a.xy; if (x < -20 || x > w + 20 || y < -20 || y > h + 20) continue;
+    const s = h * 0.0045 * (CAT[a.cat] || 1);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a.trk * RAD); ctx.scale(s, s);
+    ctx.globalAlpha = a.ground ? 0.35 : 1; ctx.fillStyle = a.ground ? '#7a8a96' : a.label ? '#ffffff' : color;
+    if (a.cat === 'A7') { ctx.beginPath(); ctx.arc(0, 0, 5, 0, TAU); ctx.fill(); ctx.fillRect(-10, -0.8, 20, 1.6); ctx.fillRect(-0.8, -10, 1.6, 20); }   // helicóptero
+    else ctx.fill(PLANE ||= new Path2D(PLANE_D));
+    ctx.restore();
+    if (a.label) {
+      const [lines, x0, y0] = a.label;
+      ctx.font = `${fs}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillStyle = HUD; ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
+      lines.forEach((s2, i) => { ctx.globalAlpha = i ? 0.7 : 0.95; ctx.fillText(s2, x0, y0 + i * fs * 1.15); });
+      ctx.shadowBlur = 0;
+    }
+  }
+  ctx.globalAlpha = 1;
+  hudText(ctx, h, hud, hx, h * 0.08);
+  say(ctx, h, 'dados: adsb.lol · adsbdb', w * 0.13, h * 0.86, 0.35);
 }
