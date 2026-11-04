@@ -297,3 +297,5 @@ export function historia(ctx, w, h, t, color) {
   }
   ctx.globalAlpha = 1;
 }
+
+export { foto, falhou, borrado, cover, caixa, linhas, caber, PARA, MESES };

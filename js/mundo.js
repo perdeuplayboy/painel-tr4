@@ -476,6 +476,111 @@ export function terra(ctx, w, h, t, color) {
 }
 
 // =====================================================================================
+// TERRA VISTA DO ESPAÇO: as fotos de verdade da Terra inteira, da câmera EPIC da NASA no satélite DSCOVR, a 1,5 milhão
+// de km, parado entre a Terra e o Sol (por isso a Terra aparece sempre de dia). Passa as fotos do último dia publicado
+// (umas 13, saem com 2 ou 3 dias de atraso), com a Terra girando, e marca onde você está quando o seu lado aparece.
+// Cada foto tem ~220 KB; o aparelho guarda as que já baixou.
+const EP = { list: null, at: 0, loading: false, tried: 0 };
+const EIMG = new Map();
+function epImg(u) {                                                 // a foto já carregada, ou null enquanto chega
+  let im = EIMG.get(u);
+  if (!im) { im = new Image(); im.decoding = 'async'; im.onerror = () => { im.falhou = true; }; im.src = u; EIMG.set(u, im); if (EIMG.size > 20) EIMG.delete(EIMG.keys().next().value); }
+  return im.complete && im.naturalWidth ? im : null;
+}
+const epFalhou = u => EIMG.get(u)?.falhou;
+async function loadEpic() {
+  EP.loading = true; EP.tried = Date.now();
+  try {
+    const r = await fetch('https://epic.gsfc.nasa.gov/api/natural', { signal: AbortSignal.timeout(25000) }); if (!r.ok) throw new Error(r.status);
+    const list = (await r.json()).map(o => {
+      const [d, hm] = (o.date || '').split(' '), P = o.dscovr_j2000_position || {}, c = o.centroid_coordinates || {};
+      return { u: `https://epic.gsfc.nasa.gov/archive/natural/${d.replace(/-/g, '/')}/jpg/${o.image}.jpg`, ms: Date.parse(`${d}T${hm}Z`), la: c.lat, lo: c.lon, km: Math.hypot(P.x, P.y, P.z) || 1.5e6 };
+    }).filter(o => Number.isFinite(o.ms) && Number.isFinite(o.la)).sort((a, b) => a.ms - b.ms);
+    if (list.length) { Object.assign(EP, { list, at: Date.now() }); keep('epic', { list, at: EP.at }); }
+  } catch {}
+  EP.loading = false;
+}
+const visto = (o, p) => Math.sin(o.la * RAD) * Math.sin(p.lat * RAD) + Math.cos(o.la * RAD) * Math.cos(p.lat * RAD) * Math.cos((p.lon - o.lo) * RAD);   // > 0: aparece na foto
+let ES = null;
+export function terraFoto(ctx, w, h, t, color) {
+  if (!EP.list) { const c = load('epic', null); if (c?.list?.length) Object.assign(EP, { list: c.list, at: c.at }); }
+  if ((!EP.list || Date.now() - EP.at > 3 * 3600000) && !EP.loading && online() && Date.now() - EP.tried > 120000) loadEpic();
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+  const L = EP.list;
+  if (!L?.length) {
+    if ((!EP.loading && t > 1) || t > 12) return true;
+    hudText(ctx, h, ['TERRA VISTA DO ESPAÇO · procurando…'], w / 2, h * 0.45, 'center'); return;
+  }
+  if (!ES || t < ES.last || ES.L !== L) {
+    const p = here(), r = rng(11); let k0 = 0;
+    L.forEach((o, i) => { if (visto(o, p) > visto(L[k0], p)) k0 = i; });   // começa pela foto em que você aparece melhor
+    const meu = L.filter(o => visto(o, p) > 0.3);
+    ES = { L, p, k0, cur: -1, prev: -1, t0: 0, first: true, meu: meu.length ? [meu[0].ms, meu[meu.length - 1].ms] : null,
+      stars: Array.from({ length: 140 }, () => [r(), r(), r()]) };
+  }
+  ES.last = t;
+  const S = ES;
+  if (S.cur < 0) {
+    if (epImg(L[S.k0].u)) { S.cur = S.k0; S.t0 = t; }
+    else if (t > 15 || epFalhou(L[S.k0].u)) return true;
+    else { hudText(ctx, h, ['TERRA VISTA DO ESPAÇO · baixando a foto…'], w / 2, h * 0.45, 'center'); return; }
+  } else if (t - S.t0 > (S.cur === S.k0 ? (S.first ? 6 : 3.5) : 1.4)) {   // a próxima foto do dia, se já chegou
+    for (let n = 1; n < L.length; n++) {
+      const j = (S.cur + n) % L.length;
+      if (epImg(L[j].u)) { S.prev = S.cur; S.cur = j; S.t0 = t; S.first = false; break; }
+      if (!epFalhou(L[j].u)) break;                                 // ainda chegando: espera
+    }
+  }
+  for (let n = 1; n <= 3; n++) epImg(L[(S.cur + n) % L.length].u);  // já vai pedindo as próximas
+  const R = h * 0.45, gx = w * 0.1 + R, gy = h * 0.5;
+  ctx.fillStyle = '#ffffff';                                        // estrelas, fora da Terra
+  for (const [x, y, s] of S.stars) { const sx = x * w, sy = y * h; if ((sx - gx) ** 2 + (sy - gy) ** 2 < (R * 1.1) ** 2) continue; ctx.globalAlpha = 0.15 + s * 0.4; ctx.fillRect(sx, sy, 1 + s, 1 + s); }
+  const gl = ctx.createRadialGradient(gx, gy, R * 0.97, gx, gy, R * 1.12); gl.addColorStop(0, 'rgba(90,150,255,0.28)'); gl.addColorStop(1, 'rgba(90,150,255,0)');
+  ctx.globalAlpha = 1; ctx.fillStyle = gl; ctx.fillRect(gx - R * 1.2, gy - R * 1.2, R * 2.4, R * 2.4);   // o brilho da atmosfera
+  const a = ease((t - S.t0) / 0.7);
+  const disco = (i, A) => {
+    const o = L[i], im = epImg(o.u); if (!im) return;
+    // na foto de 1080 px a Terra mede 845 px de largura vista a 1,49 milhão de km; mais longe, fica menor
+    const rr = 0.3912 * 1492869 / o.km, sz = R / rr;
+    ctx.save(); ctx.beginPath(); ctx.arc(gx, gy, R * 1.015, 0, TAU); ctx.clip();
+    ctx.globalAlpha = A; ctx.imageSmoothingEnabled = true; ctx.drawImage(im, gx - sz * 0.503, gy - sz * 0.502, sz, sz); ctx.restore();
+    const v = visto(o, S.p); if (v < 0.12) return;                  // você, se o seu lado aparece
+    const c = Math.cos(S.p.lat * RAD), dl = (S.p.lon - o.lo) * RAD;
+    const x = gx + c * Math.sin(dl) * R, y = gy - (Math.cos(o.la * RAD) * Math.sin(S.p.lat * RAD) - Math.sin(o.la * RAD) * c * Math.cos(dl)) * R;
+    const m = A * clamp((v - 0.12) / 0.2), pr = (t * 0.7) % 1;
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(1.2, h * 0.003); ctx.globalAlpha = m * (1 - pr); ctx.beginPath(); ctx.arc(x, y, h * 0.012 + h * 0.045 * pr, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = m; ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(x, y, Math.max(2, h * 0.007), 0, TAU); ctx.fill();
+    say(ctx, h, S.p.padrao ? 'SÃO PAULO' : 'VOCÊ', x + h * 0.025, y - h * 0.065, m);
+  };
+  if (S.prev >= 0 && a < 1) disco(S.prev, 1);
+  disco(S.cur, a);
+  // à direita: de quando é a foto e de onde ela foi tirada
+  const o = L[S.cur], d = new Date(o.ms), tx = gx + R + w * 0.045, tw = w * 0.96 - tx;
+  const fit = (s, f0, peso = '') => { let f = f0; ctx.font = `${peso}${f}px system-ui, sans-serif`; const lw = ctx.measureText(s).width; if (lw > tw) { f *= tw / lw; ctx.font = `${peso}${f}px system-ui, sans-serif`; } return f; };
+  say(ctx, h, 'TERRA VISTA DO ESPAÇO', tx, h * 0.08);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  const dias = Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(o.ms).setHours(0, 0, 0, 0)) / 86400000);
+  let y = h * 0.19;
+  const linha = (s, f0, peso, c, al, lh) => { const f = fit(s, f0, peso); ctx.fillStyle = c; ctx.globalAlpha = al; ctx.fillText(s, tx, y); y += f * lh; };
+  linha(`${d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })} às ${hhmm(o.ms)}`, h * 0.07, '600 ', '#ffffff', 1, 1.15);
+  linha(dias <= 0 ? 'foto de hoje' : dias === 1 ? 'foto de ontem' : `foto de ${dias} dias atrás`, h * 0.042, '', HUD, 0.75, 1.9);
+  linha(`tirada a ${(o.km / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} milhão de km daqui,`, h * 0.042, '', HUD, 0.9, 1.4);
+  linha('do satélite DSCOVR, entre a Terra e o Sol:', h * 0.042, '', HUD, 0.9, 1.4);
+  linha('por isso ela aparece sempre de dia', h * 0.042, '', HUD, 0.9, 1.9);
+  if (S.meu) linha(`você aparece nas fotos das ${hhmm(S.meu[0])} às ${hhmm(S.meu[1])}`, h * 0.042, '', HUD, 0.9, 1.4);
+  // as fotos do dia, uma bolinha cada; acesas as que mostram você
+  const by = Math.min(h * 0.6, y + h * 0.06), gap = Math.min(tw / L.length, h * 0.05);
+  L.forEach((q, i) => {
+    const bx = tx + gap * (i + 0.5), sel = i === S.cur, meu = visto(q, S.p) > 0.3;
+    ctx.globalAlpha = sel ? 1 : meu ? 0.7 : 0.3; ctx.fillStyle = sel ? '#ffffff' : meu ? color : HUD;
+    ctx.beginPath(); ctx.arc(bx, by, sel ? Math.max(3, h * 0.011) : Math.max(1.5, h * 0.006), 0, TAU); ctx.fill();
+  });
+  ctx.font = `${Math.max(9, h * 0.03)}px monospace`; ctx.fillStyle = HUD; ctx.globalAlpha = 0.4;
+  ctx.fillText('fotos: NASA EPIC · DSCOVR', tx, by + h * 0.035);
+  ctx.globalAlpha = 1;
+}
+
+// =====================================================================================
 // AVIÕES PASSANDO AGORA: o radar dos aviões em volta do carro, pelos sinais que os próprios aviões transmitem (ADS-B,
 // rede aberta adsb.lol). Os sites de aviões não deixam o painel ler direto, então passa por um intermediário seu
 // (Cloudflare Worker, código em cloudflare/avioes.js). A rota de cada voo vem do adsbdb e as cidades em volta, do
