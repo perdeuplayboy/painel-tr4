@@ -1,5 +1,5 @@
-// Mais animações do standby, desenhadas em canvas 2D: céu de hoje, relevo da região,
-// previsão do tempo, cardume e Jogo da Vida. Cada uma recebe (ctx, largura, altura, segundos, cor)
+// Mais animações do standby, desenhadas em canvas 2D: relevo da região, previsão do tempo, cardume e
+// Jogo da Vida, mais as contas do céu (a cena do céu de hoje fica em js/ceu.js). Cada uma recebe (ctx, largura, altura, segundos, cor)
 // e guarda o próprio estado; quando o tempo volta a zero, começa de novo.
 
 const TAU = Math.PI * 2, RAD = Math.PI / 180;
@@ -21,8 +21,7 @@ export function hudText(ctx, h, lines, x, y, align = 'left') {
 }
 
 // =====================================================================================
-// CÉU DE HOJE: estrelas, constelações, Via Láctea, planetas e a Lua na fase certa, calculados pela hora e
-// pelo lugar do carro. De dia mostra o céu das 21h30 de hoje. A vista gira de nordeste até oeste, do horizonte ao zênite.
+// ESTRELAS BRILHANTES E PLANETAS: posições no céu de um lugar e hora (usadas pelo céu de hoje, em js/ceu.js, e pelos satélites).
 // Estrelas: [ascensão reta (graus), declinação (graus), magnitude, cor opcional]
 export const ST = {
   sirius: [101.287, -16.716, -1.46], canopus: [95.988, -52.696, -0.74], acen: [219.90, -60.835, -0.27, '#ffe9c4'], arcturus: [213.915, 19.182, -0.05, '#ffd29a'],
@@ -41,17 +40,6 @@ export const ST = {
   aludra: [111.024, -29.303, 2.45], algieba: [154.993, 19.842, 2.08], zosma: [168.527, 20.524, 2.56], alcyone: [56.871, 24.105, 2.87],
   dubhe: [165.932, 61.751, 1.8], alioth: [193.507, 55.960, 1.77], alkaid: [206.885, 49.313, 1.86], polaris: [37.955, 89.264, 1.98],
 };
-const CONST = [
-  ['Cruzeiro do Sul', [['acrux', 'gacrux'], ['mimosa', 'imai']]],
-  ['Alfa e Beta do Centauro', [['acen', 'hadar']]],
-  ['Escorpião', [['acrab', 'dschubba'], ['dschubba', 'pisco'], ['dschubba', 'sigsco'], ['sigsco', 'antares'], ['antares', 'tausco'], ['tausco', 'epssco'], ['epssco', 'musco'], ['musco', 'etasco'], ['etasco', 'sargas'], ['sargas', 'kappasco'], ['kappasco', 'shaula']]],
-  ['Órion', [['betelgeuse', 'alnitak'], ['bellatrix', 'mintaka'], ['alnitak', 'alnilam'], ['alnilam', 'mintaka'], ['alnitak', 'saiph'], ['mintaka', 'rigel'], ['betelgeuse', 'meissa'], ['bellatrix', 'meissa']]],
-  ['Cão Maior', [['sirius', 'mirzam'], ['sirius', 'wezen'], ['wezen', 'adhara'], ['wezen', 'aludra']]],
-  ['Gêmeos', [['castor', 'pollux'], ['pollux', 'alhena']]],
-  ['Leão', [['regulus', 'algieba'], ['algieba', 'zosma'], ['zosma', 'denebola']]],
-  ['Triângulo de verão', [['vega', 'altair'], ['altair', 'deneb'], ['deneb', 'vega']]],
-  ['Ursa Maior', [['dubhe', 'alioth'], ['alioth', 'alkaid']]],
-];
 // elementos orbitais aproximados (J2000 + taxa por século): a, e, I, L, longitude do periélio, longitude do nodo
 const PLANETS = {
   'Mercúrio': [[0.38709927, 0.00000037], [0.20563593, 0.00001906], [7.00497902, -0.00594749], [252.2503235, 149472.67411175], [77.45779628, 0.16047689], [48.33076593, -0.12534081]],
@@ -61,7 +49,6 @@ const PLANETS = {
   'Júpiter': [[5.202887, -0.00011607], [0.04838624, -0.00013253], [1.30439695, -0.00183714], [34.39644051, 3034.74612775], [14.72847983, 0.21252668], [100.47390909, 0.20469106]],
   'Saturno': [[9.53667594, -0.0012506], [0.05386179, -0.00050991], [2.48599187, 0.00193609], [49.95424423, 1222.49362201], [92.59887831, -0.41897216], [113.66242448, -0.28867794]],
 };
-const PCOL = { 'Mercúrio': '#e8dcc8', 'Vênus': '#fff6dc', 'Marte': '#ff9060', 'Júpiter': '#ffe8c0', 'Saturno': '#ffe0a0' };
 function helio(el, T) {
   const [a, e, I, L, wp, O] = el.map(([v, r]) => v + r * T);
   const M = ((L - wp) % 360 + 540) % 360 - 180, w = wp - O;
@@ -95,97 +82,11 @@ export function skyAt(date, lat, lon) {
   const elong = ((mlon - sunLon) % 360 + 360) % 360;
   return { altaz, planets, sun: altaz(sra, sdec), moon: [...altaz(mra, mdec), elong] };
 }
-function galToEq(l, b) {
+export function galToEq(l, b) {                                 // coordenadas da galáxia para o céu
   const aN = 192.85948 * RAD, dN = 27.12825 * RAD, lN = 122.93192 * RAD, L = l * RAD, B = b * RAD;
   const sd = Math.sin(dN) * Math.sin(B) + Math.cos(dN) * Math.cos(B) * Math.cos(lN - L);
   const ra = aN + Math.atan2(Math.cos(B) * Math.sin(lN - L), Math.cos(dN) * Math.sin(B) - Math.sin(dN) * Math.cos(B) * Math.cos(lN - L));
   return [((ra / RAD) % 360 + 360) % 360, Math.asin(sd) / RAD];
-}
-const FAINT = (() => { const r = rng(7), a = []; for (let i = 0; i < 700; i++) a.push([r() * 360, Math.asin(r() * 2 - 1) / RAD, 3.6 + r() * 2.4, r()]); return a; })();
-let SK = null;
-export function ceu(ctx, w, h, t, color) {
-  if (!SK || t < SK.last) {
-    const p = here(), now = new Date();
-    let date = now, label = 'AGORA';
-    if (skyAt(now, p.lat, p.lon).sun[1] > -8) { date = new Date(now); date.setHours(21, 30, 0, 0); label = 'HOJE ÀS 21:30'; }   // de dia: o céu desta noite
-    SK = { sky: skyAt(date, p.lat, p.lon), label, p, az0: 70 };
-    SK.hills = Array.from({ length: 64 }, (_, i) => 0.5 + 0.5 * Math.sin(i * 0.7) * Math.cos(i * 0.23 + 1) + (rng(i + 3)() - 0.5) * 0.4);
-  }
-  SK.last = t;
-  const { sky } = SK, fov = 150, hy = h * 0.86, k = w / fov, azC = SK.az0 + t * 8;   // gira de nordeste até oeste
-  // panorâmica: o céu inteiro cabe na faixa, do horizonte ao zênite (o alto fica comprimido)
-  const pos = (az, alt) => { const da = ((az - azC + 540) % 360) - 180; return [w / 2 + da * k, hy - (alt > 0 ? (hy - h * 0.03) * (alt / 90) ** 0.8 : alt * k)]; };
-  const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#02040c'); g.addColorStop(0.75, '#060b1c'); g.addColorStop(1, '#0c1430');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-  ctx.save(); ctx.globalCompositeOperation = 'lighter';
-  for (let l = 0; l < 360; l += 3) {                                // Via Láctea: faixa difusa, mais forte perto do centro da galáxia
-    const [ra, dec] = galToEq(l, 0), [az, alt] = sky.altaz(ra, dec);
-    if (alt < -5) continue;
-    const [x, y] = pos(az, alt), core = 0.35 + 0.65 * Math.exp(-((((l + 180) % 360 - 180) / 40) ** 2));
-    const r = k * (6 + 5 * core), gr = ctx.createRadialGradient(x, y, 0, x, y, r);
-    gr.addColorStop(0, `rgba(150,165,220,${0.07 * core})`); gr.addColorStop(1, 'rgba(150,165,220,0)');
-    ctx.fillStyle = gr; ctx.fillRect(x - r, y - r, r * 2, r * 2);
-  }
-  for (const [ra, dec, sz] of [[80.9, -69.75, 4], [13.2, -72.8, 2.6]]) {   // Nuvens de Magalhães
-    const [az, alt] = sky.altaz(ra, dec); if (alt < 0) continue;
-    const [x, y] = pos(az, alt), r = k * sz, gr = ctx.createRadialGradient(x, y, 0, x, y, r);
-    gr.addColorStop(0, 'rgba(190,200,240,.16)'); gr.addColorStop(1, 'rgba(190,200,240,0)'); ctx.fillStyle = gr; ctx.fillRect(x - r, y - r, r * 2, r * 2);
-  }
-  ctx.restore();
-  const star = (az, alt, mag, col = '#ffffff', tw = 0) => {
-    if (alt < -1) return;
-    const [x, y] = pos(az, alt); if (x < -10 || x > w + 10 || y < -10) return;
-    const ext = clamp(alt / 8, 0.15, 1), r = clamp(2.6 - mag * 0.5, 0.5, 3.4) * Math.max(1, h / 300);
-    ctx.globalAlpha = ext * (0.8 + 0.2 * Math.sin(t * (2 + tw * 3) + tw * 40)) * clamp(1.2 - mag * 0.17, 0.25, 1);
-    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
-    if (mag < 1.5) { ctx.globalAlpha *= 0.25; ctx.beginPath(); ctx.arc(x, y, r * 3, 0, TAU); ctx.fill(); }
-  };
-  for (const [ra, dec, mag, tw] of FAINT) { const [az, alt] = sky.altaz(ra, dec); star(az, alt, mag, '#dfe6ff', tw); }
-  for (const [ra, dec, mag, col] of Object.values(ST)) { const [az, alt] = sky.altaz(ra, dec); star(az, alt, mag, col, ra % 1); }
-  ctx.globalAlpha = 1;
-  // constelações se desenhando uma de cada vez
-  const fs = Math.max(10, h * 0.05);
-  ctx.font = `${fs}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-  CONST.forEach(([name, lines], i) => {
-    const a = ease((t - 1 - i * 0.3) / 2) * 0.55; if (a <= 0) return;
-    ctx.strokeStyle = color; ctx.globalAlpha = a; ctx.lineWidth = Math.max(1, h * 0.004); ctx.beginPath();
-    let top = null;                                               // o nome vai na estrela mais alta que estiver à vista
-    for (const [s1, s2] of lines) {
-      const A = sky.altaz(ST[s1][0], ST[s1][1]), B = sky.altaz(ST[s2][0], ST[s2][1]);
-      if (A[1] < 0 || B[1] < 0) continue;
-      const [x1, y1] = pos(...A), [x2, y2] = pos(...B);
-      if (Math.abs(x1 - x2) > w * 0.5) continue;
-      ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
-      for (const q of [[x1, y1], [x2, y2]]) if (!top || q[1] < top[1]) top = q;
-    }
-    ctx.stroke();
-    if (top && top[0] > 0 && top[0] < w) { ctx.globalAlpha = a * 1.6; ctx.fillStyle = color; ctx.fillText(name, top[0], top[1] - fs * 0.6); }
-  });
-  ctx.globalAlpha = 1;
-  for (const [name, az, alt] of sky.planets) {                     // planetas: ponto firme (não pisca) com o nome
-    if (alt < 0) continue;
-    const [x, y] = pos(az, alt); if (x < 0 || x > w) continue;
-    ctx.fillStyle = PCOL[name]; ctx.beginPath(); ctx.arc(x, y, Math.max(2, h * 0.009), 0, TAU); ctx.fill();
-    ctx.globalAlpha = 0.85; ctx.font = `${fs * 0.9}px system-ui, sans-serif`; ctx.fillText(name, x, y - fs * 0.5); ctx.globalAlpha = 1;
-  }
-  const [maz, malt, el] = sky.moon;                                 // Lua com a parte iluminada certa
-  if (malt > -2) {
-    const [x, y] = pos(maz, malt), r = Math.max(6, h * 0.045), f = (1 - Math.cos(el * RAD)) / 2;
-    const gl = ctx.createRadialGradient(x, y, r, x, y, r * 4); gl.addColorStop(0, `rgba(230,230,210,${0.2 * f})`); gl.addColorStop(1, 'rgba(230,230,210,0)');
-    ctx.fillStyle = gl; ctx.fillRect(x - r * 4, y - r * 4, r * 8, r * 8);
-    ctx.fillStyle = '#1a1c22'; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
-    ctx.save(); ctx.translate(x, y); if (SK.p.lat < 0) ctx.scale(-1, 1);   // no hemisfério sul a Lua crescente fica com a barriga para a esquerda
-    const waxing = el < 180, sd = waxing ? 1 : -1;
-    ctx.fillStyle = '#f1ecd8'; ctx.beginPath(); ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2, sd < 0);
-    ctx.ellipse(0, 0, Math.abs(1 - 2 * f) * r, r, 0, Math.PI / 2, -Math.PI / 2, (f > 0.5) === (sd > 0)); ctx.fill(); ctx.restore();
-  }
-  ctx.fillStyle = '#020306'; ctx.beginPath(); ctx.moveTo(0, h);       // horizonte: morros e pinheiros em silhueta
-  for (let i = 0; i <= 64; i++) { const x = i / 64 * w, v = SK.hills[(i + Math.floor(azC / 4) + 6400) % 64]; ctx.lineTo(x, hy - v * h * 0.05); }
-  ctx.lineTo(w, h); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = HUD; ctx.globalAlpha = 0.7; ctx.font = `${fs * 0.85}px monospace`; ctx.textBaseline = 'top';
-  for (const [n, az] of [['N', 0], ['NE', 45], ['L', 90], ['SE', 135], ['S', 180], ['SO', 225], ['O', 270], ['NO', 315]]) { const [x] = pos(az, 0); if (x > 0 && x < w) ctx.fillText(n, x, hy + h * 0.02); }
-  ctx.globalAlpha = 1;
-  hudText(ctx, h, [`CÉU ${SK.label}`, `${Math.abs(SK.p.lat).toFixed(1)}°${SK.p.lat < 0 ? 'S' : 'N'} ${Math.abs(SK.p.lon).toFixed(1)}°${SK.p.lon < 0 ? 'O' : 'L'}`], w * 0.11, h * 0.08);
 }
 
 // =====================================================================================
