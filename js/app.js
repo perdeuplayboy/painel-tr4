@@ -53,6 +53,12 @@ function layout() {
   $('outlinePath').setAttribute('d', S.outline ? hole : '');
   $('btnFitReset').hidden = !S.holeShape;
   $('screen').classList.toggle('dim', S.mask === 'dim');
+  // configurações: no retângulo que cabe inteiro dentro da janela (sem as pontas arredondadas)
+  const sl = (vw - W * mm) / 2, st = (vh - H * mm) / 2;
+  Object.assign($('settings').style, {
+    left: sl + (x0 + 14 * k) * mm + 'px', top: st + (y0 + 5 * k) * mm + 'px',
+    width: 112 * k * mm + 'px', height: 38.5 * k * mm + 'px',
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -66,17 +72,10 @@ function set(k, v) {
 // ---------------------------------------------------------------------------
 // Páginas e gestos
 let page = Math.min(Math.max(load('page', 0), 0), PAGES.length - 1);
-const dots = $('dots');
-PAGES.forEach((_, i) => {
-  const dot = document.createElement('i');
-  dot.addEventListener('click', () => showPage(i));
-  dots.appendChild(dot);
-});
 
 function showPage(i) {
   page = (i + PAGES.length) % PAGES.length;
   document.querySelectorAll('.page').forEach(el => el.classList.toggle('on', el.dataset.page === PAGES[page]));
-  [...dots.children].forEach((d, j) => d.classList.toggle('on', j === page));
   save('page', page);
 }
 
@@ -927,8 +926,7 @@ function render(d, fresh, speed, running, t) {
   let msg = '', err = false;
   const strip = ni && PAGES[page] !== 'nav';
   if (strip) msg = `${arrowChar(ni.step)} ${fmtDist(ni.dist)} · ${ni.step.name || ni.text}`;
-  else if (S.source === 'sim') msg = 'SIMULAÇÃO';
-  else if (src.state !== State.CONNECTED) {
+  else if (S.source !== 'sim' && src.state !== State.CONNECTED) {
     err = true;
     msg = src.device?.gatt.connected ? `OBD: ${src.state}` : `OBD: ${src.err || src.state} · toque aqui para conectar`;
   }
@@ -974,7 +972,7 @@ function renderAnims() {
     const box = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !S.animOff.includes(id) });
     box.addEventListener('change', () => {
       S.animOff = box.checked ? S.animOff.filter(a => a !== id) : [...S.animOff, id];
-      saveSettings();
+      saveSettings(); animCount();
     });
     const see = Object.assign(document.createElement('button'), { className: 'pill', textContent: 'ver' });
     see.addEventListener('click', e => {
@@ -985,6 +983,11 @@ function renderAnims() {
     label.append(box, ` ${name}`, see);
     return label;
   }));
+  animCount();
+}
+function animCount() {                                                    // resumo na lista fechada
+  const ids = Object.keys(ANIM_NAMES), on = ids.filter(id => !S.animOff.includes(id)).length;
+  $('animCount').textContent = `· ${on} de ${ids.length} ligadas`;
 }
 
 // seus vídeos e GIFs por pasta: ligar/desligar a pasta inteira e apagar a pasta
@@ -1123,9 +1126,10 @@ function openSettings() {
   renderNavSettings(); renderUpkeep(); renderTrips(); renderSpotifySettings(); renderAnims();
   updateSettingsInfo();
   $('settings').hidden = false;
+  $('screen').classList.add('cfg');
   exitStandby();
 }
-function closeSettings() { $('settings').hidden = true; }
+function closeSettings() { $('settings').hidden = true; $('screen').classList.remove('cfg'); }
 
 // ---------------------------------------------------------------------------
 // Encaixe na moldura pelo traçado: o dedo percorre a borda de dentro da janela e esse desenho vira a janela.

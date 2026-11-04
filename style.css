@@ -59,19 +59,19 @@ button { font: inherit; color: inherit; background: none; border: 0; }
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .8rem;
   text-align: center;
 }
-#wing-left { left: 3.5rem; }
-#wing-right { right: 3.5rem; gap: 2rem; }
+#wing-left { left: 2.5rem; top: 4rem; height: 38rem; }
 .clock { font-size: 6.6rem; font-weight: 600; letter-spacing: -.02em; line-height: 1; }
 .date { font-size: 3rem; color: var(--txt); }
 .weekday { font-size: 2.4rem; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
-.wtemp b { font-size: 5.6rem; line-height: 1; display: block; }
-.wtemp small { font-size: 2.2rem; }
-.wtemp.engine b { font-size: 4.6rem; }
+.wtemp b { font-size: 4.4rem; line-height: 1; display: block; }
+.wtemp small { font-size: 1.9rem; }
+.wing .wtemp:first-child { margin-bottom: 1.4rem; }   /* fora: acima do relógio; motor: abaixo */
+.wing .wtemp:last-child { margin-top: 1.4rem; }
 .wtemp.cold b { color: var(--cold); }
 .wtemp.hot b { color: var(--bad); }
 
 /* ---- área central e páginas ---- */
-#center { position: absolute; left: 24rem; right: 24rem; top: 3.5rem; bottom: 5.5rem; }
+#center { position: absolute; left: 23rem; right: 10rem; top: 3.5rem; bottom: 2.5rem; }
 .page { position: absolute; inset: 0; display: none; flex-direction: column; }
 .page.on { display: flex; }
 .page h2 {
@@ -84,14 +84,11 @@ button { font: inherit; color: inherit; background: none; border: 0; }
   border: .25rem solid var(--accent); border-radius: 3rem; padding: .2rem 1.4rem;
 }
 
-#dots { position: absolute; left: 0; right: 0; bottom: 1rem; display: flex; justify-content: center; gap: 1.4rem; }
-#dots i { width: 1.3rem; height: 1.3rem; border-radius: 50%; background: var(--line); }
-#dots i.on { background: var(--accent); }
 .status { position: absolute; left: 50%; bottom: 2.9rem; transform: translateX(-50%); font-size: 1.9rem; color: var(--muted); white-space: nowrap; }
 .status.err { color: var(--warn); }
 
 /* direção */
-.rpmbar { position: relative; height: 2.2rem; margin: 0 2rem; border-radius: 2rem; background: var(--line); overflow: hidden; }
+.rpmbar { position: relative; height: 2.2rem; margin: 0 5rem 0 2rem; border-radius: 2rem; background: var(--line); overflow: hidden; }
 .rpmfill { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, #2c7be5, var(--accent) 70%, var(--bad)); border-radius: 2rem; transition: width .15s linear; }
 .rpmred { position: absolute; top: 0; bottom: 0; left: 84.6%; width: .4rem; background: var(--bad); }
 .drive { flex: 1; display: grid; grid-template-columns: 22rem 1fr 22rem; align-items: center; }
@@ -276,12 +273,13 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 .a-sub { font-size: 3rem; margin-top: 1rem; opacity: .9; }
 @keyframes pulse { from { filter: brightness(1); } to { filter: brightness(.75); } }
 
-/* ---- configurações (tela inteira, fora da moldura) ---- */
+/* ---- configurações (no retângulo dentro da janela da moldura; o JS posiciona) ---- */
 #settings {
-  position: fixed; inset: 0; overflow-y: auto; background: #0b0d10; color: var(--txt);
-  font-size: 16px; padding: 16px 16px 48px; z-index: 10; user-select: text; -webkit-user-select: text;
+  position: fixed; overflow: hidden auto; background: #0b0d10; color: var(--txt); border-radius: 10px;
+  font-size: 16px; padding: 0 12px 24px; z-index: 10; user-select: text; -webkit-user-select: text;
 }
-#settings header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; position: sticky; top: -16px; background: #0b0d10; padding: 8px 0; }
+#screen.cfg #shift { visibility: hidden; }   /* nas pontas da janela, em volta das configurações, só preto */
+#settings header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; position: sticky; top: 0; z-index: 1; background: #0b0d10; padding: 6px 0; }
 #settings h1 { font-size: 20px; font-weight: 600; }
 #settings h3 { font-size: 15px; color: var(--accent); margin: 18px 0 8px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
 #settings section { max-width: 760px; margin: 0 auto; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
@@ -302,7 +300,7 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 #settings .dest { padding: 8px 12px; border-radius: 10px; border-width: 1px; }
 #settings .dest b { font-size: 15px; }
 #settings .dest small { font-size: 13px; }
-#settings .uk { display: grid; grid-template-columns: minmax(150px, 1.6fr) repeat(3, minmax(70px, .7fr)) minmax(120px, 1fr) minmax(150px, 1.4fr) auto; gap: 6px 10px; align-items: center; font-size: 14px; }
+#settings .uk { overflow-x: auto; display: grid; grid-template-columns: minmax(120px, 1.6fr) repeat(3, minmax(58px, .7fr)) minmax(96px, 1fr) minmax(110px, 1.4fr) auto; gap: 6px 10px; align-items: center; font-size: 14px; }
 #settings .uk .h { color: var(--muted); font-size: 12px; }
 #settings .uk input { width: 100%; max-width: none; padding: 6px 8px; }
 #settings .uk .bad { color: var(--bad); } #settings .uk .warn { color: var(--warn); } #settings .uk .ok { color: var(--ok); }
@@ -312,6 +310,8 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 #settings th { color: var(--muted); font-weight: 500; font-size: 12px; }
 #settings td:first-child, #settings th:first-child { text-align: left; }
 #tripsList { overflow-x: auto; }
+#settings details.fold summary { cursor: pointer; padding: 8px 0 8px 24px; color: var(--accent); }
+#settings details.fold summary .muted { display: inline; }
 #settings .anim-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 12px; padding-left: 24px; }
 #settings .anim-list label { padding: 4px 0; justify-content: flex-start; gap: 8px; }
 #settings .anim-list .pill { margin-left: auto; padding: 4px 12px; font-size: 13px; }

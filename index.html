@@ -19,9 +19,11 @@
     <div id="shift">
 
       <aside id="wing-left" class="wing" title="Segure para abrir as configurações">
+        <div class="wtemp"><b data-k="outTemp">--°</b><small data-k="outLabel">fora</small></div>
         <div class="clock" data-k="time">--:--</div>
         <div class="date" data-k="date">--</div>
         <div class="weekday" data-k="weekday">--</div>
+        <div class="wtemp engine" id="engTemp"><b data-k="coolant">--°</b><small>motor</small></div>
       </aside>
 
       <main id="center">
@@ -186,12 +188,6 @@
         </section>
       </main>
 
-      <aside id="wing-right" class="wing">
-        <div class="wtemp"><b data-k="outTemp">--°</b><small data-k="outLabel">fora</small></div>
-        <div class="wtemp engine" id="engTemp"><b data-k="coolant">--°</b><small>motor</small></div>
-      </aside>
-
-      <div id="dots"></div>
       <div id="status" class="status"></div>
     </div>
 
@@ -287,7 +283,9 @@
     <div id="mediaList" class="anim-list"></div>
     <p class="muted">Cada pasta liga ou desliga inteira. Pasta nova já entra ligada; vídeos avulsos ficam em "Avulsos".</p>
     <label class="check"><input id="sAnims" type="checkbox"> Incluir animações retrô</label>
-    <div id="animList" class="anim-list"></div>
+    <details class="fold"><summary>Escolher cenas <span id="animCount" class="muted"></span></summary>
+      <div id="animList" class="anim-list"></div>
+    </details>
     <div class="row">
       <label class="pill file">Arquivos do painel TR4<input id="sFiles" type="file" accept=".zip,.map,.001,.scr,.wav,.png,.webp,.webm,.js" multiple hidden></label>
       <span id="filesInfo" class="muted"></span>
