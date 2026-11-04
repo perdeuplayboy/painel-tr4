@@ -273,25 +273,52 @@ async function loadQuakes() {
   } catch {}
   EQ.loading = false;
 }
+let MASK = null;
+const GL = { S: 0 };
+function landMask(W) {                                              // mapa-múndi de meio em meio grau: 1 = terra, 0 = mar
+  if (MASK) return MASK;
+  const c = Object.assign(document.createElement('canvas'), { width: 720, height: 360 }), g = c.getContext('2d', { willReadFrequently: true });
+  g.fillStyle = '#fff'; g.beginPath();
+  for (const { ll } of W.land) { for (let k = 0; k < ll.length; k += 2) { const x = (ll[k] + 180) * 2, y = (90 - ll[k + 1]) * 2; k ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath(); }
+  g.fill('evenodd');
+  const d = g.getImageData(0, 0, 720, 360).data, m = new Uint8Array(720 * 360);
+  for (let i = 0; i < m.length; i++) m[i] = d[i * 4 + 3] > 127 ? 1 : 0;
+  return (MASK = m);
+}
 function globe(ctx, cx, cy, R, l0, p0, color, W) {                  // globo visto de longe, centrado em (l0, p0)
   const cl = Math.cos(l0 * RAD), sl = Math.sin(l0 * RAD), cp = Math.cos(p0 * RAD), sp = Math.sin(p0 * RAD);
   const P = (x, y, z) => [-sl * x + cl * y, -sp * cl * x - sp * sl * y + cp * z, cp * cl * x + cp * sl * y + sp * z];
   ctx.fillStyle = '#04101e'; ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.fill();
   const lines = (arr, a, lwk) => {                                  // só os trechos do lado de cá
     ctx.beginPath();
-    for (const { v } of arr) { let pen = false; for (let k = 0; k < v.length; k += 3) { const [x, y, z] = P(v[k], v[k + 1], v[k + 2]); if (z > 0) { pen ? ctx.lineTo(cx + x * R, cy - y * R) : ctx.moveTo(cx + x * R, cy - y * R); pen = true; } else pen = false; } }
+    for (const { v, ll } of arr) {
+      let pen = false;
+      for (let k = 0, q = 0; k < v.length; k += 3, q += 2) {
+        if (Math.abs(ll[q + 1]) > 89.9 || Math.abs(ll[q]) > 179.99) { pen = false; continue; }   // emenda do mapa no polo e em 180°: não é litoral
+        const [x, y, z] = P(v[k], v[k + 1], v[k + 2]);
+        if (z > 0) { pen ? ctx.lineTo(cx + x * R, cy - y * R) : ctx.moveTo(cx + x * R, cy - y * R); pen = true; } else pen = false;
+      }
+    }
     ctx.strokeStyle = color; ctx.globalAlpha = a; ctx.lineWidth = Math.max(0.6, R * lwk); ctx.stroke(); ctx.globalAlpha = 1;
   };
   if (W) {
-    ctx.beginPath();                                                // terra: o que fica atrás encosta na borda do globo
-    for (const { v } of W.land) {
-      for (let k = 0; k < v.length; k += 3) {
-        let [x, y, z] = P(v[k], v[k + 1], v[k + 2]); if (z < 0) { const m = Math.hypot(x, y) || 1; x /= m; y /= m; }
-        k ? ctx.lineTo(cx + x * R, cy - y * R) : ctx.moveTo(cx + x * R, cy - y * R);
+    // terra pintada ponto a ponto: cada ponto do globo procura no mapa-múndi se é terra ou mar. Recortar os contornos
+    // na borda do globo errava quando um continente grande passava por trás (pintava o mar no lugar da terra).
+    const mask = landMask(W), S = Math.round(clamp(R * 2, 32, 240)), g = GL;
+    if (g.S !== S) { g.S = S; g.c = Object.assign(document.createElement('canvas'), { width: S, height: S }); g.x = g.c.getContext('2d'); g.img = g.x.createImageData(S, S); }
+    if (g.col !== color) { const t = document.createElement('canvas').getContext('2d'); t.fillStyle = color; t.fillRect(0, 0, 1, 1); g.rgb = t.getImageData(0, 0, 1, 1).data; g.col = color; }
+    const d = g.img.data, [r0, g0, b0] = g.rgb;
+    for (let j = 0; j < S; j++) {
+      const y = 1 - (j + 0.5) / S * 2;
+      for (let i = 0; i < S; i++) {
+        const x = (i + 0.5) / S * 2 - 1, q = 1 - x * x - y * y, o = (j * S + i) * 4;
+        if (q <= 0) { d[o + 3] = 0; continue; }
+        const z = Math.sqrt(q), X = -sl * x - sp * cl * y + cp * cl * z, Y = cl * x - sp * sl * y + cp * sl * z, Z = cp * y + sp * z;
+        const col = Math.floor((Math.atan2(Y, X) / RAD + 180) * 2) % 720, row = Math.min(359, Math.max(0, Math.floor((90 - Math.asin(Z) / RAD) * 2)));
+        if (mask[row * 720 + col]) { d[o] = r0; d[o + 1] = g0; d[o + 2] = b0; d[o + 3] = 30 + 25 * z; } else d[o + 3] = 0;   // mais forte no meio, como luz de frente
       }
-      ctx.closePath();
     }
-    ctx.fillStyle = color; ctx.globalAlpha = 0.16; ctx.fill(); ctx.globalAlpha = 1;
+    g.x.putImageData(g.img, 0, 0); ctx.imageSmoothingEnabled = true; ctx.drawImage(g.c, cx - R, cy - R, R * 2, R * 2);
     lines(W.grid, 0.08, 0.004); lines(W.borders, 0.22, 0.004); lines(W.land, 0.7, 0.008);
   }
   ctx.strokeStyle = color; ctx.globalAlpha = 0.45; ctx.lineWidth = Math.max(1, R * 0.012); ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1;
