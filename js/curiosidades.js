@@ -1,6 +1,7 @@
 // Cenas de curiosidades com dados ao vivo:
 // BICHOS VISTOS PERTO: fotos de bichos e plantas que pessoas fotografaram num raio de 50 km do carro (iNaturalist),
 // com o nome em português, quando e onde foram vistos e o crédito da foto. Só entram fotos com licença aberta.
+// Selos na foto: ameaçado de extinção, raro por aqui (poucos registros na região), raro no mundo, endêmico e veio de fora.
 // HOJE NA HISTÓRIA: o que aconteceu neste mesmo dia em outros anos (Wikipédia em português), com a foto do artigo.
 // O que baixa fica guardado; sem dados, a cena termina na hora.
 import { here, load, keep, hudText, HUD, clamp, ease, rng } from './cenas.js';
@@ -53,25 +54,48 @@ const LIC = 'cc0,cc-by,cc-by-nc,cc-by-sa,cc-by-nd,cc-by-nc-sa,cc-by-nc-nd';
 const GRUPO = { Aves: 'ave', Mammalia: 'mamífero', Reptilia: 'réptil', Amphibia: 'anfíbio', Actinopterygii: 'peixe', Mollusca: 'molusco',
   Arachnida: 'aracnídeo', Insecta: 'inseto', Plantae: 'planta', Fungi: 'fungo', Animalia: 'animal', Chromista: 'alga', Protozoa: 'protozoário' };
 const BX = { key: '', list: null, total: 0, at: 0, loading: false, tried: 0, i: 0 };
+const IUCN = { 30: 'vulnerável', 40: 'em perigo', 50: 'criticamente em perigo', 60: 'extinto na natureza' };
+// selos da ficha: [título, explicação, cor]. "Raro" quer dizer pouco fotografado, que é o que o iNaturalist sabe.
+function selos(o) {
+  const s = [];
+  if (o.thr) s.push(o.iu >= 30 ? ['AMEAÇADO DE EXTINÇÃO', IUCN[o.iu] || 'em lista oficial', '#ff6a5a'] : o.iu === 20 ? ['QUASE AMEAÇADO', 'na lista vermelha mundial', '#ff9a4a'] : ['AMEAÇADO DE EXTINÇÃO', 'em lista oficial', '#ff6a5a']);
+  if (o.lc === 1) s.push(['RARO POR AQUI', 'único registro na região', '#c58cff']);
+  else if (o.lc && o.lc <= 3) s.push(['POUCO VISTO', `só ${o.lc} registros na região`, '#c58cff']);
+  if (o.sp && o.wc && o.wc < 150) s.push(['RARO NO MUNDO', `só ${fmtN(o.wc)} registros no mundo`, '#ffd34d']);
+  if (o.end) s.push(['ENDÊMICO', 'só vive nesta parte do mundo', '#5fd3a0']);
+  if (o.intro) s.push(['VEIO DE FORA', 'espécie trazida de outro lugar', '#7fb0ff']);
+  return s.slice(0, 2);
+}
 async function loadBichos(p, key) {
   BX.loading = true; BX.tried = Date.now();
   try {
-    const q = new URLSearchParams({ lat: p.lat.toFixed(3), lng: p.lon.toFixed(3), radius: 50, photos: 'true', captive: 'false', quality_grade: 'research',
-      locale: 'pt-BR', order_by: 'observed_on', order: 'desc', per_page: 200, photo_license: LIC });
-    const r = await fetch(`${INAT}?${q}`, { signal: AbortSignal.timeout(25000) }); if (!r.ok) throw new Error(r.status);
-    const j = await r.json(), seen = new Set(), by = new Map();
-    for (const o of j.results || []) {
+    const at = { lat: p.lat.toFixed(3), lng: p.lon.toFixed(3), radius: 50 };
+    const get = async (path, q) => { const r = await fetch(`${INAT}${path}?${new URLSearchParams({ ...at, ...q })}`, { signal: AbortSignal.timeout(25000) }); if (!r.ok) throw new Error(r.status); return r.json(); };
+    const base = { photos: 'true', captive: 'false', quality_grade: 'research', locale: 'pt-BR', order_by: 'observed_on', order: 'desc', photo_license: LIC };
+    // as fotos mais recentes e, à parte, as das espécies ameaçadas (que senão quase nunca apareceriam)
+    const [j, jt] = await Promise.all([get('', { ...base, per_page: 200 }), get('', { ...base, per_page: 100, threatened: 'true' }).catch(() => ({ results: [] }))]);
+    const seen = new Set(), all = [];
+    for (const o of [...(jt.results || []), ...(j.results || [])]) {
       const t = o.taxon, ph = (o.photos || []).find(f => f.license_code && f.url), c = o.geojson?.coordinates;
       if (!t || !ph || !c || seen.has(t.id)) continue; seen.add(t.id);
-      const quem = (ph.attribution || '').match(/^\(c\)\s*(.+?),\s*(?:some|all|no) rights/i)?.[1] || '';
-      const it = { n: t.preferred_common_name || '', s: t.name, g: t.iconic_taxon_name || '', d: o.observed_on, la: c[1], lo: c[0],
-        u: ph.url.replace('/square.', '/large.'), q: quem.slice(0, 40), l: ph.license_code.toUpperCase().replace(/^CC-/, 'CC ') };
-      if (!by.has(it.g)) by.set(it.g, []); by.get(it.g).push(it);
+      const quem = (ph.attribution || '').match(/^\(c\)\s*(.+?),\s*(?:some|all|no) rights/i)?.[1] || '', cs = t.conservation_status;
+      all.push({ id: t.id, n: t.preferred_common_name || '', s: t.name, g: t.iconic_taxon_name || '', d: o.observed_on, la: c[1], lo: c[0],
+        u: ph.url.replace('/square.', '/large.'), q: quem.slice(0, 40), l: ph.license_code.toUpperCase().replace(/^CC-/, 'CC '),
+        sp: t.rank_level <= 10, wc: t.observations_count || 0, thr: !!t.threatened, iu: /iucn/i.test(cs?.authority || '') ? cs.iucn : null,
+        end: !!t.endemic, intro: !!t.introduced, ob: !!o.obscured });
     }
-    for (const a of by.values()) a.sort((x, y) => (!!y.n - !!x.n) || (y.d > x.d ? 1 : y.d < x.d ? -1 : 0));   // com nome popular primeiro, depois os mais recentes
+    const ids = all.filter(o => o.sp).map(o => o.id);                // quantas vezes cada espécie já foi registrada na região
+    if (ids.length) try {
+      const sc = await get('/species_counts', { verifiable: 'true', per_page: 200, taxon_id: ids.join(',') }), cnt = new Map((sc.results || []).map(x => [x.taxon.id, x.count]));
+      for (const o of all) if (o.sp && cnt.has(o.id)) o.lc = cnt.get(o.id);
+    } catch {}
+    const peso = o => (o.thr ? (o.iu >= 30 || o.iu == null ? 4 : 3) : 0) + (o.lc === 1 ? 2 : o.lc <= 3 ? 1 : 0) + (o.sp && o.wc && o.wc < 150 ? 1.5 : 0) + (o.end ? 1 : 0);
+    const by = new Map();
+    for (const o of all) { delete o.id; if (!by.has(o.g)) by.set(o.g, []); by.get(o.g).push(o); }
+    for (const a of by.values()) a.sort((x, y) => peso(y) - peso(x) || (!!y.n - !!x.n) || (y.d > x.d ? 1 : y.d < x.d ? -1 : 0));   // as raras primeiro, depois as com nome popular
     const list = []; for (let left = true; left;) { left = false; for (const a of by.values()) if (a.length) { list.push(a.shift()); left = true; } }   // um de cada grupo por vez
-    Object.assign(BX, { key, list: list.slice(0, 60), total: j.total_results || list.length, at: Date.now(), i: 0 });
-    keep('bichos', { key, at: BX.at, list: BX.list, total: BX.total });
+    Object.assign(BX, { key, list: list.slice(0, 80), total: j.total_results || list.length, at: Date.now(), i: 0 });
+    keep('bichos', { v: 2, key, at: BX.at, list: BX.list, total: BX.total });
   } catch {}
   BX.loading = false;
 }
@@ -84,6 +108,7 @@ function quando(d) {
 function onde(p, o) {
   const km = kmBetween(p, { lat: o.la, lon: o.lo }); if (km < 1.5) return 'pertinho daqui';
   const dir = PARA[Math.round(((Math.atan2((o.lo - p.lon) * Math.cos(p.lat * RAD), o.la - p.lat) / RAD) % 360 + 360) % 360 / 45) % 8];
+  if (o.ob) return `uns ${fmtN(km)} km ${dir} (local protegido)`;   // o iNaturalist esconde o ponto exato das espécies ameaçadas
   const CL = cities(p); let perto = null;
   if (CL) for (const c of CL) { const d = kmBetween(c, { lat: o.la, lon: o.lo }); if (d < 12 && (!perto || d < perto.d)) perto = { n: c.n, d }; }
   return `${perto ? `perto de ${perto.n} · ` : ''}${fmtN(km)} km ${dir}`;
@@ -91,7 +116,7 @@ function onde(p, o) {
 let BS = null;
 export function bichos(ctx, w, h, t, color) {
   const p = here(), key = `${p.lat.toFixed(1)},${p.lon.toFixed(1)}`;
-  if (BX.key !== key) { const c = load('bichos', null); if (c?.key === key && c.list?.length) Object.assign(BX, { key, list: c.list, total: c.total, at: c.at, i: 0 }); }
+  if (BX.key !== key) { const c = load('bichos', null); if (c?.v === 2 && c.key === key && c.list?.length) Object.assign(BX, { key, list: c.list, total: c.total, at: c.at, i: 0 }); }
   if ((BX.key !== key || Date.now() - BX.at > 6 * 3600000) && !BX.loading && online() && Date.now() - BX.tried > 120000) loadBichos(p, key);
   ctx.fillStyle = '#05080a'; ctx.fillRect(0, 0, w, h);
   const L = BX.key === key ? BX.list : null;
@@ -127,6 +152,19 @@ function ficha(ctx, w, h, t, color, it, alpha, p, ta) {   // alpha: a foto; ta: 
   const ar = im.naturalWidth / im.naturalHeight, ch = h * 0.84, cw = Math.min(w * 0.46, ch * clamp(ar, 0.72, 1.4)), x0 = w * 0.1, y0 = h * 0.08;
   ctx.save(); caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.clip(); cover(ctx, im, x0, y0, cw, ch, 1.02 + 0.06 * kb); ctx.restore();
   caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.strokeStyle = color; ctx.globalAlpha = alpha * 0.35; ctx.lineWidth = Math.max(1, h * 0.003); ctx.stroke();
+  let py = y0 + h * 0.025;                                          // selos de raridade, colados no alto da foto
+  for (const [tt, sub, cor] of it.sel || (it.sel = selos(o))) {
+    const f1 = Math.max(10, h * 0.042), f2 = Math.max(9, h * 0.034), pad = h * 0.02, px = x0 + h * 0.025;
+    ctx.font = `700 ${f1}px system-ui, sans-serif`; const w1 = ctx.measureText(tt).width;
+    ctx.font = `${f2}px system-ui, sans-serif`; const w2 = ctx.measureText(sub).width;
+    const pw = Math.min(cw - h * 0.05, Math.max(w1, w2) + pad * 2.2), ph = f1 + f2 * 1.15 + pad * 1.4;
+    ctx.globalAlpha = alpha * 0.8; ctx.fillStyle = '#05070a'; caixa(ctx, px, py, pw, ph, ph * 0.22); ctx.fill();
+    ctx.globalAlpha = alpha; ctx.fillStyle = cor; ctx.fillRect(px + pad * 0.45, py + ph * 0.2, Math.max(2, h * 0.006), ph * 0.6);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.font = `700 ${f1}px system-ui, sans-serif`; ctx.fillText(tt, px + pad * 1.2, py + pad * 0.7);
+    ctx.font = `${f2}px system-ui, sans-serif`; ctx.fillStyle = '#ffffff'; ctx.globalAlpha = alpha * 0.85; ctx.fillText(sub, px + pad * 1.2, py + pad * 0.7 + f1 * 1.15);
+    py += ph + h * 0.015;
+  }
   const tx = x0 + cw + w * 0.035, tw = w * 0.96 - tx;
   if (!it.lay || it.lay.w !== w) {                                  // o texto é medido uma vez por foto
     const nome = o.n ? o.n[0].toUpperCase() + o.n.slice(1) : o.s, N = caber(ctx, nome, tw, h * 0.085, h * 0.05, 2, '600 ');
