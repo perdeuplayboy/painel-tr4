@@ -190,12 +190,17 @@ export function ceu(ctx, w, h, t, color) {
 
 // =====================================================================================
 // NÍVEL E AREIA: a inclinação de verdade do carro (o mesmo sensor do inclinômetro). Dois níveis de bolha
-// (lateral e frontal) e uma caixa de areia que escorre para o lado que o carro inclina.
+// (lateral e frontal) e uma caixa de areia presa no carro: a superfície fica sempre nivelada com o chão de verdade,
+// então quando o carro inclina a areia escorre para o lado mais baixo (a inclinação é um pouco aumentada para aparecer).
+// Cada coluna guarda a altura da areia; se o degrau entre vizinhas passa do ângulo de repouso, escorre. Solavanco
+// faz os grãos pularem e a areia assentar.
 const grav = { x: 0, y: 9.8, z: 0, ok: false };
+let jolt = 0;
 addEventListener('devicemotion', e => {
   const g = e.accelerationIncludingGravity; if (!g || g.x == null) return;
   if (!grav.ok) Object.assign(grav, { x: g.x, y: g.y, z: g.z, ok: true });
   grav.x += (g.x - grav.x) * 0.1; grav.y += (g.y - grav.y) * 0.1; grav.z += (g.z - grav.z) * 0.1;
+  const a = e.acceleration; if (a && a.x != null) jolt = Math.max(jolt, Math.hypot(a.x, a.y, a.z));   // solavanco (sem a gravidade)
 });
 function carTilt(t) {
   if (!grav.ok) return { roll: 9 * Math.sin(t * 0.35), pitch: 5 * Math.sin(t * 0.27 + 1), sim: true };   // sem sensor (PC): balança sozinho
@@ -207,34 +212,64 @@ function carTilt(t) {
 }
 let SA = null;
 export function nivel(ctx, w, h, t, color) {
-  const C = 120, R = 40;
-  if (!SA || t < SA.last) {
-    const g = new Uint8Array(C * R), r = rng(11);
-    for (let y = Math.floor(R * 0.5); y < R; y++) for (let x = 0; x < C; x++) if (r() < 0.93) g[y * C + x] = 1 + Math.floor((y - R * 0.5) / 3) % 4;   // camadas de areia
-    SA = { g, r, ang: 0, last: 0 };
+  const N = 140, bx0 = w * 0.36, bw = w * 0.56, bh = Math.min(h * 0.58, bw * 0.45), by0 = Math.max(h * 0.1, h * 0.68 - bh);   // acima do relógio
+  const cw = bw / N, dx = cw / bh, gs = Math.max(2, bh / 55);    // largura da coluna (em alturas da caixa) e tamanho do grão
+  if (!SA || t < SA.last || SA.bw !== bw || SA.bh !== bh) {
+    const r = rng(11), tex = document.createElement('canvas'); tex.width = Math.ceil(bw) + 2; tex.height = Math.ceil(bh) + 2;
+    const tc = tex.getContext('2d'), sand = ['#c9a26b', '#b98a52', '#d8b47a', '#a8763f', '#c29a60'];
+    for (let y = 0; y < tex.height; y += gs) for (let x = 0; x < tex.width; x += gs) { tc.fillStyle = sand[Math.floor(r() * 5)]; tc.fillRect(x, y, gs + 0.5, gs + 0.5); }
+    const gr = tc.createLinearGradient(0, 0, 0, tex.height); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.4)');
+    tc.fillStyle = gr; tc.fillRect(0, 0, tex.width, tex.height);
+    SA = { H: new Float32Array(N).fill(0.42), T: new Float32Array(N), mass: 0.42 * N, flow: false, ang: 0, last: t, tex, bw, bh, grains: [], r, shake: 0 };
   }
   const dt = clamp(t - SA.last, 0, 0.1); SA.last = t;
-  const { roll, pitch, sim } = carTilt(t);
-  SA.ang += (clamp(roll * 2.2, -70, 70) * RAD - SA.ang) * Math.min(1, dt * 3);   // a areia sente a inclinação lateral (aumentada)
-  const gx = Math.sin(SA.ang), gy = Math.cos(SA.ang), G = SA.g, r = SA.r;
-  const dirs = [[0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1], [-1, 0], [-1, 1]];
-  const di = Math.round((Math.atan2(gx, gy) / (Math.PI / 4) + 8)) % 8;
-  const free = (u, w2) => u >= 0 && u < C && w2 >= 0 && w2 < R && !G[w2 * C + u];
-  for (let pass = 0; pass < 2; pass++) {
-    const [dx, dy] = dirs[di], [ax, ay] = dirs[(di + 1) % 8], [bx, by] = dirs[(di + 7) % 8];
-    const ys = dy >= 0 ? [R - 1, -1, -1] : [0, R, 1], xs = dx >= 0 ? [C - 1, -1, -1] : [0, C, 1];
-    for (let y = ys[0]; y !== ys[1]; y += ys[2]) for (let x = xs[0]; x !== xs[1]; x += xs[2]) {
-      const v = G[y * C + x]; if (!v) continue;
-      let nx = x + dx, ny = y + dy;
-      if (!free(nx, ny)) { const s = r() < 0.5; const [p1, q1] = s ? [ax, ay] : [bx, by], [p2, q2] = s ? [bx, by] : [ax, ay];
-        if (free(x + p1, y + q1)) { nx = x + p1; ny = y + q1; } else if (free(x + p2, y + q2)) { nx = x + p2; ny = y + q2; } else continue; }
-      G[ny * C + nx] = v; G[y * C + x] = 0;
+  const { roll, pitch, sim } = carTilt(t), H = SA.H, r = SA.r;
+  SA.ang += (clamp(roll * 1.6, -40, 40) * RAD - SA.ang) * Math.min(1, dt * 4);
+  const surf = x => by0 + bh - H[clamp(Math.floor((x - bx0) / cw), 0, N - 1)] * bh;   // altura da areia (pixels) num ponto
+  const j = sim ? (Math.floor(t / 8) !== Math.floor((t - dt) / 8) ? 6 : 0) : jolt; jolt = 0;   // simulação: um solavanco a cada 8 s
+  if (j > 2.5) {
+    SA.shake = Math.min(1, SA.shake + (j - 2.5) / 4);
+    for (let k = Math.min(70, Math.round((j - 2.5) * 18)); k-- > 0;) {
+      const x = bx0 + r() * bw;
+      SA.grains.push({ x, y: surf(x) - gs, vx: (r() - 0.5) * bh * 0.4, vy: -bh * (0.3 + r() * 0.5) * Math.min(1.5, (j - 2) / 4), hop: true });
+    }
+  }
+  SA.shake = Math.max(0, SA.shake - dt * 1.2);
+  // onde a areia quer ficar: superfície nivelada com o chão de verdade (reta com inclinação m dentro da caixa),
+  // a mesma quantidade de areia, entre o fundo e a tampa
+  const m = Math.tan(SA.ang), xm = (N - 1) / 2, T = SA.T;
+  const fill = c => { let s = 0; for (let i = 0; i < N; i++) s += clamp(c + m * (i - xm) * dx); return s; };
+  let lo = -3, hi = 4; for (let k = 0; k < 28; k++) { const c = (lo + hi) / 2; if (fill(c) < SA.mass) lo = c; else hi = c; }
+  for (let i = 0; i < N; i++) T[i] = clamp((lo + hi) / 2 + m * (i - xm) * dx);
+  const fit = A => { let mean = 0, sxy = 0, sxx = 0; for (let i = 0; i < N; i++) mean += A[i]; mean /= N;
+    for (let i = 0; i < N; i++) { const u = (i - xm) * dx; sxy += u * (A[i] - mean); sxx += u * u; } return sxy / sxx; };
+  const dev = fit(T) - fit(H), rest = 0.07 * (1 - SA.shake);        // ângulo de repouso ~4°: abaixo disso a areia fica parada
+  if (Math.abs(dev) > rest) SA.flow = true; else if (Math.abs(dev) < 0.015) SA.flow = false;
+  if (SA.flow || SA.shake > 0.05) {                                // escorre com velocidade de avalanche (o mesmo passo em todas mantém a areia)
+    let big = 0; for (let i = 0; i < N; i++) big = Math.max(big, Math.abs(T[i] - H[i]));
+    const k = big > 0 ? Math.min(1, dt * (0.6 + SA.shake) / big) : 0;
+    for (let i = 0; i < N; i++) H[i] += (T[i] - H[i]) * k;
+    for (let n = big * k > 0.002 ? Math.round(r() * 3) : 0; n-- > 0 && SA.grains.length < 200;) {   // grãos rolando na avalanche
+      const x = bx0 + r() * bw; SA.grains.push({ x, y: surf(x) - gs, vx: Math.sign(dev) * bh * (0.3 + r() * 0.5), vy: 0, hop: false, life: 0.3 + r() * 0.7 });
     }
   }
   ctx.fillStyle = '#05070b'; ctx.fillRect(0, 0, w, h);
-  const bx0 = w * 0.36, bw = w * 0.56, cs = bw / C, bh = cs * R, by0 = (h - bh) / 2;
-  const sand = ['#000', '#c9a26b', '#b98a52', '#d8b47a', '#a8763f'];
-  for (let y = 0; y < R; y++) for (let x = 0; x < C; x++) { const v = G[y * C + x]; if (v) { ctx.fillStyle = sand[v]; ctx.fillRect(bx0 + x * cs, by0 + y * cs, cs + 0.5, cs + 0.5); } }
+  ctx.fillStyle = '#0a0d12'; ctx.fillRect(bx0, by0, bw, bh);
+  for (let i = 0; i < N; i++) {
+    const hh = H[i] * bh; if (hh < 0.5) continue;
+    const sx = i * cw, sy = bh - hh; ctx.drawImage(SA.tex, sx, sy, cw + 0.6, hh, bx0 + sx, by0 + sy, cw + 0.6, hh);
+  }
+  ctx.strokeStyle = 'rgba(255,236,196,.55)'; ctx.lineWidth = Math.max(1, gs * 0.6); ctx.beginPath();
+  for (let i = 0; i < N; i++) { const x = bx0 + (i + 0.5) * cw, y = by0 + bh - H[i] * bh; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+  ctx.stroke();
+  const G = bh * 5, gx = Math.sin(SA.ang) * G, gy = Math.cos(SA.ang) * G;
+  ctx.fillStyle = '#e0bf86';
+  SA.grains = SA.grains.filter(g => {
+    if (g.hop) { g.vx += gx * dt; g.vy += gy * dt; g.x += g.vx * dt; g.y += g.vy * dt; if (g.y < by0) { g.y = by0; g.vy = Math.abs(g.vy) * 0.3; } }
+    else { g.x += g.vx * dt; g.y = surf(g.x) - gs * 0.8; g.life -= dt; }
+    if (g.x < bx0 || g.x > bx0 + bw || (g.hop ? g.vy > 0 && g.y >= surf(g.x) : g.life <= 0)) return false;
+    ctx.fillRect(g.x - gs / 2, g.y - gs / 2, gs, gs); return true;
+  });
   ctx.strokeStyle = color; ctx.globalAlpha = 0.7; ctx.lineWidth = Math.max(1.5, h * 0.008); ctx.strokeRect(bx0 - 2, by0 - 2, bw + 4, bh + 4); ctx.globalAlpha = 1;
   const vial = (cy, ang, lab) => {                                  // nível de bolha: a bolha foge para o lado mais alto
     const vx = w * 0.06, vw = w * 0.24, vh = h * 0.16;
@@ -248,7 +283,7 @@ export function nivel(ctx, w, h, t, color) {
     ctx.fillText(`${lab} ${Math.abs(ang).toFixed(1).replace('.', ',')}°`, vx, cy - vh * 0.65);
   };
   vial(h * 0.42, roll, 'LATERAL'); vial(h * 0.78, pitch, 'FRONTAL');
-  if (sim) hudText(ctx, h, ['SIMULAÇÃO'], w * 0.06, h * 0.08);
+  if (sim) hudText(ctx, h, ['SIMULAÇÃO'], w * 0.06, h * 0.17);
 }
 
 // =====================================================================================
@@ -356,7 +391,7 @@ export function previsao(ctx, w, h, t, color) {
   if (!ok) { if (!FC.loading || t > 10) return true; hudText(ctx, h, ['PREVISÃO · carregando…'], w / 2, h * 0.45, 'center'); return; }
   if (!FS || t < FS.last) FS = { drops: Array.from({ length: 160 }, () => [Math.random(), Math.random(), 0.6 + Math.random() * 0.8]), flash: 0 };
   const dt = clamp(t - (FS.last ?? t), 0, 0.1); FS.last = t;
-  const D = FC.data.slice(0, 13), n = D.length, cw = w / n, top = h * 0.12, skyH = h * 0.5;
+  const D = FC.data.slice(0, 13), n = D.length, cw = w / n, top = h * 0.09, skyH = h * 0.34;   // de baixo fica livre: lá fica o relógio e a música
   D.forEach((o, i) => {                                            // céu de cada hora
     const x = i * cw, cl = o.cloud / 100, g = ctx.createLinearGradient(0, top, 0, top + skyH);
     const a = o.day ? [`rgb(${40 - 10 * cl},${90 - 20 * cl},${150 - 40 * cl})`, `rgb(${110 - 30 * cl},${150 - 40 * cl},${190 - 50 * cl})`] : ['#060a18', '#101a34'];
@@ -386,7 +421,7 @@ export function previsao(ctx, w, h, t, color) {
   for (let i = 1; i < n; i++) { ctx.moveTo(i * cw, top); ctx.lineTo(i * cw, top + skyH); } ctx.stroke(); ctx.globalAlpha = 1;
   ctx.strokeStyle = color; ctx.lineWidth = 2.2; ctx.strokeRect(1, top, cw - 2, skyH);   // agora
   const temps = D.map(o => o.temp), lo = Math.min(...temps) - 1, hi = Math.max(...temps) + 1;
-  const ty = v => top + skyH + h * 0.06 + (1 - (v - lo) / (hi - lo)) * h * 0.18;
+  const ty = v => h * 0.555 + (1 - (v - lo) / (hi - lo)) * h * 0.085;
   const prog = ease(t / 4);                                        // a linha da temperatura vai se desenhando
   ctx.strokeStyle = color; ctx.lineWidth = Math.max(1.5, h * 0.007); ctx.beginPath();
   D.forEach((o, i) => { const x = i * cw + cw / 2; if (i / (n - 1) <= prog) i ? ctx.lineTo(x, ty(o.temp)) : ctx.moveTo(x, ty(o.temp)); }); ctx.stroke();
@@ -397,8 +432,8 @@ export function previsao(ctx, w, h, t, color) {
     if (i / (n - 1) <= prog) { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, ty(o.temp), Math.max(2, h * 0.008), 0, TAU); ctx.fill(); }
     ctx.fillStyle = HUD;
     if (i % 2 === 0 && i / (n - 1) <= prog) ctx.fillText(`${Math.round(o.temp)}°`, x, ty(o.temp) - fs * 0.3);
-    ctx.textBaseline = 'top'; ctx.globalAlpha = 0.75; ctx.fillText(i ? `${String(o.hour).padStart(2, '0')}h` : 'agora', x, h * 0.9);
-    if (o.rain >= 30) { ctx.fillStyle = '#9cc4ff'; ctx.fillText(`${o.rain}%`, x, top + skyH + h * 0.005); }
+    ctx.textBaseline = 'top'; ctx.globalAlpha = 0.75; ctx.fillText(i ? `${String(o.hour).padStart(2, '0')}h` : 'agora', x, h * 0.665);
+    if (o.rain >= 30) { ctx.fillStyle = '#9cc4ff'; ctx.fillText(`${o.rain}%`, x, top + skyH + h * 0.008); }
     ctx.globalAlpha = 1; ctx.textBaseline = 'bottom';
   });
   hudText(ctx, h, ['PRÓXIMAS 12 HORAS'], w * 0.5, h * 0.01, 'center');
@@ -465,38 +500,81 @@ export function cardume(ctx, w, h, t, color) {
 }
 
 // =====================================================================================
-// JOGO DA VIDA: células nascem com 3 vizinhas e sobrevivem com 2 ou 3. Começa sorteado, de tempos em tempos
-// chega um planador; quando a população para de mudar, recomeça. As células velhas ficam com a cor do painel.
+// JOGO DA VIDA (Conway, 1970): cada quadradinho é uma célula. Ela nasce se tiver 3 vizinhas vivas e continua viva
+// com 2 ou 3; com menos morre de solidão, com mais morre sufocada. Dessa regra só aparecem formas que andam,
+// piscam e até fabricam outras. Começa com formas conhecidas (com o nome escrito no começo): um canhão que
+// dispara planadores, um pulsar, um oscilador e uma nave que cruza o caminho dos planadores. Quando tudo para,
+// recomeça sorteado; depois volta às formas. As bordas não dão a volta: o que sai da tela some.
+const LIFE_PAT = {
+  canhao: ['........................O', '......................O.O', '............OO......OO............OO', '...........O...O....OO............OO',
+    'OO........O.....O...OO', 'OO........O...O.OO....O.O', '..........O.....O.......O', '...........O...O', '............OO'],
+  pulsar: ['..OOO...OOO..', '', 'O....O.O....O', 'O....O.O....O', 'O....O.O....O', '..OOO...OOO..', '', '..OOO...OOO..',
+    'O....O.O....O', 'O....O.O....O', 'O....O.O....O', '', '..OOO...OOO..'],
+  oscilador: ['..O....O..', 'OO.OOOO.OO', '..O....O..'],
+  nave: ['.O..O', 'O....', 'O...O', 'OOOO.'],
+};
+const LIFE_NAME = { canhao: ['canhão de planadores', 18, -1.6], pulsar: ['pulsar', -4.5, 5.8], oscilador: ['oscilador', 5, -1.8], nave: ['nave', 2.5, -1.4] };
 let LF = null;
+function lifeLayout(C, R) {
+  // o pulsar ocupa até 15×15; a nave passa duas linhas abaixo dele (mais perto, um mexe no outro) e cruza a fila de planadores uns 9 s depois
+  const P = { canhao: [Math.round(C * 0.12), 5], pulsar: [C - 24, 2], oscilador: [Math.round(C * 0.08), R - 7], nave: [C - 8, 18] };
+  if (C < 70) delete P.pulsar;
+  return P;
+}
+function lifeStart(L, mode, t) {
+  const { C, R } = L, a = new Uint8Array(C * R);
+  if (mode === 0) {
+    const P = lifeLayout(C, R);
+    for (const k in P) LIFE_PAT[k].forEach((s, y) => { for (let x = 0; x < s.length; x++) {
+      const u = P[k][0] + x, v = P[k][1] + y; if (s[x] === 'O' && u >= 0 && u < C && v >= 0 && v < R) a[v * C + u] = 1; } });
+  } else for (let y = 2; y < R - 2; y++) for (let x = 2; x < C - 2; x++) a[y * C + x] = Math.random() < 0.3 ? 1 : 0;
+  Object.assign(L, { a, mode, gen: 0, pops: [], since: t });
+}
 export function vida(ctx, w, h, t, color) {
-  const cs = Math.max(4, h / 32), C = Math.floor(w / cs), R = Math.floor(h / cs);
-  const seed = () => { const a = new Uint16Array(C * R), r = Math.random; for (let i = 0; i < a.length; i++) a[i] = r() < 0.3 ? 1 : 0; return a; };
-  if (!LF || t < LF.last || LF.C !== C) LF = { C, R, a: seed(), fade: new Float32Array(C * R), step: 0, acc: 0, pops: [], last: t };
+  const cs = Math.max(4, h / 30), C = Math.floor(w / cs), R = Math.floor(h / cs);
+  if (!LF || t < LF.last || LF.C !== C || LF.R !== R) { LF = { C, R, fade: new Float32Array(C * R), acc: 0, last: t }; lifeStart(LF, 0, t); }
   const dt = clamp(t - LF.last, 0, 0.1); LF.last = t; LF.acc += dt;
-  while (LF.acc > 0.11) {
-    LF.acc -= 0.11; LF.step++;
-    const a = LF.a, b = new Uint16Array(C * R); let pop = 0;
+  while (LF.acc > 0.1) {
+    LF.acc -= 0.1; LF.gen++;
+    const a = LF.a, b = new Uint8Array(C * R); let pop = 0;
     for (let y = 0; y < R; y++) for (let x = 0; x < C; x++) {
       let n = 0;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (dx || dy) n += a[((y + dy + R) % R) * C + (x + dx + C) % C] ? 1 : 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy; if (yy < 0 || yy >= R) continue;
+        for (let dx = -1; dx <= 1; dx++) { const xx = x + dx; if ((dx || dy) && xx >= 0 && xx < C && a[yy * C + xx]) n++; }
+      }
       const i = y * C + x, age = a[i];
-      if (age ? n === 2 || n === 3 : n === 3) { b[i] = Math.min(age + 1, 60); pop++; } else if (age) LF.fade[i] = 1;
+      if (age ? n === 2 || n === 3 : n === 3) { b[i] = Math.min(age + 1, 250); pop++; } else if (age) LF.fade[i] = 1;
     }
-    if (LF.step % 45 === 0) {                                      // planador entrando por um canto
-      const ox = Math.floor(Math.random() * C), oy = Math.floor(Math.random() * R);
-      for (const [dx, dy] of [[1, 0], [2, 1], [0, 2], [1, 2], [2, 2]]) b[((oy + dy) % R) * C + (ox + dx) % C] = 1;
-    }
-    LF.pops.push(pop); if (LF.pops.length > 60) LF.pops.shift();
-    const still = LF.pops.length === 60 && Math.max(...LF.pops) - Math.min(...LF.pops) < 6;
-    LF.a = still || pop < C * R * 0.02 ? seed() : b;
-    if (still) LF.pops = [];
+    LF.a = b;
+    LF.pops.push(pop); if (LF.pops.length > 80) LF.pops.shift();
+    const still = LF.pops.length === 80 && Math.max(...LF.pops) - Math.min(...LF.pops) < 6;
+    if (still || pop < 4 || t - LF.since > 75) lifeStart(LF, 1 - LF.mode, t);
   }
   ctx.fillStyle = '#04060a'; ctx.fillRect(0, 0, w, h);
-  const ox = (w - C * cs) / 2, oy = (h - R * cs) / 2;
+  const ox = (w - C * cs) / 2, oy = (h - R * cs) / 2, g = Math.max(1, cs * 0.1), sz = cs - 2 * g;
+  ctx.fillStyle = color;                                           // rastro de quem acabou de morrer
   for (let i = 0; i < C * R; i++) {
-    const age = LF.a[i], x = ox + (i % C) * cs, y = oy + Math.floor(i / C) * cs;
-    if (age) { ctx.fillStyle = age < 3 ? '#e8f6ff' : color; ctx.globalAlpha = age < 3 ? 1 : 0.55 + 0.45 * Math.min(1, age / 20); ctx.fillRect(x + 1, y + 1, cs - 2, cs - 2); }
-    else if (LF.fade[i] > 0.02) { ctx.fillStyle = color; ctx.globalAlpha = LF.fade[i] * 0.35; ctx.fillRect(x + 1, y + 1, cs - 2, cs - 2); LF.fade[i] *= 1 - dt * 3; }
+    if (LF.a[i]) { LF.fade[i] = 0; continue; }
+    if (LF.fade[i] < 0.03) continue;
+    ctx.globalAlpha = LF.fade[i] * 0.3; ctx.fillRect(ox + (i % C) * cs + g, oy + ((i / C) | 0) * cs + g, sz, sz); LF.fade[i] *= 1 - dt * 2.5;
   }
   ctx.globalAlpha = 1;
+  for (let i = 0; i < C * R; i++) {                                // vivas: recém-nascidas mais claras
+    const age = LF.a[i]; if (!age) continue;
+    ctx.fillStyle = age === 1 ? '#ffffff' : HUD; ctx.fillRect(ox + (i % C) * cs + g, oy + ((i / C) | 0) * cs + g, sz, sz);
+  }
+  const shown = t - LF.since, la = LF.mode === 0 ? clamp((14 - shown) / 3) : 0;
+  if (la > 0) {                                                    // nomes das formas nos primeiros segundos
+    const P = lifeLayout(C, R), fs = Math.max(9, h * 0.045);
+    ctx.save(); ctx.globalAlpha = la * 0.9; ctx.fillStyle = color; ctx.font = `${fs}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
+    for (const k in P) {
+      const [txt, ax, ay] = LIFE_NAME[k], nave = k === 'nave', mx = nave ? -LF.gen / 2 : 0;   // a nave anda meia casa por geração
+      ctx.globalAlpha = la * 0.9 * (nave ? clamp((8.5 - shown) / 1.5) : 1);   // e some antes de bater nos planadores
+      ctx.fillText(txt, ox + (P[k][0] + ax + mx) * cs, oy + (P[k][1] + ay) * cs);
+    }
+    ctx.restore();
+  }
+  hudText(ctx, h, [la > 0 ? 'JOGO DA VIDA · nasce com 3 vizinhas, vive com 2 ou 3' : 'JOGO DA VIDA'], w / 2, h * 0.035, 'center');
 }
