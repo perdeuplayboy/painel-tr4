@@ -96,8 +96,8 @@ function sprite() {                                                 // mancha di
 }
 function build(p) {
   const now = Date.now();
-  let ms = now, label = `CÉU AGORA · ${hhmm(now)}`;
-  if (skyAt(new Date(now), p.lat, p.lon).sun[1] > -8) { const d = new Date(now); d.setHours(21, 30, 0, 0); ms = d.getTime(); label = 'CÉU DE HOJE ÀS 21:30'; }   // de dia: o céu desta noite
+  let ms = now, label = null;                                       // sem título: só diz a hora quando o céu não é o de agora
+  if (skyAt(new Date(now), p.lat, p.lon).sun[1] > -8) { const d = new Date(now); d.setHours(21, 30, 0, 0); ms = d.getTime(); label = 'céu desta noite, às 21:30'; }   // de dia: o céu desta noite
   const sky = skyAt(new Date(ms), p.lat, p.lon), d = ms / 86400000 + 2440587.5 - 2451545.0;
   const lst = ((280.46061837 + 360.98564736629 * d + p.lon) % 360 + 360) % 360, sf = Math.sin(p.lat * RAD), cf = Math.cos(p.lat * RAD);
   const enu = (ra, dec, out, o) => {                                // ascensão reta e declinação para leste, norte e para cima

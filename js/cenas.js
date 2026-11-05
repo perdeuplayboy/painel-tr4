@@ -24,31 +24,41 @@ export function hudText(ctx, h, lines, x, y, align = 'left') {
   ctx.restore();
 }
 
-// Coluna de texto para ler de longe: cada item [texto, opacidade, cor, tamanho (fração de h), peso ou 'mono', linhas no máximo].
+// Coluna de texto para ler de longe: cada item [texto, opacidade, cor, tamanho (fração de h), peso ou 'mono', linhas no máximo, pode cortar].
+// Só corta com reticências o item de 3 linhas ou mais, ou marcado como 'pode cortar'; nos outros, o encher diminui a letra.
 // Diminui a letra até 85% para caber na largura; se ainda não couber, quebra em até `n` linhas e corta com reticências.
 // Para em `fim` (o que não couber fica de fora). Devolve a altura onde parou. Com draw = false, só mede.
-export function coluna(ctx, h, itens, x, y, tw, fim = h * 0.97, draw = true) {
+// s: escala de todas as letras. Depois de medir, coluna.cortou diz se algum item ficou de fora.
+export function coluna(ctx, h, itens, x, y, tw, fim = h * 0.97, draw = true, s = 1, m = 1) {   // m: opacidade geral
   ctx.save(); ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
+  coluna.cortou = false;
   for (const it of itens) {
     if (!it) continue;
-    let [s, a = 0.85, cor = HUD, px = LER, peso = '', n = 2] = it;
-    let f = Math.max(9, h * px); const mono = peso === 'mono', fam = mono ? 'px monospace' : 'px system-ui, sans-serif';
+    let [t, a = 0.85, cor = HUD, px = LER, peso = '', n = 2, corta = n >= 3] = it;
+    let f = Math.max(9, h * px * s); const mono = peso === 'mono', fam = mono ? 'px monospace' : 'px system-ui, sans-serif';
     if (mono) peso = '';                                            // 'mono': título no estilo do hudText
-    ctx.font = `${peso}${f}${fam}`; const lw = ctx.measureText(s).width;
-    let L = [s];
+    ctx.font = `${peso}${f}${fam}`; const lw = ctx.measureText(t).width;
+    let L = [t];
     if (lw > tw && lw * 0.85 <= tw) { f *= tw / lw; ctx.font = `${peso}${f}${fam}`; }
     else if (lw > tw) {
       L = []; let cur = '';
-      for (const wd of s.split(' ')) { const tr = cur ? `${cur} ${wd}` : wd; if (cur && ctx.measureText(tr).width > tw) { L.push(cur); cur = wd; } else cur = tr; }
+      for (const wd of t.split(' ')) { const tr = cur ? `${cur} ${wd}` : wd; if (cur && ctx.measureText(tr).width > tw) { L.push(cur); cur = wd; } else cur = tr; }
       if (cur) L.push(cur);
-      if (L.length > n) { L = L.slice(0, n); let u = L[n - 1]; while (u.includes(' ') && ctx.measureText(u + '…').width > tw) u = u.slice(0, u.lastIndexOf(' ')); L[n - 1] = u.replace(/[,;:·]\s*$/, '') + '…'; }
+      if (L.length > n) { if (!corta) coluna.cortou = true; L = L.slice(0, n); let u = L[n - 1]; while (u.includes(' ') && ctx.measureText(u + '…').width > tw) u = u.slice(0, u.lastIndexOf(' ')); L[n - 1] = u.replace(/[,;:·]\s*$/, '') + '…'; }
     }
-    if (y + f * L.length * 1.22 > fim + f * 0.2) break;
-    for (const l of L) { if (draw) { ctx.globalAlpha = a; ctx.fillStyle = cor; ctx.fillText(l, x, y); } y += f * 1.22; }
+    if (y + f * L.length * 1.22 > fim + f * 0.2) { coluna.cortou = true; break; }
+    for (const l of L) { if (draw) { ctx.globalAlpha = a * m; ctx.fillStyle = cor; ctx.fillText(l, x, y); } y += f * 1.22; }
     y += f * 0.12;
   }
   ctx.restore();
   return y;
+}
+// A mesma coluna, com as letras no maior tamanho em que tudo cabe até `fim` (aproveita a altura toda). Devolve a escala.
+export function encher(ctx, h, itens, x, y, tw, fim, max = 1.9, draw = true, m = 1) {
+  let s = max;
+  for (; s > 0.7; s *= 0.95) { coluna(ctx, h, itens, x, y, tw, fim, false, s); if (!coluna.cortou) break; }
+  if (draw) coluna(ctx, h, itens, x, y, tw, fim, true, s, m);
+  return s;
 }
 
 // =====================================================================================
@@ -125,12 +135,18 @@ export function galToEq(l, b) {                                 // coordenadas d
 // em linhas que escondem o que está atrás, girando devagar, com a posição do carro marcada.
 // Precisa de internet uma vez por lugar; depois fica guardado. Sem dados, a animação termina na hora.
 const RG = { grid: null, key: '', loading: false, failed: false, S: 64 };
-function regionKey(p) { return `relevo.${p.lat.toFixed(2)},${p.lon.toFixed(2)}`; }
+function regionKey(p) { const r = v => (Math.round(v * 200) / 200).toFixed(3); return `relevo2.${r(p.lat)},${r(p.lon)}`; }   // um quadrado de 2 km a cada ~500 m andados
+try {                                                               // os relevos de 10 km de antes e os muitos guardados de 2 km saem
+  const ks = Object.keys(localStorage).filter(k => k.startsWith('tr4.relevo.') || k.startsWith('tr4.relevo2.'));
+  for (const k of ks.filter(k => k.startsWith('tr4.relevo.'))) localStorage.removeItem(k);
+  const novos = ks.filter(k => k.startsWith('tr4.relevo2.'));
+  for (const k of novos.slice(0, Math.max(0, novos.length - 30))) localStorage.removeItem(k);   // fica só com os 30 últimos
+} catch {}
 async function loadRegion(p) {
   RG.loading = true;
   try {
-    const z = 12, n = 2 ** z, fx = (p.lon + 180) / 360 * n, la = p.lat * RAD;
-    const fy = (1 - Math.log(Math.tan(la) + 1 / Math.cos(la)) / Math.PI) / 2 * n, span = 1.1;   // ~11 km em volta
+    const z = 14, n = 2 ** z, fx = (p.lon + 180) / 360 * n, la = p.lat * RAD;
+    const fy = (1 - Math.log(Math.tan(la) + 1 / Math.cos(la)) / Math.PI) / 2 * n, span = 0.88;   // ~2 km em volta
     const tx0 = Math.floor(fx - span / 2), ty0 = Math.floor(fy - span / 2), tx1 = Math.floor(fx + span / 2), ty1 = Math.floor(fy + span / 2);
     const cv = document.createElement('canvas'); cv.width = (tx1 - tx0 + 1) * 256; cv.height = (ty1 - ty0 + 1) * 256;
     const g = cv.getContext('2d', { willReadFrequently: true });
@@ -225,7 +241,7 @@ export function regiao(ctx, w, h, t, color) {
   }
   ctx.restore();
   const lugar = p.padrao ? 'sem GPS: centro de São Paulo' : RG.nome || `${Math.abs(p.lat).toFixed(3)}°${p.lat < 0 ? 'S' : 'N'} ${Math.abs(p.lon).toFixed(3)}°${p.lon < 0 ? 'O' : 'L'}`;
-  hudText(ctx, h, [`RELEVO · ${RG.km.toFixed(0)} × ${RG.km.toFixed(0)} km`, lugar, `${RS.lo} a ${RS.hi} m`], w * 0.03, h * 0.04);
+  hudText(ctx, h, [lugar, `${RS.lo} a ${RS.hi} m`], w * 0.03, h * 0.04);
 }
 
 // =====================================================================================
@@ -256,7 +272,7 @@ export function previsao(ctx, w, h, t, color) {
   if (!ok) { if (!FC.loading || t > 10) return true; hudText(ctx, h, ['PREVISÃO · carregando…'], w / 2, h * 0.45, 'center'); return; }
   if (!FS || t < FS.last) FS = { drops: Array.from({ length: 160 }, () => [Math.random(), Math.random(), 0.6 + Math.random() * 0.8]), flash: 0 };
   const dt = clamp(t - (FS.last ?? t), 0, 0.1); FS.last = t;
-  const D = FC.data.slice(0, 13), n = D.length, cw = w / n, top = h * 0.105, skyH = h * (TELA.relogio ? 0.3 : 0.4);   // no standby, embaixo fica livre para o relógio
+  const D = FC.data.slice(0, 13), n = D.length, cw = w / n, top = h * 0.02, skyH = h * (TELA.relogio ? 0.36 : 0.5);   // no standby, embaixo fica livre para o relógio
   D.forEach((o, i) => {                                            // céu de cada hora
     const x = i * cw, cl = o.cloud / 100, g = ctx.createLinearGradient(0, top, 0, top + skyH);
     const a = o.day ? [`rgb(${40 - 10 * cl},${90 - 20 * cl},${150 - 40 * cl})`, `rgb(${110 - 30 * cl},${150 - 40 * cl},${190 - 50 * cl})`] : ['#060a18', '#101a34'];
@@ -290,7 +306,7 @@ export function previsao(ctx, w, h, t, color) {
   const prog = ease(t / 4);                                        // a linha da temperatura vai se desenhando
   ctx.strokeStyle = color; ctx.lineWidth = Math.max(1.5, h * 0.007); ctx.beginPath();
   D.forEach((o, i) => { const x = i * cw + cw / 2; if (i / (n - 1) <= prog) i ? ctx.lineTo(x, ty(o.temp)) : ctx.moveTo(x, ty(o.temp)); }); ctx.stroke();
-  const fs = Math.max(10, h * 0.075), fr = Math.max(9, h * 0.055);
+  const fs = Math.max(10, h * 0.09), fr = Math.max(9, h * 0.06);
   ctx.font = `600 ${fs}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = HUD;
   D.forEach((o, i) => {
     const x = i * cw + cw / 2;
@@ -298,11 +314,10 @@ export function previsao(ctx, w, h, t, color) {
     ctx.fillStyle = HUD;
     if (i % 2 === 0 && i / (n - 1) <= prog) ctx.fillText(`${Math.round(o.temp)}°`, x, ty(o.temp) - fs * 0.3);
     ctx.textBaseline = 'top'; ctx.globalAlpha = 0.8;
-    if (i % 2 === 0) ctx.fillText(i ? `${String(o.hour).padStart(2, '0')}h` : 'agora', i ? x : Math.max(x, ctx.measureText('agora').width / 2 + 2), base + h * 0.13);
+    if (i % 2 === 0) ctx.fillText(i ? `${String(o.hour).padStart(2, '0')}h` : 'agora', i ? x : Math.max(x, ctx.measureText('agora').width / 2 + 2), base + h * 0.14);
     if (o.rain >= 30) { ctx.save(); ctx.font = `${fr}px monospace`; ctx.fillStyle = '#9cc4ff'; ctx.fillText(`${o.rain}%`, x, top + skyH + h * 0.01); ctx.restore(); }
     ctx.globalAlpha = 1; ctx.textBaseline = 'bottom';
   });
-  hudText(ctx, h, ['PRÓXIMAS 12 HORAS'], w * 0.5, h * 0.01, 'center');
 }
 
 // =====================================================================================
@@ -484,8 +499,6 @@ export function vida(ctx, w, h, t, color) {
     }
     ctx.restore();
   }
-  const title = la <= 0 ? 'JOGO DA VIDA' : LF.formas ? 'JOGO DA VIDA · nasce com 3 vizinhas, vive com 2 ou 3' : 'JOGO DA VIDA · células sorteadas';
-  hudText(ctx, h, [title], w / 2, h * 0.035, 'center');
 }
 regiao.prep = regiaoPrep;
 previsao.prep = previsaoPrep;

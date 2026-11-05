@@ -2,7 +2,7 @@
 // satélites passando sobre o carro agora (órbitas do CelesTrak), terremotos das últimas 24 horas num globo (USGS)
 // e a Terra com o dia e a noite deste instante (mapa do Natural Earth), mais os aviões em volta (ADS-B, por um
 // intermediário no Cloudflare). Sem dados, a cena termina na hora.
-import { here, load, keep, hudText, skyAt, ST, HUD, rng, clamp, ease, coluna, TELA, LER } from './cenas.js';
+import { here, load, keep, hudText, skyAt, ST, HUD, rng, clamp, ease, coluna, encher, TELA, LER } from './cenas.js';
 
 const TAU = Math.PI * 2, RAD = Math.PI / 180, RE = 6378.137;
 const days = ms => ms / 86400000 + 2440587.5 - 2451545.0;          // dias desde o ano 2000 ao meio-dia (J2000)
@@ -153,7 +153,7 @@ export function satelites(ctx, w, h, t, color) {
       faint: Array.from({ length: 220 }, (_, i) => { const r = rng(i * 7 + 3); return [r() * 360, Math.asin(r()) / RAD, r()]; }) };
   }
   SS.last = t;
-  const hy = h * 0.64, top = h * 0.05, k = w / 360;                 // horizonte acima do relógio; o céu todo, de norte a norte
+  const hy = h * 0.55, top = h * 0.04, k = w / 360;                 // o céu todo, de norte a norte; embaixo do horizonte, o texto
   const X = az => az * k, Y = el => el >= 0 ? hy - (hy - top) * (el / 90) ** 0.85 : hy - el * (hy - top) / 90;
   const sun = sunEq(now), sunAlt = altOf(sun, now, p.lat, p.lon), dark = sunAlt < -6, sv = unit(sun);
   const g = ctx.createLinearGradient(0, 0, 0, hy);
@@ -193,10 +193,9 @@ export function satelites(ctx, w, h, t, color) {
   const dia = ms => new Date(ms).toDateString() === new Date(now).toDateString() ? 'hoje' : 'amanhã';
   const issTxt = !SS.iss ? null : issUp ? `ISS passando agora a ${Math.round(issUp.el)}° de altura`
     : SS.pass ? `ISS: dá para ver ${dia(SS.pass.ms)} às ${hhmm(SS.pass.ms)}, até ${Math.round(SS.pass.top)}° de altura` : 'ISS: sem passagem visível nas próximas 24 h';
-  const hud = ['SATÉLITES SOBRE VOCÊ', `${n0} acima do horizonte · ${dark ? `${nv} dá para ver agora` : 'de dia não dá para ver'}`, issTxt, p.padrao ? 'sem GPS: céu do centro de São Paulo' : null].filter(Boolean);
-  const hfs = Math.max(10, h * 0.075), fs = Math.max(10, h * 0.06);
-  ctx.font = `${hfs}px monospace`;
-  const taken = [[w * 0.04 - 6, 0, w * 0.04 + Math.max(...hud.map(s => ctx.measureText(s).width)) + 6, h * 0.04 + hud.length * hfs * 1.3 + 4]];   // o texto do canto
+  const hud = [[`${n0} acima do horizonte · ${dark ? `${nv} dá para ver agora` : 'de dia não dá para ver'}`, 0.9, '#ffffff', LER, '600 ', 1], issTxt ? [issTxt, 0.85, HUD, LER, '', 2] : null, p.padrao ? ['sem GPS: céu do centro de São Paulo', 0.7] : null];
+  const fs = Math.max(10, h * 0.06);
+  const taken = [];                                                 // o texto fica embaixo, no chão escuro
   const free = b => !taken.some(o => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]);
   const named = up.filter(u => u.el > 0).sort((a, b) => (b.s.big - a.s.big) || (b.el - a.el));
   let labels = 0;
@@ -232,7 +231,7 @@ export function satelites(ctx, w, h, t, color) {
     ctx.textAlign = az === 0 ? 'left' : az === 360 ? 'right' : 'center'; ctx.fillText(n, X(az) + (az === 0 ? 4 : az === 360 ? -4 : 0), hy + h * 0.02);
   }
   ctx.globalAlpha = 1;
-  hudText(ctx, h, hud, w * 0.04, h * 0.04);
+  encher(ctx, h, hud, w * 0.03, hy + h * 0.1, w * (TELA.relogio ? 0.55 : 0.94), h * 0.97, 1.4);   // no chão, embaixo do horizonte
 }
 
 // =====================================================================================
@@ -364,10 +363,10 @@ export function terremotos(ctx, w, h, t, color) {
   const [ux, uy, uz] = at(QS.p.lat, QS.p.lon);                      // o carro
   if (uz > 0) { ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(ux, uy, Math.max(1.5, h * 0.01), 0, TAU); ctx.fill(); }
   const x0 = w * 0.42, tw = w * 0.97 - x0;
-  coluna(ctx, h, [[`TERREMOTOS · 24 h · ${QS.Q.length} tremores`, 0.85, HUD, 0.075, 'mono'],
+  encher(ctx, h, [[`${QS.Q.length} tremores em 24 h`, 0.85, HUD, LER * 0.85, '600 ', 1],
     !QS.Q.length ? ['nenhum tremor forte no mundo hoje', 0.8] : null,
-    ...QS.top.slice(0, 4).map(q => { const sel = q === cur; return [`M ${q.m.toFixed(1)} · ${lugarPt(q.place)} · ${agoTxt(q.time)}`, sel ? 1 : 0.6, sel ? '#ffffff' : q.m >= 5 ? '#ffb09a' : HUD, LER, sel ? '600 ' : '', 1]; }),
-    QS.near ? [`mais perto: M ${QS.near.m.toFixed(1)} · ${fmtN(QS.nearKm)} km`, 0.75, HUD, LER, '', 1] : null], x0, h * 0.04, tw, h * (TELA.relogio ? 0.7 : 0.97));
+    ...QS.top.slice(0, 4).map(q => { const sel = q === cur; return [`M ${q.m.toFixed(1)} · ${lugarPt(q.place)} · ${agoTxt(q.time)}`, sel ? 1 : 0.6, sel ? '#ffffff' : q.m >= 5 ? '#ffb09a' : HUD, LER, sel ? '600 ' : '', 1, true]; }),
+    QS.near ? [`mais perto: M ${QS.near.m.toFixed(1)} · ${fmtN(QS.nearKm)} km`, 0.75, HUD, LER, '', 1] : null], x0, h * 0.04, tw, h * (TELA.relogio ? 0.7 : 0.96), 1.4);
 }
 
 // =====================================================================================
@@ -473,10 +472,10 @@ export function terra(ctx, w, h, t, color) {
   ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.globalAlpha = 1 - pr; ctx.beginPath(); ctx.arc(cxp, cyp, h * 0.02 + h * 0.06 * pr, 0, TAU); ctx.stroke();
   ctx.globalAlpha = 1; ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(cxp, cyp, Math.max(2, h * 0.012), 0, TAU); ctx.fill();
   say(ctx, h, S.p.padrao ? 'SÃO PAULO' : 'VOCÊ', cxp + h * 0.03, cyp - h * 0.035, 0.9);
-  const simD = new Date(sim), quando = replay ? `${simD.toDateString() === new Date(now).toDateString() ? 'hoje' : 'ontem'} ${hhmm(sim)}` : `agora · ${hhmm(now)}`;
+  const simD = new Date(sim), quando = replay ? `${simD.toDateString() === new Date(now).toDateString() ? 'hoje' : 'ontem'} ${hhmm(sim)}` : '';
   const aqui = altOf(sun, sim, S.p.lat, S.p.lon) > -0.833 ? 'aqui é dia' : 'aqui é noite';
   const sol = S.rise && S.set ? `o sol nasce ${hhmm(S.rise)} e se põe ${hhmm(S.set)}` : null;
-  hudText(ctx, h, [`TERRA · ${quando}`, sol ? `${aqui} · ${sol}` : aqui], w * 0.04, h * 0.04);
+  hudText(ctx, h, [replay ? quando : null, sol ? `${aqui} · ${sol}` : aqui].filter(Boolean), w * 0.04, h * 0.04);
 }
 
 // =====================================================================================
@@ -540,7 +539,7 @@ export function terraFoto(ctx, w, h, t, color) {
     }
   }
   for (let n = 1; n <= 3; n++) epImg(L[(S.cur + n) % L.length].u);  // já vai pedindo as próximas
-  const R = h * 0.45, gx = w * 0.1 + R, gy = h * 0.5;
+  const R = h * 0.45, gx = w * 0.03 + R, gy = h * 0.5;
   ctx.fillStyle = '#ffffff';                                        // estrelas, fora da Terra
   for (const [x, y, s] of S.stars) { const sx = x * w, sy = y * h; if ((sx - gx) ** 2 + (sy - gy) ** 2 < (R * 1.1) ** 2) continue; ctx.globalAlpha = 0.15 + s * 0.4; ctx.fillRect(sx, sy, 1 + s, 1 + s); }
   const gl = ctx.createRadialGradient(gx, gy, R * 0.97, gx, gy, R * 1.12); gl.addColorStop(0, 'rgba(90,150,255,0.28)'); gl.addColorStop(1, 'rgba(90,150,255,0)');
@@ -562,24 +561,13 @@ export function terraFoto(ctx, w, h, t, color) {
   };
   if (S.prev >= 0 && a < 1) disco(S.prev, 1);
   disco(S.cur, a);
-  // à direita: de quando é a foto e de onde ela foi tirada
-  const o = L[S.cur], d = new Date(o.ms), tx = gx + R + w * 0.045, tw = w * 0.96 - tx;
-  const fit = (s, f0, peso = '') => { let f = f0; ctx.font = `${peso}${f}px system-ui, sans-serif`; const lw = ctx.measureText(s).width; if (lw > tw) { f *= tw / lw; ctx.font = `${peso}${f}px system-ui, sans-serif`; } return f; };
-  const dias = Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(o.ms).setHours(0, 0, 0, 0)) / 86400000), fim = h * (TELA.relogio ? 0.6 : 0.84);
-  let y = coluna(ctx, h, [['TERRA VISTA DO ESPAÇO', 0.85, HUD, 0.075, 'mono'],
-    [`${d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })} às ${hhmm(o.ms)}`, 1, '#ffffff', 0.1, '600 ', 1],
+  // à direita: de quando é a foto e de onde ela foi tirada, com a maior letra que couber
+  const o = L[S.cur], d = new Date(o.ms), tx = gx + R + w * 0.04, tw = w * 0.97 - tx;
+  const dias = Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(o.ms).setHours(0, 0, 0, 0)) / 86400000);
+  encher(ctx, h, [[`${d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })} às ${hhmm(o.ms)}`, 1, '#ffffff', 0.1, '600 ', 2],
     [dias <= 0 ? 'foto de hoje' : dias === 1 ? 'foto de ontem' : `foto de ${dias} dias atrás`, 0.8],
-    [`a ${(o.km / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} milhão de km, do satélite DSCOVR`, 0.85],
-    S.meu ? [`você aparece das ${hhmm(S.meu[0])} às ${hhmm(S.meu[1])}`, 0.85] : null], tx, h * 0.04, tw, fim);
-  // as fotos do dia, uma bolinha cada; acesas as que mostram você
-  const by = y + h * 0.04, gap = Math.min(tw / L.length, h * 0.06);
-  L.forEach((q, i) => {
-    const bx = tx + gap * (i + 0.5), sel = i === S.cur, meu = visto(q, S.p) > 0.3;
-    ctx.globalAlpha = sel ? 1 : meu ? 0.7 : 0.3; ctx.fillStyle = sel ? '#ffffff' : meu ? color : HUD;
-    ctx.beginPath(); ctx.arc(bx, by, sel ? Math.max(3, h * 0.011) : Math.max(1.5, h * 0.006), 0, TAU); ctx.fill();
-  });
-  ctx.font = `${Math.max(9, h * 0.042)}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.4;
-  ctx.fillText('fotos: NASA EPIC', tx, by + h * 0.04);
+    [`tirada a ${(o.km / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} milhão de km`, 0.85],
+    S.meu ? [`você aparece das ${hhmm(S.meu[0])} às ${hhmm(S.meu[1])}`, 0.85] : null], tx, h * 0.04, tw, h * (TELA.relogio ? 0.66 : 0.96), 1.6);
   ctx.globalAlpha = 1;
 }
 
@@ -594,7 +582,6 @@ const AV = { list: [], at: 0, loading: false, fail: 0, routes: null, asking: 0, 
 const PLANE_D = 'M0,-10L1.5,-7L1.5,-2L9,3L9,5L1.5,2.5L1.2,7L4,9L4,10.5L0,9.5L-4,10.5L-4,9L-1.2,7L-1.5,2.5L-9,5L-9,3L-1.5,-2L-1.5,-7Z';   // avião visto de cima
 let PLANE = null;
 const CAT = { A1: 0.65, A2: 0.8, A3: 1, A4: 1.1, A5: 1.3 };
-const AV_FONTE = 'dados: adsb.lol, adsbdb, OpenStreetMap';
 const avUrl = () => load('avioesUrl', null) || AV_PADRAO;
 function predict(a, ms) {                                           // onde o avião está agora, seguindo rumo e velocidade
   const km = a.gs * 1.852 * clamp((ms - a.at) / 3600000, 0, 60 / 3600), tr = a.trk * RAD;
@@ -667,7 +654,7 @@ export function avioes(ctx, w, h, t, color) {
     hudText(ctx, h, ['AVIÕES · procurando…'], w / 2, h * 0.45, 'center'); return;
   }
   const W = world();
-  const cx = w * 0.34, cy = h * 0.5, k = h * 0.44 / 50;             // 50 km até a borda de cima
+  const cx = w * 0.34, cy = h * 0.5, k = h * 0.44 / 25;             // 25 km até a borda de cima
   const kx = 111.32 * Math.cos(p.lat * RAD) * k, ky = 110.57 * k, P = (la, lo) => [cx + (lo - p.lon) * kx, cy - (la - p.lat) * ky];
   if (!AS || AS.w !== w || AS.h !== h || AS.lat !== p.lat || AS.lon !== p.lon || (W && !AS.coast)) {
     AS = { w, h, lat: p.lat, lon: p.lon, coast: null };
@@ -679,11 +666,11 @@ export function avioes(ctx, w, h, t, color) {
   }
   if (AS.coast) { ctx.strokeStyle = color; ctx.globalAlpha = 0.3; ctx.lineWidth = Math.max(1, h * 0.004); ctx.stroke(AS.coast); ctx.globalAlpha = 1; }
   const fs = Math.max(10, h * 0.06), lw = Math.max(1, h * 0.004);
-  ctx.strokeStyle = color; ctx.lineWidth = lw;                      // círculos de 10, 25 e 50 km
-  for (const r of [10, 25, 50]) { ctx.globalAlpha = r === 50 ? 0.3 : 0.18; ctx.beginPath(); ctx.arc(cx, cy, r * k, 0, TAU); ctx.stroke(); }
+  ctx.strokeStyle = color; ctx.lineWidth = lw;                      // círculos de 5, 10 e 25 km
+  for (const r of [5, 10, 25]) { ctx.globalAlpha = r === 25 ? 0.3 : 0.18; ctx.beginPath(); ctx.arc(cx, cy, r * k, 0, TAU); ctx.stroke(); }
   const marks = [];                                                 // o que os nomes dos aviões não podem cobrir
   ctx.font = `${fs * 0.85}px monospace`; ctx.textBaseline = 'middle';
-  ctx.textAlign = 'center'; ctx.fillStyle = '#ff6a5a'; ctx.globalAlpha = 0.9; ctx.fillText('N', cx, cy - 50 * k + fs * 0.6); marks.push([cx - fs * 0.5, cy - 50 * k + fs * 0.1, cx + fs * 0.5, cy - 50 * k + fs * 1.1]);
+  ctx.textAlign = 'center'; ctx.fillStyle = '#ff6a5a'; ctx.globalAlpha = 0.9; ctx.fillText('N', cx, cy - 25 * k + fs * 0.6); marks.push([cx - fs * 0.5, cy - 25 * k + fs * 0.1, cx + fs * 0.5, cy - 25 * k + fs * 1.1]);
   ctx.globalAlpha = 1;
   for (const a of AV.list) {                                        // posição de agora, sem pulo quando chega leitura nova
     let [la, lo] = predict(a, now);
@@ -713,18 +700,18 @@ export function avioes(ctx, w, h, t, color) {
   }
   ctx.globalAlpha = 1;
   ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(cx, cy, Math.max(2, h * 0.012), 0, TAU); ctx.fill();   // o carro
-  const n50 = AV.list.filter(a => a.km <= 50 && !a.ground).length, flying = AV.list.filter(a => !a.ground).sort((a, b) => a.km - b.km);
+  const n25 = AV.list.filter(a => a.km <= 25 && !a.ground).length, flying = AV.list.filter(a => !a.ground).sort((a, b) => a.km - b.km);
   const near = flying[0], who = a => a.cs || a.reg || a.hex.toUpperCase();
   const hx = w * 0.62, htw = w * 0.97 - hx, hfim = h * (TELA.relogio ? 0.7 : 0.97);
-  const hud = [['AVIÕES AGORA', 0.85, HUD, 0.075, 'mono'], [n50 === 1 ? '1 no raio de 50 km' : `${n50} no raio de 50 km`, 1, '#ffffff', LER, '600 '],
-    [near ? `mais perto: ${who(near)} a ${fmtN(near.km)} km` : 'nenhum voando por perto', 0.85], p.padrao ? ['sem GPS: centro de São Paulo', 0.7] : null, [AV_FONTE, 0.4, HUD, 0.04]];
-  const hEnd = coluna(ctx, h, hud, hx, h * 0.04, htw, hfim, false);
+  const hud = [[n25 === 0 ? 'nenhum avião em 25 km' : n25 === 1 ? '1 avião em 25 km' : `${n25} aviões em 25 km`, 1, '#ffffff', LER, '600 ', 2],
+    [near ? `mais perto: ${who(near)} a ${fmtN(near.km)} km` : 'nenhum voando por perto', 0.85], p.padrao ? ['sem GPS: centro de São Paulo', 0.7] : null];
+  const hs = encher(ctx, h, hud, hx, h * 0.04, htw, hfim, 1.6, false), hEnd = coluna(ctx, h, hud, hx, h * 0.04, htw, hfim, false, hs);
   const taken = [[hx - 8, 0, w, hEnd + 4], [w * 0.55, h * 0.7, w, h], ...marks];   // texto do canto (com a fonte dos dados), relógio e marcas
   const free = b => !taken.some(o => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]);
   ctx.font = `${fs}px monospace`;
   let labels = 0;
   for (const a of flying) {                                         // nome, altura e rota dos mais perto, sem trombar
-    if (labels >= 6 || a.km > 90) break;
+    if (labels >= 6 || a.km > 45) break;
     const [x, y] = a.xy; if (x < 0 || x > w || y < 0 || y > h) continue;
     const vs = a.vs > 300 ? ' ↑' : a.vs < -300 ? ' ↓' : '', rt = a.route;
     const lines = [`${who(a)}${a.type ? ' · ' + a.type : ''}`, `${fmtN(a.alt)} m${vs} · ${fmtN(a.gs * 1.852)} km/h`];
@@ -737,10 +724,10 @@ export function avioes(ctx, w, h, t, color) {
     }
   }
   const CL = cities(p);
-  if (CL) {                                                         // até 12 cidades dentro dos 50 km, sem trombar
+  if (CL) {                                                         // até 12 cidades dentro dos 30 km, sem trombar
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = HUD;
     // vale mais a cidade grande e a que está perto: uma pequena a 5 km conta mais do que uma igual a 45 km
-    const pick = CL.map(c => ({ c, d: kmBetween(p, c) })).filter(o => o.d <= 50).sort((a, b) => b.c.pop / (1 + b.d / 10) - a.c.pop / (1 + a.d / 10));
+    const pick = CL.map(c => ({ c, d: kmBetween(p, c) })).filter(o => o.d <= 30).sort((a, b) => b.c.pop / (1 + b.d / 10) - a.c.pop / (1 + a.d / 10));
     let nc = 0;
     for (const { c } of pick) {
       if (nc >= 12) break;
@@ -757,7 +744,7 @@ export function avioes(ctx, w, h, t, color) {
     ctx.globalAlpha = 1;
   }
   ctx.font = `${fs * 0.8}px monospace`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.45;
-  for (const r of [10, 25, 50]) {                                   // distâncias em cima do círculo, onde sobrar espaço
+  for (const r of [5, 10, 25]) {                                    // distâncias em cima do círculo, onde sobrar espaço
     const s = `${r} km`, tw = ctx.measureText(s).width;
     for (const ang of [225, 315, 135, 45, 270, 180]) {
       const x = cx + Math.cos(ang * RAD) * r * k - tw / 2, y = cy - Math.sin(ang * RAD) * r * k, bx = [x - 2, y - fs * 0.45, x + tw + 2, y + fs * 0.45];
@@ -783,7 +770,7 @@ export function avioes(ctx, w, h, t, color) {
     }
   }
   ctx.globalAlpha = 1;
-  coluna(ctx, h, hud, hx, h * 0.04, htw, hfim);   // a fonte dos dados vai embaixo do texto, longe do radar
+  coluna(ctx, h, hud, hx, h * 0.04, htw, hfim, true, hs);
 }
 
 export { world, cities, kmBetween, sunEq, moonEq, altOf, wrap, hhmm, online, fmtN, say };
