@@ -31,19 +31,19 @@ function fundoMapa(ctx, w, h, p, M, color, taken, alpha = 1) {
   if (MP.coast) { ctx.strokeStyle = color; ctx.globalAlpha = 0.3 * alpha; ctx.lineWidth = Math.max(1, h * 0.004); ctx.stroke(MP.coast); }
   const fs = Math.max(10, h * 0.05), CL = cities(p);
   if (CL) {
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = HUD;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     const pick = CL.map(c => ({ c, d: kmBetween(p, c) })).filter(o => o.d <= 55).sort((a, b) => b.c.pop / (1 + b.d / 10) - a.c.pop / (1 + a.d / 10));
     let n = 0;
     for (const { c } of pick) {
       if (n >= 10) break;
-      const big = c.pop >= 50000, cfs = fs * (big ? 0.82 : 0.72); ctx.font = `${cfs}px monospace`;
+      const big = c.pop >= 50000, cfs = fs * (big ? 1.64 : 1.44); ctx.font = `${big ? '600 ' : ''}${cfs}px system-ui, sans-serif`;   // o dobro de antes, para ler de longe
       const [x, y] = M.P(c.lat, c.lon), tw = ctx.measureText(c.n).width, dr = Math.max(1.2, h * (big ? 0.006 : 0.0045));
       for (const [x0, y0] of [[x + dr + 3, y], [x - dr - 3 - tw, y], [x - tw / 2, y - cfs * 0.95], [x - tw / 2, y + cfs * 0.95]]) {
         const b = [x0 - 2, y0 - cfs * 0.55, x0 + tw + 2, y0 + cfs * 0.55];
-        if (x0 < w * 0.05 || x0 + tw > w * 0.98 || y0 < h * 0.04 || y0 > h * 0.96 || hit(taken, b)) continue;
+        if (x0 < w * 0.03 || x0 + tw > w * 0.98 || b[1] < h * 0.01 || b[3] > h * 0.99 || hit(taken, b)) continue;
         taken.push(b); n++;
-        ctx.globalAlpha = (big ? 0.55 : 0.4) * alpha; ctx.beginPath(); ctx.arc(x, y, dr, 0, TAU); ctx.fill();
-        ctx.globalAlpha = (big ? 0.6 : 0.45) * alpha; ctx.fillText(c.n, x0, y0); break;
+        ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.85 * alpha; ctx.beginPath(); ctx.arc(x, y, dr * 1.4, 0, TAU); ctx.fill();
+        ctx.shadowColor = '#000'; ctx.shadowBlur = 4; ctx.globalAlpha = (big ? 0.95 : 0.85) * alpha; ctx.fillText(c.n, x0, y0); ctx.shadowBlur = 0; break;
       }
     }
   }
@@ -134,7 +134,7 @@ export function chuva(ctx, w, h, t, color) {
   const nr = RV.near, situ = !nr ? '' : nr.km <= 3 ? 'está chovendo aí' : nr.km === Infinity ? 'sem chuva num raio de 60 km' : `chuva mais perto: ${fmtN(nr.km)} km ${PARA[dir8(nr.dir)]}`;
   const hx = w * 0.6, tw = w * 0.97 - hx, fs = Math.max(10, h * 0.075), fim = h * (TELA.relogio ? 0.7 : 0.97);
   const itens = [situ ? [situ, 1, '#ffffff', LER, '600 ', 3] : null, [quando, 0.8, HUD, LER * 0.8, '', 1]];
-  const sc = encher(ctx, h, itens, hx, h * 0.04, tw, fim, 1.6, false), yEnd = coluna(ctx, h, itens, hx, h * 0.04, tw, fim, false, sc);
+  const sc = encher(ctx, h, itens, hx, h * 0.04, tw, fim, 2.2, false), yEnd = coluna(ctx, h, itens, hx, h * 0.04, tw, fim, false, sc);
   const x0 = w * 0.05, x1 = w * 0.5, yb = h * 0.92, taken = [[hx - 8, 0, w, yEnd + 4], [w * 0.55, h * 0.7, w, h], [x0 - 10, yb - fs * 1.4, x1 + 10, h]];
   fundoMapa(ctx, w, h, p, M, color, taken);
   ctx.strokeStyle = HUD; ctx.globalAlpha = 0.35; ctx.lineWidth = Math.max(1, h * 0.006); ctx.beginPath(); ctx.moveTo(x0, yb); ctx.lineTo(x1, yb); ctx.stroke();
@@ -210,7 +210,7 @@ export function vento(ctx, w, h, t, color) {
   const itens = [[`${fmtN(sHere)} km/h`, 1, '#ffffff', 0.15, '700 '],
     [`${sHere < 2 ? '' : DIRS[dir8(g.dirs[mid])] + ' · '}${nome(sHere)}`, 0.9], [`rajadas até ${fmtN(gHere)} km/h`, 0.85],
     [`na região: ${fmtN(Math.min(...g.spd))} a ${fmtN(Math.max(...g.spd))} km/h`, 0.7]];
-  const sc = encher(ctx, h, itens, hx, h * 0.04, tw, fim, 1.6, false), yEnd = coluna(ctx, h, itens, hx, h * 0.04, tw, fim, false, sc);
+  const sc = encher(ctx, h, itens, hx, h * 0.04, tw, fim, 2.2, false), yEnd = coluna(ctx, h, itens, hx, h * 0.04, tw, fim, false, sc);
   fundoMapa(ctx, w, h, p, M, color, [[hx - 8, 0, w, yEnd + 4], [w * 0.55, h * 0.7, w, h]], 0.9);
   ctx.fillStyle = 'rgba(2,4,8,0.55)'; ctx.fillRect(hx - w * 0.02, 0, w, yEnd + h * 0.02);   // o texto não some no meio das linhas do vento
   coluna(ctx, h, itens, hx, h * 0.04, tw, fim, true, sc);
@@ -287,7 +287,7 @@ export function ar(ctx, w, h, t, color) {
     [`ozônio ${fmtN(d.ozone ?? 0)} · NO₂ ${fmtN(d.nitrogen_dioxide ?? 0)}`, 0.6]];
   const yCat = coluna(ctx, h, itens.slice(0, 1), x0, h * 0.04, tw, fim);
   const by = yCat + h * 0.01, bw = Math.min(tw, w * 0.36);          // régua do índice, de bom a péssimo
-  encher(ctx, h, itens.slice(2), x0, by + bh + h * 0.06, tw, fim, 1.5);
+  encher(ctx, h, itens.slice(2), x0, by + bh + h * 0.06, tw, fim, 2.2);
   {
     [[0, 50], [50, 100], [100, 150], [150, 200], [200, 300]].forEach(([a], i) => { ctx.fillStyle = AQI[i][2]; ctx.globalAlpha = 0.8; ctx.fillRect(x0 + i * bw / 5, by, bw / 5 - 2, bh); });
     const v = clamp(d.us_aqi ?? 0, 0, 300), mx = x0 + (v <= 200 ? v / 200 * 0.8 : 0.8 + (v - 200) / 100 * 0.2) * bw;
@@ -416,7 +416,7 @@ export function lua(ctx, w, h, t, color) {
   encher(ctx, h, [[`${Math.round(LS.f * 100)}% · ${fase(LS.f, LS.wax)}`, 1, '#ffffff', 0.11, '700 ', 1],
     [`nasce ${LS.rise ? hhmm(LS.rise) : '—'} · se põe ${LS.set ? hhmm(LS.set) : '—'}`, 0.85],
     ['PRÓXIMOS NO CÉU', 0.9, color, 0.06, '600 '],
-    ...LS.ev.slice(0, 3).map(e => [`${dm(e.ms)} · ${e.s}`, 0.75, HUD, LER * 0.85, '', 1, true])], x0, h * 0.04, w * 0.97 - x0, h * (TELA.relogio ? 0.7 : 0.96), 1.5);   // no standby, nada embaixo, onde fica o relógio
+    ...LS.ev.slice(0, 3).map(e => [`${dm(e.ms)} · ${e.s}`, 0.75, HUD, LER * 0.85, '', 1, true])], x0, h * 0.04, w * 0.97 - x0, h * (TELA.relogio ? 0.7 : 0.96), 2.2);   // no standby, nada embaixo, onde fica o relógio
 }
 chuva.prep = chuvaPrep;
 vento.prep = ventoPrep;

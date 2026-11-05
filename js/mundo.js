@@ -231,7 +231,7 @@ export function satelites(ctx, w, h, t, color) {
     ctx.textAlign = az === 0 ? 'left' : az === 360 ? 'right' : 'center'; ctx.fillText(n, X(az) + (az === 0 ? 4 : az === 360 ? -4 : 0), hy + h * 0.02);
   }
   ctx.globalAlpha = 1;
-  encher(ctx, h, hud, w * 0.03, hy + h * 0.1, w * (TELA.relogio ? 0.55 : 0.94), h * 0.97, 1.4);   // no chão, embaixo do horizonte
+  encher(ctx, h, hud, w * 0.03, hy + h * 0.1, w * (TELA.relogio ? 0.55 : 0.94), h * 0.97, 2.2);   // no chão, embaixo do horizonte
 }
 
 // =====================================================================================
@@ -366,7 +366,7 @@ export function terremotos(ctx, w, h, t, color) {
   encher(ctx, h, [[`${QS.Q.length} tremores em 24 h`, 0.85, HUD, LER * 0.85, '600 ', 1],
     !QS.Q.length ? ['nenhum tremor forte no mundo hoje', 0.8] : null,
     ...QS.top.slice(0, 4).map(q => { const sel = q === cur; return [`M ${q.m.toFixed(1)} · ${lugarPt(q.place)} · ${agoTxt(q.time)}`, sel ? 1 : 0.6, sel ? '#ffffff' : q.m >= 5 ? '#ffb09a' : HUD, LER, sel ? '600 ' : '', 1, true]; }),
-    QS.near ? [`mais perto: M ${QS.near.m.toFixed(1)} · ${fmtN(QS.nearKm)} km`, 0.75, HUD, LER, '', 1] : null], x0, h * 0.04, tw, h * (TELA.relogio ? 0.7 : 0.96), 1.4);
+    QS.near ? [`mais perto: M ${QS.near.m.toFixed(1)} · ${fmtN(QS.nearKm)} km`, 0.75, HUD, LER, '', 1] : null], x0, h * 0.04, tw, h * (TELA.relogio ? 0.7 : 0.96), 2.2);
 }
 
 // =====================================================================================
@@ -567,7 +567,7 @@ export function terraFoto(ctx, w, h, t, color) {
   encher(ctx, h, [[`${d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })} às ${hhmm(o.ms)}`, 1, '#ffffff', 0.1, '600 ', 2],
     [dias <= 0 ? 'foto de hoje' : dias === 1 ? 'foto de ontem' : `foto de ${dias} dias atrás`, 0.8],
     [`tirada a ${(o.km / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} milhão de km`, 0.85],
-    S.meu ? [`você aparece das ${hhmm(S.meu[0])} às ${hhmm(S.meu[1])}`, 0.85] : null], tx, h * 0.04, tw, h * (TELA.relogio ? 0.66 : 0.96), 1.6);
+    S.meu ? [`você aparece das ${hhmm(S.meu[0])} às ${hhmm(S.meu[1])}`, 0.85] : null], tx, h * 0.04, tw, h * (TELA.relogio ? 0.66 : 0.96), 2.2);
   ctx.globalAlpha = 1;
 }
 
@@ -703,9 +703,9 @@ export function avioes(ctx, w, h, t, color) {
   const n25 = AV.list.filter(a => a.km <= 25 && !a.ground).length, flying = AV.list.filter(a => !a.ground).sort((a, b) => a.km - b.km);
   const near = flying[0], who = a => a.cs || a.reg || a.hex.toUpperCase();
   const hx = w * 0.62, htw = w * 0.97 - hx, hfim = h * (TELA.relogio ? 0.7 : 0.97);
-  const hud = [[n25 === 0 ? 'nenhum avião em 25 km' : n25 === 1 ? '1 avião em 25 km' : `${n25} aviões em 25 km`, 1, '#ffffff', LER, '600 ', 2],
-    [near ? `mais perto: ${who(near)} a ${fmtN(near.km)} km` : 'nenhum voando por perto', 0.85], p.padrao ? ['sem GPS: centro de São Paulo', 0.7] : null];
-  const hs = encher(ctx, h, hud, hx, h * 0.04, htw, hfim, 1.6, false), hEnd = coluna(ctx, h, hud, hx, h * 0.04, htw, hfim, false, hs);
+  const hud = [[n25 === 0 ? 'nenhum avião em 25 km' : n25 === 1 ? '1 avião em 25 km' : `${n25} aviões em 25 km`, 1, '#ffffff', LER, '600 ', 3],
+    near ? [`mais perto: ${who(near)} a ${fmtN(near.km)} km`, 0.85, HUD, LER, '', 3] : null, p.padrao ? ['sem GPS: centro de São Paulo', 0.7] : null];
+  const hs = encher(ctx, h, hud, hx, h * 0.04, htw, hfim, 2.2, false), hEnd = coluna(ctx, h, hud, hx, h * 0.04, htw, hfim, false, hs);
   const taken = [[hx - 8, 0, w, hEnd + 4], [w * 0.55, h * 0.7, w, h], ...marks];   // texto do canto (com a fonte dos dados), relógio e marcas
   const free = b => !taken.some(o => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]);
   ctx.font = `${fs}px monospace`;
@@ -724,21 +724,21 @@ export function avioes(ctx, w, h, t, color) {
     }
   }
   const CL = cities(p);
-  if (CL) {                                                         // até 12 cidades dentro dos 30 km, sem trombar
+  if (CL) {                                                         // até 10 cidades dentro dos 30 km, sem trombar
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = HUD;
     // vale mais a cidade grande e a que está perto: uma pequena a 5 km conta mais do que uma igual a 45 km
     const pick = CL.map(c => ({ c, d: kmBetween(p, c) })).filter(o => o.d <= 30).sort((a, b) => b.c.pop / (1 + b.d / 10) - a.c.pop / (1 + a.d / 10));
     let nc = 0;
     for (const { c } of pick) {
-      if (nc >= 12) break;
-      const big = c.pop >= 50000, cfs = fs * (big ? 0.82 : 0.72); ctx.font = `${cfs}px monospace`;
+      if (nc >= 10) break;
+      const big = c.pop >= 50000, cfs = fs * (big ? 1.64 : 1.44); ctx.font = `${big ? '600 ' : ''}${cfs}px system-ui, sans-serif`;   // o dobro de antes, para ler de longe
       const [x, y] = P(c.lat, c.lon), tw = ctx.measureText(c.n).width, dr = Math.max(1.2, h * (big ? 0.006 : 0.0045));
       for (const [x0, y0] of [[x + dr + 3, y], [x - dr - 3 - tw, y], [x - tw / 2, y - cfs * 0.95], [x - tw / 2, y + cfs * 0.95]]) {   // do lado, em cima ou embaixo
         const bx = [x0 - 2, y0 - cfs * 0.55, x0 + tw + 2, y0 + cfs * 0.55];
-        if (x0 < w * 0.05 || !free(bx)) continue;
+        if (x0 < w * 0.03 || x0 + tw > w * 0.98 || bx[1] < h * 0.01 || bx[3] > h * 0.99 || !free(bx)) continue;
         taken.push(bx, [x - dr - 1, y - dr - 1, x + dr + 1, y + dr + 1]); nc++;
-        ctx.globalAlpha = big ? 0.45 : 0.3; ctx.beginPath(); ctx.arc(x, y, dr, 0, TAU); ctx.fill();
-        ctx.globalAlpha = big ? 0.5 : 0.36; ctx.fillText(c.n, x0, y0); break;
+        ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.8; ctx.beginPath(); ctx.arc(x, y, dr * 1.4, 0, TAU); ctx.fill();
+        ctx.shadowColor = '#000'; ctx.shadowBlur = 4; ctx.globalAlpha = big ? 0.95 : 0.85; ctx.fillText(c.n, x0, y0); ctx.shadowBlur = 0; break;
       }
     }
     ctx.globalAlpha = 1;

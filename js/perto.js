@@ -134,7 +134,7 @@ function cartao(ctx, w, h, t, color, it, A, p, ta, L) {             // A: a foto
     radar(ctx, x0 + cw / 2, y0 + ch / 2, Math.min(cw, ch) * 0.46, h, p, o, L, color, k, A);
   }
   const tx = x0 + cw + w * 0.035, tw = w * 0.97 - tx, fim = h * (TELA.relogio ? 0.66 : 0.96);
-  if (!it.lay || it.lay.w !== w) { const itens = itensL(o, p, L, color); it.lay = { w, itens, s: encher(ctx, h, itens, tx, h * 0.04, tw, fim, 1.6, false) }; }   // medido uma vez por lugar
+  if (!it.lay || it.lay.w !== w) { const itens = itensL(o, p, L, color); it.lay = { w, itens, s: encher(ctx, h, itens, tx, h * 0.04, tw, fim, 2.2, false) }; }   // medido uma vez por lugar
   coluna(ctx, h, it.lay.itens, tx, h * 0.04, tw, fim, true, it.lay.s, ta);
   ctx.restore();
 }
@@ -276,7 +276,7 @@ export function trilhas(ctx, w, h, t, color) {
   ctx.fillText('N', cx, y0 + 3); ctx.globalAlpha = 1;
   // à direita: quanto tem de terra em volta e o passeio da vez, com a maior letra que couber
   const tx = x0 + B + w * 0.035;
-  if (!S.s) S.s = encher(ctx, h, S.itens, tx, h * 0.04, S.tw, S.fim, 1.7, false);
+  if (!S.s) S.s = encher(ctx, h, S.itens, tx, h * 0.04, S.tw, S.fim, 2.2, false);
   coluna(ctx, h, S.itens, tx, h * 0.04, S.tw, S.fim, true, S.s, ease((t - 0.5) / 0.8));
 }
 function trilhasInit(ctx, w, h, p, f0) {
@@ -302,14 +302,14 @@ function trilhasInit(ctx, w, h, p, f0) {
   const itens = [];
   if (TL.km >= 1) {
     itens.push([`${fmtN(TL.km)} km de terra`, 1, '#ffffff', 0.1, '700 ', 1]);
-    itens.push([near < 0.05 ? 'você está numa estrada de terra' : `a mais perto: ${near < 1 ? `${Math.max(1, Math.round(near * 10)) * 100} m` : `${kmTxt(near)} km`} ${dir(nx, ny)}`, 0.9, HUD, LER * 0.85, '', 2]);
+    itens.push([near < 0.05 ? 'você está numa estrada de terra' : `a mais perto: ${near < 1 ? `${Math.max(1, Math.round(near * 10)) * 100} m` : `${kmTxt(near)} km`} ${dir(nx, ny)}`, 0.9, HUD, LER * 0.85, '', 1]);
   } else itens.push(['nenhuma estrada de terra perto', 0.9, HUD, LER * 0.85]);
   if (f) {
     const [nome, cor] = TIPO[f.t];
     itens.push([nome, 0.95, cor, 0.06, '600 ', 1], [f.n, 1, '#ffffff', 0.11, '600 ', 2],
-      [[`${kmTxt(f.d)} km ${dir(f.x, f.y)}`, f.ele ? `${fmtN(f.ele)} m` : '', f.alt ? `queda de ${fmtN(f.alt)} m` : ''].filter(Boolean).join(' · '), 0.9, HUD, LER * 0.85, '', 2]);
+      [[`${kmTxt(f.d)} km ${dir(f.x, f.y)}`, f.ele ? `${fmtN(f.ele)} m` : '', f.alt ? `queda de ${fmtN(f.alt)} m` : ''].filter(Boolean).join(' · '), 0.9, HUD, LER * 0.85, '', 1]);
   }
-  if (conta.length) itens.push([`em 40 km: ${conta.join(' · ')}`, 0.7, HUD, 0.055, '', 2]);
+  if (conta.length) itens.push([`em 40 km: ${conta.join(' · ')}`, 0.7, HUD, 0.055, '', 1]);
   return { w, roads: TL.roads, src: TL.pts, terra, trilha, pts, f, itens, tw, fim };
 }
 trilhas.prep = trilhasPrep;

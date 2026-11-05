@@ -156,7 +156,7 @@ function ficha(ctx, w, h, t, color, it, alpha, p, ta) {   // alpha: a foto; ta: 
   ctx.save(); caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.clip(); cover(ctx, im, x0, y0, cw, ch, 1.02 + 0.06 * kb); ctx.restore();
   caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.strokeStyle = color; ctx.globalAlpha = alpha * 0.35; ctx.lineWidth = Math.max(1, h * 0.003); ctx.stroke();
   const tx = x0 + cw + w * 0.035, tw = w * 0.97 - tx, fim = h * (TELA.relogio ? 0.66 : 0.96);   // no standby, embaixo à direita fica o relógio
-  if (!it.lay || it.lay.w !== w) { const itens = itensB(o, p, color); it.lay = { w, itens, s: encher(ctx, h, itens, tx, h * 0.04, tw, fim, 1.6, false) }; }   // medido uma vez por foto
+  if (!it.lay || it.lay.w !== w) { const itens = itensB(o, p, color); it.lay = { w, itens, s: encher(ctx, h, itens, tx, h * 0.04, tw, fim, 2.2, false) }; }   // medido uma vez por foto
   colunaT(ctx, h, it.lay.itens, tx, h * 0.04, tw, fim, true, it.lay.s, ta);
   ctx.restore();
 }
@@ -165,7 +165,7 @@ function itensB(o, p, color) {
   const nome = o.n ? o.n[0].toUpperCase() + o.n.slice(1) : o.s;
   return [[(GRUPO[o.g] || 'ser vivo').toUpperCase(), 0.95, color, 0.06, '600 ', 1], [nome, 1, '#ffffff', 0.12, '600 ', 2],
     o.n ? [o.s, 0.7, HUD, 0.06, 'italic ', 1] : null,
-    ...selos(o).map(([tt, ex, cor]) => [`${tt} · ${ex}`, 1, cor, 0.055, '700 ', 2]),
+    ...selos(o).map(([tt, ex, cor]) => [`${tt} · ${ex}`, 1, cor, 0.055, '700 ', 1]),
     [quando(o.d), 0.85, HUD, LER * 0.85, '', 1], [onde(p, o), 0.85, HUD, LER * 0.85, '', 2]];
 }
 
@@ -239,7 +239,7 @@ export function historia(ctx, w, h, t, color) {
   ctx.font = `${Math.max(10, h * LER)}px system-ui, sans-serif`; ctx.fillStyle = HUD; ctx.globalAlpha = out * fade * 0.85;
   ctx.fillText(n <= 0 ? 'este ano' : n === 1 ? 'há 1 ano' : `há ${fmtN(n)} anos`, lx0 + aw + h * 0.04, fy0);
   const fy = fy0 + h * 0.05, fim = h * 0.96;                      // a coluna da esquerda não chega no relógio do standby
-  if (!HS.cur.lay || HS.cur.lay.w !== w || HS.cur.lay.fy !== fy) { const itens = [[o.txt, 1, '#f4efe6', LER, '', 8]]; HS.cur.lay = { w, fy, itens, s: encher(ctx, h, itens, lx0, fy, cw, fim, 1.5, false) }; }
+  if (!HS.cur.lay || HS.cur.lay.w !== w || HS.cur.lay.fy !== fy) { const itens = [[o.txt, 1, '#f4efe6', LER, '', 8]]; HS.cur.lay = { w, fy, itens, s: encher(ctx, h, itens, lx0, fy, cw, fim, 2.2, false) }; }
   colunaT(ctx, h, HS.cur.lay.itens, lx0, fy, cw, fim, true, HS.cur.lay.s, out * ease((k - 1.5) / 0.6));
   // a foto do artigo, do lado direito (sem descer até o relógio)
   const im = o.img ? foto(o.img) : null;

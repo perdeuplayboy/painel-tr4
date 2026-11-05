@@ -26,6 +26,7 @@ export function hudText(ctx, h, lines, x, y, align = 'left') {
 
 // Coluna de texto para ler de longe: cada item [texto, opacidade, cor, tamanho (fração de h), peso ou 'mono', linhas no máximo, pode cortar].
 // Só corta com reticências o item de 3 linhas ou mais, ou marcado como 'pode cortar'; nos outros, o encher diminui a letra.
+// O item de 1 linha que não pode cortar encolhe só ele até caber na largura (as outras linhas continuam grandes).
 // Diminui a letra até 85% para caber na largura; se ainda não couber, quebra em até `n` linhas e corta com reticências.
 // Para em `fim` (o que não couber fica de fora). Devolve a altura onde parou. Com draw = false, só mede.
 // s: escala de todas as letras. Depois de medir, coluna.cortou diz se algum item ficou de fora.
@@ -39,7 +40,7 @@ export function coluna(ctx, h, itens, x, y, tw, fim = h * 0.97, draw = true, s =
     if (mono) peso = '';                                            // 'mono': título no estilo do hudText
     ctx.font = `${peso}${f}${fam}`; const lw = ctx.measureText(t).width;
     let L = [t];
-    if (lw > tw && lw * 0.85 <= tw) { f *= tw / lw; ctx.font = `${peso}${f}${fam}`; }
+    if (lw > tw && (lw * 0.85 <= tw || (n === 1 && !corta))) { f *= tw / lw; ctx.font = `${peso}${f}${fam}`; }   // de uma linha só: encolhe só ela
     else if (lw > tw) {
       L = []; let cur = '';
       for (const wd of t.split(' ')) { const tr = cur ? `${cur} ${wd}` : wd; if (cur && ctx.measureText(tr).width > tw) { L.push(cur); cur = wd; } else cur = tr; }
