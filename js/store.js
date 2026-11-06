@@ -12,6 +12,8 @@ export const DEFAULTS = {
   battLimit: 12.0,
   rollLimit: 30,
   pitchLimit: 35,
+  invRoll: true,            // inclinômetro: inverte o lado (depende de como o celular foi montado)
+  invPitch: true,           // inclinômetro: inverte frente/trás
   displacement: 2.0,
   ve: 0.85,
   screenW: 148.2,           // largura da área acesa da tela do G42, em mm (deitado, 2400×1080)

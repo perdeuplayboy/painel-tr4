@@ -271,7 +271,7 @@ function tilt() {
   const r = rawTilt();
   if (!r) return { roll: NaN, pitch: NaN };
   const z = S.level || { roll: 0, pitch: 0 };
-  return { roll: r.roll - z.roll, pitch: r.pitch - z.pitch };
+  return { roll: (r.roll - z.roll) * (S.invRoll ? -1 : 1), pitch: (r.pitch - z.pitch) * (S.invPitch ? -1 : 1) };
 }
 
 // ---------------------------------------------------------------------------
@@ -961,7 +961,7 @@ armed($('btnClearDtc'), () => src.clearDtcs());
 const FIELDS = {
   sSource: 'source', sFuel: 'fuel', sPriceG: 'priceG', sPriceE: 'priceE', sVe: 've',
   sStandbyMin: 'standbyMin', sCoolLimit: 'coolLimit', sBattLimit: 'battLimit',
-  sRollLimit: 'rollLimit', sPitchLimit: 'pitchLimit',
+  sRollLimit: 'rollLimit', sPitchLimit: 'pitchLimit', sInvRoll: 'invRoll', sInvPitch: 'invPitch',
   sScreenW: 'screenW', sOffX: 'offX', sOffY: 'offY', sMask: 'mask', sOutline: 'outline',
   sVoice: 'voice', sTheme: 'theme', sNightDim: 'nightDim', sSpotifyId: 'spotifyClient',
   sAnims: 'anims', sClipSec: 'clipSec', sSleepUnplug: 'sleepUnplug', sCenaRelogio: 'cenaRelogio', sMapTilt: 'mapTilt',
@@ -1356,9 +1356,17 @@ function wakeScreen() {
   if (!asleep) return;
   asleep = false;
   $('sleep').hidden = true;
-  keepAwake(); pageVideo();
+  keepAwake(); pageVideo(); checkUpdate();
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { wakeScreen(); keepAwake(); } });
+// ao acender a tela procura versão nova; o sw.js novo assume na hora (skipWaiting) e a página recarrega
+let updAt = 0;
+function checkUpdate() {
+  if (!navigator.onLine || Date.now() - updAt < 60000) return;
+  updAt = Date.now();
+  navigator.serviceWorker?.getRegistration().then(r => r?.update()).catch(() => {});
+}
+if (navigator.serviceWorker?.controller) navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { wakeScreen(); keepAwake(); checkUpdate(); } });
 addEventListener('pointerdown', e => {
   if (asleep) { wakeScreen(); return; }
   if (e.target.closest('#wing-left, #settings, #fitter, .sound-box')) return;   // o relógio é para as configurações
