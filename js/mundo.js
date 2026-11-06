@@ -731,14 +731,14 @@ export function avioes(ctx, w, h, t, color) {
     let nc = 0;
     for (const { c } of pick) {
       if (nc >= 10) break;
-      const big = c.pop >= 50000, cfs = fs * (big ? 1.64 : 1.44); ctx.font = `${big ? '600 ' : ''}${cfs}px system-ui, sans-serif`;   // o dobro de antes, para ler de longe
-      const [x, y] = P(c.lat, c.lon), tw = ctx.measureText(c.n).width, dr = Math.max(1.2, h * (big ? 0.006 : 0.0045));
+      const cfs = fs * 1.56; ctx.font = `600 ${cfs}px system-ui, sans-serif`;   // todas iguais, o dobro de antes, para ler de longe
+      const [x, y] = P(c.lat, c.lon), tw = ctx.measureText(c.n).width, dr = Math.max(1.2, h * 0.0052);
       for (const [x0, y0] of [[x + dr + 3, y], [x - dr - 3 - tw, y], [x - tw / 2, y - cfs * 0.95], [x - tw / 2, y + cfs * 0.95]]) {   // do lado, em cima ou embaixo
         const bx = [x0 - 2, y0 - cfs * 0.55, x0 + tw + 2, y0 + cfs * 0.55];
         if (x0 < w * 0.03 || x0 + tw > w * 0.98 || bx[1] < h * 0.01 || bx[3] > h * 0.99 || !free(bx)) continue;
         taken.push(bx, [x - dr - 1, y - dr - 1, x + dr + 1, y + dr + 1]); nc++;
         ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.8; ctx.beginPath(); ctx.arc(x, y, dr * 1.4, 0, TAU); ctx.fill();
-        ctx.shadowColor = '#000'; ctx.shadowBlur = 4; ctx.globalAlpha = big ? 0.95 : 0.85; ctx.fillText(c.n, x0, y0); ctx.shadowBlur = 0; break;
+        ctx.shadowColor = '#000'; ctx.shadowBlur = 4; ctx.globalAlpha = 0.92; ctx.fillText(c.n, x0, y0); ctx.shadowBlur = 0; break;
       }
     }
     ctx.globalAlpha = 1;
