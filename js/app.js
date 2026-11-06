@@ -1,7 +1,7 @@
 import {
   State, FUELS, emptyTrip, tripAvgKmL, tripAvgSpeed, deriveAndIntegrate, MockSource, ElmBleSource,
 } from './obd.js';
-import { loadSettings, loadUpkeep, load, save, addVideos, folderOf, listVideos, clearVideos, removeVideo, saveJohnnyFiles, johnnyReady, saveExtras, extrasHave, extrasReady, EXTRAS } from './store.js';
+import { loadSettings, loadUpkeep, load, save, addVideos, folderOf, listVideos, clearVideos, removeVideo, saveJohnnyFiles, johnnyReady, saveExtras, extrasHave, extrasReady, extraURL, EXTRAS } from './store.js';
 import { MapView, Navigator, geocode, distM, fmtDist, arrowPath, arrowChar, packRoute, unpackRoute } from './nav.js';
 import { Spotify } from './spotify.js';
 import { Player } from './player.js';
@@ -266,6 +266,25 @@ function rawTilt() {
   else { sx = grav.x; sy = grav.y; }
   const deg = 180 / Math.PI;
   return { roll: Math.atan2(sx, sy) * deg, pitch: Math.atan2(-grav.z, sy) * deg };
+}
+// inclinação frontal com a TR4 das Aventuras do Joni, quando o offroad.js está no aparelho (Arquivos do painel)
+let joniCar = null, joniCarLoading = false;
+function joniIncl(id, graus, tras) {
+  if (!joniCar) {
+    if (!joniCarLoading && extrasReady('joni')) {
+      joniCarLoading = true;
+      extraURL('offroad.js').then(u => u && import(u)).then(m => { if (m?.carroIncl) joniCar = m.carroIncl; }).catch(() => {});
+    }
+    return;
+  }
+  const box = $(id), svg = box.querySelector('svg');
+  let cv = box.querySelector('canvas');
+  if (!cv) { cv = document.createElement('canvas'); cv.className = 'car'; svg.before(cv); svg.style.display = 'none'; }
+  const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1, W = Math.round(r.width * d), H = Math.round(r.height * d);
+  if (!W || !H) return;
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const lv = box.classList.contains('bad') ? '--bad' : box.classList.contains('warn') ? '--warn' : '--txt';
+  joniCar(cv.getContext('2d'), W, H, graus, getComputedStyle(document.documentElement).getPropertyValue(lv).trim() || '#ddd', tras);
 }
 function tilt() {
   const r = rawTilt();
@@ -880,6 +899,8 @@ function render(d, fresh, speed, running, t) {
   $('inclPitch').className = 'incl ' + level(t.pitch, S.pitchLimit);
   $('carRear').style.transform = `rotate(${isNum(t.roll) ? t.roll : 0}deg)`;
   $('carSide').style.transform = `rotate(${isNum(t.pitch) ? -t.pitch : 0}deg)`;
+  joniIncl('inclPitch', isNum(t.pitch) ? -t.pitch : 0, false);
+  joniIncl('inclRoll', isNum(t.roll) ? t.roll : 0, true);
   const gpsOk = Date.now() - gps.at < 10000;
   const dirs = ['N', 'NE', 'L', 'SE', 'S', 'SO', 'O', 'NO'];
   set('heading', gpsOk && gps.speed > 5 && isNum(gps.heading)
