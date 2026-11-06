@@ -267,16 +267,11 @@ function rawTilt() {
   const deg = 180 / Math.PI;
   return { roll: Math.atan2(sx, sy) * deg, pitch: Math.atan2(-grav.z, sy) * deg };
 }
-// inclinação frontal com a TR4 das Aventuras do Joni, quando o offroad.js está no aparelho (Arquivos do painel)
-let joniCar = null, joniCarLoading = false;
+// inclinômetro com a TR4 das Aventuras do Joni (de lado e de trás), em js/carro-tr4.js
+import('./carro-tr4.js').then(m => { joniCar = m.carroIncl; }).catch(e => log('inclinômetro: ' + e.message));
+let joniCar = null;
 function joniIncl(id, graus, tras) {
-  if (!joniCar) {
-    if (!joniCarLoading && extrasReady('joni')) {
-      joniCarLoading = true;
-      extraURL('offroad.js').then(u => u && import(u)).then(m => { if (m?.carroIncl) { joniCar = m.carroIncl; log('inclinômetro: TR4 do Joni'); } else log('inclinômetro: o offroad.js do aparelho é antigo (sem o desenho); mande o novo em Arquivos do painel'); }).catch(e => log('inclinômetro: offroad.js não abriu: ' + e.message));
-    }
-    return;
-  }
+  if (!joniCar) return;
   const box = $(id), svg = box.querySelector('svg');
   let cv = box.querySelector('canvas');
   if (!cv) { cv = document.createElement('canvas'); cv.className = 'car'; svg.before(cv); svg.style.display = 'none'; }
