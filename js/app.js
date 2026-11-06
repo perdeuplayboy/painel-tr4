@@ -273,7 +273,7 @@ function joniIncl(id, graus, tras) {
   if (!joniCar) {
     if (!joniCarLoading && extrasReady('joni')) {
       joniCarLoading = true;
-      extraURL('offroad.js').then(u => u && import(u)).then(m => { if (m?.carroIncl) joniCar = m.carroIncl; }).catch(() => {});
+      extraURL('offroad.js').then(u => u && import(u)).then(m => { if (m?.carroIncl) { joniCar = m.carroIncl; log('inclinômetro: TR4 do Joni'); } else log('inclinômetro: o offroad.js do aparelho é antigo (sem o desenho); mande o novo em Arquivos do painel'); }).catch(e => log('inclinômetro: offroad.js não abriu: ' + e.message));
     }
     return;
   }
