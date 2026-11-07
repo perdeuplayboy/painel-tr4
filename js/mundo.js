@@ -731,7 +731,7 @@ export function avioes(ctx, w, h, t, color) {
     let nc = 0;
     for (const { c } of pick) {
       if (nc >= 10) break;
-      const cfs = fs * 1.56; ctx.font = `600 ${cfs}px system-ui, sans-serif`;   // todas iguais, o dobro de antes, para ler de longe
+      const cfs = fs * 1.56; ctx.font = `${cfs}px system-ui, sans-serif`;   // todas iguais, sem negrito, o dobro de antes, para ler de longe
       const [x, y] = P(c.lat, c.lon), tw = ctx.measureText(c.n).width, dr = Math.max(1.2, h * 0.0052);
       for (const [x0, y0] of [[x + dr + 3, y], [x - dr - 3 - tw, y], [x - tw / 2, y - cfs * 0.95], [x - tw / 2, y + cfs * 0.95]]) {   // do lado, em cima ou embaixo
         const bx = [x0 - 2, y0 - cfs * 0.55, x0 + tw + 2, y0 + cfs * 0.55];

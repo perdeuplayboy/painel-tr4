@@ -105,6 +105,7 @@ export class Player {
         c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      TELA.canvas = c;                                                     // para o texto da cena saber onde estão os cantos da moldura
       const rel = this.opts.relogio; TELA.relogio = !!(typeof rel === 'function' ? rel() : rel);   // standby: relógio no canto da cena
       if (draw(ctx, w, h, (now - t0) / 1000, this.opts.color()) === true) this.next();   // a animação terminou
     };

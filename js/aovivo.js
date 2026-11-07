@@ -36,7 +36,7 @@ function fundoMapa(ctx, w, h, p, M, color, taken, alpha = 1) {
     let n = 0;
     for (const { c } of pick) {
       if (n >= 10) break;
-      const cfs = fs * 1.56; ctx.font = `600 ${cfs}px system-ui, sans-serif`;   // todas iguais, o dobro de antes, para ler de longe
+      const cfs = fs * 1.56; ctx.font = `${cfs}px system-ui, sans-serif`;   // todas iguais, sem negrito, o dobro de antes, para ler de longe
       const [x, y] = M.P(c.lat, c.lon), tw = ctx.measureText(c.n).width, dr = Math.max(1.2, h * 0.0052);
       for (const [x0, y0] of [[x + dr + 3, y], [x - dr - 3 - tw, y], [x - tw / 2, y - cfs * 0.95], [x - tw / 2, y + cfs * 0.95]]) {
         const b = [x0 - 2, y0 - cfs * 0.55, x0 + tw + 2, y0 + cfs * 0.55];
@@ -405,14 +405,14 @@ export function lua(ctx, w, h, t, color) {
   ctx.fillStyle = '#03050a'; ctx.fillRect(0, 0, w, h);
   for (const [x, y, b] of LS.stars) { ctx.globalAlpha = 0.15 + 0.35 * b * (0.7 + 0.3 * Math.sin(t * 2 + b * 30)); ctx.fillStyle = '#dfe6ff'; ctx.fillRect(x, y, 1, 1); }
   ctx.globalAlpha = 1;
-  const r = h * 0.42, cx = w * 0.2, cy = h * 0.5, south = p.lat < 0;
+  const r = Math.min(h * 0.42, w * 0.17), cx = w * 0.03 + r, cy = h * 0.5, south = p.lat < 0;
   const gl = ctx.createRadialGradient(cx, cy, r * 0.9, cx, cy, r * 1.5); gl.addColorStop(0, `rgba(230,230,210,${0.12 * LS.f})`); gl.addColorStop(1, 'rgba(230,230,210,0)');
   ctx.fillStyle = gl; ctx.fillRect(cx - r * 1.6, cy - r * 1.6, r * 3.2, r * 3.2);
   ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.clip(); ctx.translate(cx, cy); if (south) ctx.rotate(Math.PI);
   if (LS.foto.complete && LS.foto.naturalWidth) { const s = r / LUA_R; ctx.drawImage(LS.foto, -s / 2, -s / 2, s, s); }
   else { ctx.fillStyle = '#9a9a92'; ctx.fillRect(-r, -r, r * 2, r * 2); }
   ctx.drawImage(LS.mask, -r, -r, r * 2, r * 2); ctx.restore();
-  const x0 = w * 0.4, dm = d => new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', ...(d - now > 300 * 86400000 ? { year: '2-digit' } : {}) });
+  const x0 = Math.max(w * 0.4, w * 0.03 + 2 * Math.min(h * 0.42, w * 0.17) + w * 0.04), dm = d => new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', ...(d - now > 300 * 86400000 ? { year: '2-digit' } : {}) });
   encher(ctx, h, [[`${Math.round(LS.f * 100)}% · ${fase(LS.f, LS.wax)}`, 1, '#ffffff', 0.11, '700 ', 1],
     [`nasce ${LS.rise ? hhmm(LS.rise) : '—'} · se põe ${LS.set ? hhmm(LS.set) : '—'}`, 0.85],
     ['PRÓXIMOS NO CÉU', 0.9, color, 0.06, '600 '],

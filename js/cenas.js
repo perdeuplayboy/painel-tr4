@@ -7,7 +7,31 @@ export const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 export const ease = p => (p = clamp(p), p * p * (3 - 2 * p));
 export const HUD = '#d8f6ff';
 // TELA.relogio: a cena está no standby, com o relógio por cima no canto de baixo à direita (o texto não desce até lá)
-export const TELA = { relogio: false };
+export const TELA = { relogio: false, janela: null, canvas: null };
+// Formato da janela da moldura (TELA.janela: pontos em mm da tela, e TELA.tela(): retângulo da tela e mm em px, do app).
+// livre(x0, x1) diz, em px do canvas da cena, de que altura até que altura a faixa x0..x1 aparece pela moldura:
+// nos cantos arredondados o texto desce o necessário em vez de sumir atrás da moldura.
+let LV = { t: 0, r: null };
+export function livre(x0, x1) {
+  const J = TELA.janela, c = TELA.canvas;
+  if (!J || !c || !TELA.tela) return [-1e9, 1e9];
+  const now = performance.now();
+  if (now - LV.t > 500 || LV.c !== c) { LV = { t: now, c, r: c.getBoundingClientRect(), T: TELA.tela() }; }
+  const { r, T } = LV; if (!r.width || !T) return [-1e9, 1e9];
+  let top = -1e9, bot = 1e9;
+  for (let k = 0; k <= 6; k++) {
+    const xm = (r.left + x0 + (x1 - x0) * k / 6 - T.left) / T.mm;   // em mm da tela
+    let a = 1e9, b = -1e9;
+    for (let i = 0; i < J.length; i++) {
+      const [ax, ay] = J[i], [bx, by] = J[(i + 1) % J.length];
+      if ((ax <= xm) === (bx <= xm) || ax === bx) continue;
+      const y = ay + (by - ay) * (xm - ax) / (bx - ax); a = Math.min(a, y); b = Math.max(b, y);
+    }
+    if (a > b) continue;
+    top = Math.max(top, (a * T.mm + T.top - r.top) + 2); bot = Math.min(bot, (b * T.mm + T.top - r.top) - 2);
+  }
+  return [top, bot];
+}
 // tamanho mínimo das letras de texto corrido, em fração da altura (lido de longe, no painel do carro)
 export const LER = 0.088;
 export const load = (k, d) => { try { const v = localStorage.getItem('tr4.' + k); return v ? JSON.parse(v) : d; } catch { return d; } };
@@ -20,7 +44,12 @@ export function hudText(ctx, h, lines, x, y, align = 'left') {
   const fs = Math.max(10, h * 0.075);
   ctx.save(); ctx.font = `${fs}px monospace`; ctx.textAlign = align; ctx.textBaseline = 'top';
   ctx.fillStyle = HUD; ctx.globalAlpha = 0.85; ctx.shadowColor = '#000'; ctx.shadowBlur = 6;
-  lines.forEach((s, i) => ctx.fillText(s, x, y + i * fs * 1.3));
+  let yy = y; const cw = ctx.canvas.width / (ctx.getTransform().a || 1), room = align === 'left' ? cw * 0.98 - x : align === 'right' ? x - cw * 0.02 : cw * 0.96;
+  for (const s of lines) {
+    ctx.font = `${fs}px monospace`; if (ctx.measureText(s).width > room) ctx.font = `${fs * room / ctx.measureText(s).width}px monospace`;
+    const tw = ctx.measureText(s).width, x0 = align === 'right' ? x - tw : align === 'center' ? x - tw / 2 : x;
+    yy = Math.max(yy, livre(x0, x0 + tw)[0]); ctx.fillText(s, x, yy); yy += fs * 1.3;
+  }
   ctx.restore();
 }
 
@@ -45,10 +74,14 @@ export function coluna(ctx, h, itens, x, y, tw, fim = h * 0.97, draw = true, s =
       L = []; let cur = '';
       for (const wd of t.split(' ')) { const tr = cur ? `${cur} ${wd}` : wd; if (cur && ctx.measureText(tr).width > tw) { L.push(cur); cur = wd; } else cur = tr; }
       if (cur) L.push(cur);
+      const mw = Math.max(...L.map(l => ctx.measureText(l).width));   // palavra sozinha mais larga que a coluna: diminui a letra
+      if (mw > tw) { f *= tw / mw; ctx.font = `${peso}${f}${fam}`; }
       if (L.length > n) { if (!corta) coluna.cortou = true; L = L.slice(0, n); let u = L[n - 1]; while (u.includes(' ') && ctx.measureText(u + '…').width > tw) u = u.slice(0, u.lastIndexOf(' ')); L[n - 1] = u.replace(/[,;:·]\s*$/, '') + '…'; }
     }
-    if (y + f * L.length * 1.22 > fim + f * 0.2) { coluna.cortou = true; break; }
-    for (const l of L) { if (draw) { ctx.globalAlpha = a * m; ctx.fillStyle = cor; ctx.fillText(l, x, y); } y += f * 1.22; }
+    for (const l of L) { const [lt] = livre(x, x + ctx.measureText(l).width); if (y < lt) y = lt; break; }   // canto arredondado em cima
+    const lim = Math.min(fim, livre(x, x + tw)[1]);
+    if (y + f * L.length * 1.22 > lim + f * 0.2) { coluna.cortou = true; break; }
+    for (const l of L) { const lt = livre(x, x + ctx.measureText(l).width)[0]; if (y < lt) y = lt; if (draw) { ctx.globalAlpha = a * m; ctx.fillStyle = cor; ctx.fillText(l, x, y); } y += f * 1.22; }
     y += f * 0.12;
   }
   ctx.restore();

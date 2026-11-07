@@ -346,13 +346,15 @@ function compass(ctx, w, h, t, color) {
   ctx.globalAlpha = 1;
   ctx.fillStyle = color;                                              // marca fixa no topo
   ctx.beginPath(); ctx.moveTo(cx, cy - R - 2); ctx.lineTo(cx - 7, cy - R - 14); ctx.lineTo(cx + 7, cy - R - 14); ctx.fill();
-  ctx.font = `bold ${h * 0.14}px monospace`; ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#e6e9ef';
-  ctx.fillText(`${String(locked ? 0 : Math.round(hd + 360) % 360).padStart(3, '0')}°`, w * 0.15, cy);
-  ctx.font = `${h * 0.07}px sans-serif`;
-  ctx.fillStyle = locked ? color : '#8a8f98';
-  ctx.fillText(locked ? 'TRAVADO' : 'BUSCANDO…', w * 0.85, cy);
-  ctx.textBaseline = 'alphabetic';
+  // rumo à esquerda e estado à direita da bússola, cada um no espaço que sobra (a tela pode ser mais ou menos larga)
+  const ladoL = cx - R * 1.12, ladoR = cx + R * 1.12, fit = (txt, px, room, fam) => {
+    ctx.font = `${px}px ${fam}`; const tw = ctx.measureText(txt).width; if (tw > room) ctx.font = `${px * room / tw}px ${fam}`; };
+  ctx.textBaseline = 'middle'; ctx.save(); ctx.textAlign = 'right';
+  const rumo = `${String(locked ? 0 : Math.round(hd + 360) % 360).padStart(3, '0')}°`;
+  ctx.fillStyle = '#e6e9ef'; fit(rumo, h * 0.14, ladoL - w * 0.03, 'monospace'); ctx.font = 'bold ' + ctx.font; ctx.fillText(rumo, ladoL, cy);
+  ctx.textAlign = 'left'; const st = locked ? 'TRAVADO' : 'BUSCANDO…';
+  ctx.fillStyle = locked ? color : '#8a8f98'; fit(st, h * 0.07, w * 0.97 - ladoR, 'sans-serif'); ctx.fillText(st, ladoR, cy);
+  ctx.restore(); ctx.textBaseline = 'alphabetic';
 }
 
 // Brilho ciano: vídeo retrô em loop (veio pronto, fica só no aparelho), desenhado no canvas como as outras animações
