@@ -116,6 +116,11 @@ export function carTras(c, x, y, s, angle = 0) {
     c.beginPath(); c.arc(sx * 25, -23.3, 1.2, 0, TAU); c.fill();
   }
   c.fillStyle = '#e8e8e8'; c.globalAlpha = 0.45; c.beginPath(); c.roundRect(-21.4, -35.4, 13.2, 4.4, 0.6); c.fill(); c.globalAlpha = 1;   // placa
+  // a aba em cima da placa (luz de placa com "PAJERO TR4"), saliente da tampa: x 85–192 e y 155–178 na foto
+  c.beginPath(); c.roundRect(-21.8, -38.9, 14.1, 3.1, [0.6, 1.4, 0.4, 0.4]); outline(c, lw * 0.7);
+  c.fillStyle = rgba(OR, 0.55); c.fillRect(-17.2, -37.6, 7.2, 0.9);   // as letras, como um risco
+  c.fillStyle = '#c0283a'; c.fillRect(-11.6, -37.6, 1.8, 0.9);       // o "TR4" vermelho
+
   c.beginPath(); c.moveTo(-28.6, -19.8); c.lineTo(28.6, -19.8); c.strokeStyle = OR; c.lineWidth = lw * 0.8; c.stroke();   // para-choque
   c.strokeStyle = rgba(OR, 0.4); c.lineWidth = 0.8; c.beginPath(); c.moveTo(-15, -15.8); c.lineTo(15, -15.8); c.stroke();
   c.beginPath(); c.arc(5.3, -30.2, 12.7, 0, TAU); outline(c, lw);   // estepe na tampa, um pouco à direita
