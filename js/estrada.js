@@ -42,10 +42,9 @@ function guardar(k, v) {
   keep('estrada', MEM);
 }
 
-// "12 km · 18 min" (por estrada; com "+ 1,2 km a pé" quando o ponto fica longe da estrada)
+// "12 km · 18 min", por estrada
 export function textoEstrada(r) {
   const km = r.km < 10 ? r.km.toFixed(1).replace('.', ',') : String(Math.round(r.km));
   const min = r.min < 60 ? `${Math.max(1, Math.round(r.min))} min` : `${Math.floor(r.min / 60)} h ${String(Math.round(r.min % 60)).padStart(2, '0')}`;
-  const ape = r.ape >= 0.3 ? ` + ${r.ape < 10 ? r.ape.toFixed(1).replace('.', ',') : Math.round(r.ape)} km a pé` : '';
-  return `${km} km · ${min}${ape}`;
+  return `${km} km · ${min}`;
 }
