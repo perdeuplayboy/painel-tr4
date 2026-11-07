@@ -59,14 +59,14 @@ button { font: inherit; color: inherit; background: none; border: 0; }
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .8rem;
   text-align: center;
 }
-#wing-left { left: 2rem; top: 13.5rem; height: 31rem; }   /* abaixo do canto arredondado de cima à esquerda */
+#wing-left { left: 2rem; top: 14rem; height: 38rem; }   /* abaixo do canto arredondado de cima à esquerda */
 .clock { font-size: 6.6rem; font-weight: 600; letter-spacing: -.02em; line-height: 1; }
 .date { font-size: 3rem; color: var(--txt); }
 .weekday { font-size: 2.4rem; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
 .wtemp b { font-size: 4.4rem; line-height: 1; display: block; }
 .wtemp small { font-size: 1.9rem; }
-.wing .wtemp:first-child { margin-bottom: .6rem; }   /* fora: acima do relógio; motor: abaixo */
-.wing .wtemp:last-child { margin-top: .6rem; }
+.wing .wtemp:first-child { margin-bottom: 1.2rem; }   /* fora: acima do relógio; motor: abaixo */
+.wing .wtemp:last-child { margin-top: 1.2rem; }
 .wtemp.cold b { color: var(--cold); }
 .wtemp.hot b { color: var(--bad); }
 

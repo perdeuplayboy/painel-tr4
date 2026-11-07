@@ -35,10 +35,10 @@ function holePath(x, y) {
 }
 
 // Janela da moldura medida na foto da tela de medição (07/11/2026), em mm da tela: a largura inteira aparece, menos os
-// dois cantos de cima (o da esquerda bem arredondado, o da direita pequeno); na altura, do banco do motorista, ~47 mm.
+// dois cantos de cima (o da esquerda bem arredondado, o da direita pequeno); na altura, do banco do motorista, ~54–55 mm.
 const JANELA = [[-2, 24.1], [0, 24.1], [1.9, 19.5], [4.9, 15.8], [7.5, 13.4], [10.2, 11.3], [14.7, 8.3], [20.8, 5.3], [26.3, 3.6], [32.1, 2.3],
   [37, 1], [41.9, 0], [41.9, -2], [122, -2], [122, 0], [127.6, 1], [132.6, 2.3], [137.4, 3.3], [141.6, 4.5], [145.4, 6.8], [147.7, 8.3],
-  [151, 8.3], [151, 47], [-2, 47]];   // embaixo: do banco do motorista só aparece até ~47 mm (foto da cena História, 07/11)
+  [151, 8.3], [151, 54], [-2, 55.5]];   // embaixo: foto da régua tirada do banco do motorista (07/11): ~55,5 mm à esquerda, ~54 à direita
 // a área usada (STAGE) é o retângulo da janela dentro da tela; relógio, cenas e configurações ficam dentro dele
 const STAGE = { x: 0, y: 0, w: 140, h: 45 };
 function holeNow(W, H) {
