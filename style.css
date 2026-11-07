@@ -59,7 +59,7 @@ button { font: inherit; color: inherit; background: none; border: 0; }
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .8rem;
   text-align: center;
 }
-#wing-left { left: 4rem; top: 5rem; height: 36rem; }
+#wing-left { left: 3rem; top: 15rem; height: 39rem; }   /* abaixo do canto arredondado de cima à esquerda */
 .clock { font-size: 6.6rem; font-weight: 600; letter-spacing: -.02em; line-height: 1; }
 .date { font-size: 3rem; color: var(--txt); }
 .weekday { font-size: 2.4rem; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
@@ -71,9 +71,9 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 .wtemp.hot b { color: var(--bad); }
 
 /* ---- área central e páginas ---- */
-#center { position: absolute; left: 23rem; right: 10rem; top: 3.5rem; bottom: 2.5rem; }
+#center { position: absolute; left: 24rem; right: 4rem; top: 5.5rem; bottom: 3.5rem; }
 #screen.semrelogio #wing-left { display: none; }
-#screen.semrelogio #center { left: 11rem; }   /* sem o relógio: a cena vai até perto da ponta arredondada */
+#screen.semrelogio #center { left: 14rem; }   /* sem o relógio: a cena vai até perto do canto arredondado */
 .page { position: absolute; inset: 0; display: none; flex-direction: column; }
 .page.on { display: flex; }
 .page h2 {

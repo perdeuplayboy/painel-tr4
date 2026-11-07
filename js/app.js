@@ -33,6 +33,17 @@ function holePath(x, y) {
     `C${p(8, 5)} ${p(0, 12)} ${p(0, 23)} C${p(0, 37)} ${p(8, 45)} ${p(20, 45)} Z`;
 }
 
+// Janela da moldura medida na foto da tela de medição (07/11/2026), em mm da tela: mostra a largura inteira da tela,
+// de y 0 até ~57 mm; canto de cima à esquerda bem arredondado, o da direita pequeno. Fora da tela não importa.
+const JANELA = [[-2, 24.1], [0, 24.1], [1.9, 19.5], [4.9, 15.8], [7.5, 13.4], [10.2, 11.3], [14.7, 8.3], [20.8, 5.3], [26.3, 3.6], [32.1, 2.3],
+  [37, 1], [41.9, 0], [41.9, -2], [122, -2], [122, 0], [127.6, 1], [132.6, 2.3], [137.4, 3.3], [141.6, 4.5], [145.4, 6.8], [147.7, 8.3],
+  [151, 8.3], [151, 56.4], [147.7, 56.4], [75.2, 57.5], [0, 58], [-2, 58]];
+// a área usada (STAGE) é o retângulo da janela dentro da tela; relógio, cenas e configurações ficam dentro dele
+const STAGE = { x: 0, y: 0, w: 140, h: 45 };
+function holeNow(W, H) {
+  const pts = S.holeShape?.length > 10 ? S.holeShape : JANELA.map(([x, y]) => [x + S.offX, y + S.offY]);
+  return pts.map(([x, y]) => [Math.round(x * 100) / 100, Math.round(y * 100) / 100]);
+}
 function layout() {
   const W = S.screenW, H = W * 1080 / 2400;
   const vw = innerWidth, vh = innerHeight;
@@ -41,23 +52,22 @@ function layout() {
   Object.assign($('screen').style, {
     width: W * mm + 'px', height: H * mm + 'px', left: (vw - W * mm) / 2 + 'px', top: (vh - H * mm) / 2 + 'px',
   });
-  let x0 = (W - 140) / 2 + S.offX, y0 = (H - 45) / 2 + S.offY, k = 1, hole = holePath(x0, y0);
-  if (S.holeShape?.length > 10) {                                    // janela desenhada com o dedo: o conteúdo encolhe para caber nela
-    const xs = S.holeShape.map(p => p[0]), ys = S.holeShape.map(p => p[1]);
-    const bx = Math.min(...xs), by = Math.min(...ys), bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by;
-    k = Math.min(1.1, bw / 140, bh / 45); x0 = bx + (bw - 140 * k) / 2; y0 = by + (bh - 45 * k) / 2; hole = shapePath(S.holeShape);
-  }
-  Object.assign($('stage').style, { left: x0 + 'rem', top: y0 + 'rem', transform: k === 1 ? '' : `scale(${k})`, transformOrigin: '0 0' });
+  if (S.janelaV !== 2) { delete S.holeShape; S.offX = 0; S.offY = 0; S.janelaV = 2; saveSettings(); }   // troca a janela antiga pela medida
+  const pts = holeNow(W, H), hole = shapePath(pts);
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const x0 = Math.max(0, Math.min(...xs)), y0 = Math.max(0, Math.min(...ys));
+  Object.assign(STAGE, { x: x0, y: y0, w: Math.min(W, Math.max(...xs)) - x0, h: Math.min(H, Math.max(...ys)) - y0 });
+  Object.assign($('stage').style, { left: x0 + 'rem', top: y0 + 'rem', width: STAGE.w + 'rem', height: STAGE.h + 'rem', transform: '' });
   $('mask').setAttribute('viewBox', `0 0 ${W} ${H}`);
   $('maskPath').setAttribute('d', `M0 0 H${W} V${H} H0 Z ` + hole);
   $('outlinePath').setAttribute('d', S.outline ? hole : '');
   $('btnFitReset').hidden = !S.holeShape;
   $('screen').classList.toggle('dim', S.mask === 'dim');
-  // configurações: no retângulo que cabe inteiro dentro da janela (sem as pontas arredondadas)
+  // configurações: à direita do relógio, longe do canto arredondado
   const sl = (vw - W * mm) / 2, st = (vh - H * mm) / 2;
   Object.assign($('settings').style, {
-    left: sl + (x0 + 14 * k) * mm + 'px', top: st + (y0 + 5 * k) * mm + 'px',
-    width: 112 * k * mm + 'px', height: 38.5 * k * mm + 'px',
+    left: sl + (x0 + 24) * mm + 'px', top: st + (y0 + 5.5) * mm + 'px',
+    width: (STAGE.w - 28) * mm + 'px', height: (STAGE.h - 9) * mm + 'px',
   });
 }
 
@@ -641,7 +651,7 @@ function exitStandby() {
 // toque nas laterais (fora da área central), no relógio ou arrastar sai
 let sbTouch = null;
 function inSbCenter(e) {
-  const r = $('stage').getBoundingClientRect(), mm = r.width / 140;
+  const r = $('stage').getBoundingClientRect(), mm = r.width / STAGE.w;
   return e.clientX > r.left + 24 * mm && e.clientX < r.right - 24 * mm;
 }
 $('standby').addEventListener('pointerdown', e => { e.stopPropagation(); sbTouch = { x: e.clientX, y: e.clientY }; });
@@ -1247,9 +1257,8 @@ function medirTela() {
     for (let x = 0; x < W; x += 10) for (let y = 0; y < H; y += 10) c.fillText(`${x},${y}`, x + 0.6, y + 0.6);
     c.fillStyle = '#ffd23c'; c.font = '600 1.6px system-ui, sans-serif';   // meio de cada quadrado: o 5
     for (let x = 5; x < W; x += 10) for (let y = 5; y < H; y += 10) c.fillText(`${x},${y}`, x + 0.4, y + 0.4);
-    let x0 = (W - 140) / 2 + S.offX, y0 = (H - 45) / 2 + S.offY;
     c.strokeStyle = '#4aff7a'; c.lineWidth = 0.4; c.setLineDash([1.5, 1]);
-    c.stroke(new Path2D(S.holeShape?.length > 10 ? shapePath(S.holeShape) : holePath(x0, y0)));
+    c.stroke(new Path2D(shapePath(holeNow(W, H))));
     c.setLineDash([]); c.strokeStyle = '#fff'; c.lineWidth = 0.5; c.strokeRect(0, 0, W, H);   // borda da área acesa
   };
   let last = 0;
@@ -1259,7 +1268,7 @@ function medirTela() {
 }
 $('btnMedir').addEventListener('click', medirTela);
 $('btnFit').addEventListener('click', fitByTrace);
-$('btnFitReset').addEventListener('click', () => { delete S.holeShape; saveSettings(); layout(); });
+$('btnFitReset').addEventListener('click', () => { delete S.holeShape; saveSettings(); layout(); });   // volta para a janela medida na foto
 
 function updateSettingsInfo() {
   document.querySelectorAll('.sim-only').forEach(el => { el.hidden = S.source !== 'sim'; });
