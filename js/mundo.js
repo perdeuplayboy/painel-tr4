@@ -231,7 +231,7 @@ export function satelites(ctx, w, h, t, color) {
     ctx.textAlign = az === 0 ? 'left' : az === 360 ? 'right' : 'center'; ctx.fillText(n, X(az) + (az === 0 ? 4 : az === 360 ? -4 : 0), hy + h * 0.02);
   }
   ctx.globalAlpha = 1;
-  encher(ctx, h, hud, w * 0.03, hy + h * 0.1, w * (TELA.relogio ? 0.55 : 0.94), h * 0.97, 2.2);   // no chão, embaixo do horizonte
+  encher(ctx, h, hud, w * 0.03, hy + h * 0.1, w * 0.94, h * 0.97, 2.2);   // no chão, embaixo do horizonte (desvia sozinho do relógio do standby)
 }
 
 // =====================================================================================
@@ -366,7 +366,7 @@ export function terremotos(ctx, w, h, t, color) {
   encher(ctx, h, [[`${QS.Q.length} tremores em 24 h`, 0.85, HUD, LER * 0.85, '600 ', 1],
     !QS.Q.length ? ['nenhum tremor forte no mundo hoje', 0.8] : null,
     ...QS.top.slice(0, 4).map(q => { const sel = q === cur; return [`M ${q.m.toFixed(1)} · ${lugarPt(q.place)} · ${agoTxt(q.time)}`, sel ? 1 : 0.6, sel ? '#ffffff' : q.m >= 5 ? '#ffb09a' : HUD, LER, sel ? '600 ' : '', 1, true]; }),
-    QS.near ? [`mais perto: M ${QS.near.m.toFixed(1)} · ${fmtN(QS.nearKm)} km`, 0.75, HUD, LER, '', 1] : null], x0, h * 0.04, tw, h * (TELA.relogio ? 0.7 : 0.96), 2.2);
+    QS.near ? [`mais perto: M ${QS.near.m.toFixed(1)} · ${fmtN(QS.nearKm)} km`, 0.75, HUD, LER, '', 1] : null], x0, h * 0.04, tw, h * 0.96, 2.2);
 }
 
 // =====================================================================================
@@ -567,7 +567,7 @@ export function terraFoto(ctx, w, h, t, color) {
   encher(ctx, h, [[`${d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })} às ${hhmm(o.ms)}`, 1, '#ffffff', 0.1, '600 ', 2],
     [dias <= 0 ? 'foto de hoje' : dias === 1 ? 'foto de ontem' : `foto de ${dias} dias atrás`, 0.8],
     [`tirada a ${(o.km / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} milhão de km`, 0.85],
-    S.meu ? [`você aparece das ${hhmm(S.meu[0])} às ${hhmm(S.meu[1])}`, 0.85] : null], tx, h * 0.04, tw, h * (TELA.relogio ? 0.66 : 0.96), 2.2);
+    S.meu ? [`você aparece das ${hhmm(S.meu[0])} às ${hhmm(S.meu[1])}`, 0.85] : null], tx, h * 0.04, tw, h * 0.96, 2.2);
   ctx.globalAlpha = 1;
 }
 
@@ -702,7 +702,7 @@ export function avioes(ctx, w, h, t, color) {
   ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(cx, cy, Math.max(2, h * 0.012), 0, TAU); ctx.fill();   // o carro
   const n25 = AV.list.filter(a => a.km <= 25 && !a.ground).length, flying = AV.list.filter(a => !a.ground).sort((a, b) => a.km - b.km);
   const near = flying[0], who = a => a.cs || a.reg || a.hex.toUpperCase();
-  const hx = w * 0.62, htw = w * 0.97 - hx, hfim = h * (TELA.relogio ? 0.7 : 0.97);
+  const hx = w * 0.62, htw = w * 0.97 - hx, hfim = h * 0.97;
   const hud = [[n25 === 0 ? 'nenhum avião em 25 km' : n25 === 1 ? '1 avião em 25 km' : `${n25} aviões em 25 km`, 1, '#ffffff', LER, '600 ', 3],
     near ? [`mais perto: ${who(near)} a ${fmtN(near.km)} km`, 0.85, HUD, LER, '', 3] : null, p.padrao ? ['sem GPS: centro de São Paulo', 0.7] : null];
   const hs = encher(ctx, h, hud, hx, h * 0.04, htw, hfim, 2.2, false), hEnd = coluna(ctx, h, hud, hx, h * 0.04, htw, hfim, false, hs);

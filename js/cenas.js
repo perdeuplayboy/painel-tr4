@@ -32,9 +32,9 @@ export function livre(x0, x1) {
   }
   if (TELA.relogio && TELA.relogioBox) {                             // standby: o relógio no canto de baixo à direita também ocupa lugar
     const b = LV.rb ??= TELA.relogioBox();
-    if (b && b.width && r.left + x1 > b.left - 6 && r.left + x0 < b.right + 6) bot = Math.min(bot, b.top - r.top - 4);
+    if (b && b.width && r.left + x1 > b.left - 6 && r.left + x0 < b.right + 6) return [top, bot, { l: b.left - r.left - 8, t: b.top - r.top - 4 }];
   }
-  return [top, bot];
+  return [top, bot, null];                                           // [livre em cima, livre embaixo, relógio no caminho (em px do canvas)]
 }
 // tamanho mínimo das letras de texto corrido, em fração da altura (lido de longe, no painel do carro)
 export const LER = 0.088;
@@ -71,19 +71,27 @@ export function coluna(ctx, h, itens, x, y, tw, fim = h * 0.97, draw = true, s =
     let [t, a = 0.85, cor = HUD, px = LER, peso = '', n = 2, corta = n >= 3] = it;
     let f = Math.max(9, h * px * s); const mono = peso === 'mono', fam = mono ? 'px monospace' : 'px system-ui, sans-serif';
     if (mono) peso = '';                                            // 'mono': título no estilo do hudText
-    ctx.font = `${peso}${f}${fam}`; const lw = ctx.measureText(t).width;
-    let L = [t];
-    if (lw > tw && (lw * 0.85 <= tw || (n === 1 && !corta))) { f *= tw / lw; ctx.font = `${peso}${f}${fam}`; }   // de uma linha só: encolhe só ela
-    else if (lw > tw) {
-      L = []; let cur = '';
-      for (const wd of t.split(' ')) { const tr = cur ? `${cur} ${wd}` : wd; if (cur && ctx.measureText(tr).width > tw) { L.push(cur); cur = wd; } else cur = tr; }
-      if (cur) L.push(cur);
-      const mw = Math.max(...L.map(l => ctx.measureText(l).width));   // palavra sozinha mais larga que a coluna: diminui a letra
-      if (mw > tw) { f *= tw / mw; ctx.font = `${peso}${f}${fam}`; }
-      if (L.length > n) { if (!corta) coluna.cortou = true; L = L.slice(0, n); let u = L[n - 1]; while (u.includes(' ') && ctx.measureText(u + '…').width > tw) u = u.slice(0, u.lastIndexOf(' ')); L[n - 1] = u.replace(/[,;:·]\s*$/, '') + '…'; }
-    }
+    const f0 = f;
+    const lay = W => {                                               // quebra o item na largura W
+      f = f0; ctx.font = `${peso}${f}${fam}`; const lw = ctx.measureText(t).width;
+      let L = [t];
+      if (lw > W && (lw * 0.85 <= W || (n === 1 && !corta))) { f *= W / lw; ctx.font = `${peso}${f}${fam}`; }   // de uma linha só: encolhe só ela
+      else if (lw > W) {
+        L = []; let cur = '';
+        for (const wd of t.split(' ')) { const tr = cur ? `${cur} ${wd}` : wd; if (cur && ctx.measureText(tr).width > W) { L.push(cur); cur = wd; } else cur = tr; }
+        if (cur) L.push(cur);
+        const mw = Math.max(...L.map(l => ctx.measureText(l).width));   // palavra sozinha mais larga que a coluna: diminui a letra
+        if (mw > W) { f *= W / mw; ctx.font = `${peso}${f}${fam}`; }
+        if (L.length > n) { cut = !corta; L = L.slice(0, n); let u = L[n - 1]; while (u.includes(' ') && ctx.measureText(u + '…').width > W) u = u.slice(0, u.lastIndexOf(' ')); L[n - 1] = u.replace(/[,;:·]\s*$/, '') + '…'; }
+      }
+      return L;
+    };
+    let cut = false, L = lay(tw);
     for (const l of L) { const [lt] = livre(x, x + ctx.measureText(l).width); if (y < lt) y = lt; break; }   // canto arredondado em cima
-    const lim = Math.min(fim, livre(x, x + tw)[1]);
+    const [, bot, rel] = livre(x, x + tw);
+    if (rel && y + f * L.length * 1.22 > rel.t && rel.l - x > tw * 0.35) { cut = false; L = lay(rel.l - x); }   // desce ao lado do relógio do standby, mais estreito
+    if (cut) coluna.cortou = true;
+    const lim = Math.min(fim, bot);
     if (y + f * L.length * 1.22 > lim + f * 0.2) { coluna.cortou = true; break; }
     for (const l of L) { const lt = livre(x, x + ctx.measureText(l).width)[0]; if (y < lt) y = lt; if (draw) { ctx.globalAlpha = a * m; ctx.fillStyle = cor; ctx.fillText(l, x, y); } y += f * 1.22; }
     y += f * 0.12;

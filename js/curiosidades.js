@@ -155,7 +155,7 @@ function ficha(ctx, w, h, t, color, it, alpha, p, ta) {   // alpha: a foto; ta: 
   const ar = im.naturalWidth / im.naturalHeight, ch = h * 0.92, cw = Math.min(w * 0.38, ch * clamp(ar, 0.72, 1.4)), x0 = w * 0.03, y0 = h * 0.04;
   ctx.save(); caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.clip(); cover(ctx, im, x0, y0, cw, ch, 1.02 + 0.06 * kb); ctx.restore();
   caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.strokeStyle = color; ctx.globalAlpha = alpha * 0.35; ctx.lineWidth = Math.max(1, h * 0.003); ctx.stroke();
-  const tx = x0 + cw + w * 0.035, tw = w * 0.97 - tx, fim = h * (TELA.relogio ? 0.66 : 0.96);   // no standby, embaixo à direita fica o relógio
+  const tx = x0 + cw + w * 0.035, tw = w * 0.97 - tx, fim = h * 0.96;   // no standby, embaixo à direita fica o relógio
   if (!it.lay || it.lay.w !== w) { const itens = itensB(o, p, color); it.lay = { w, itens, s: encher(ctx, h, itens, tx, h * 0.04, tw, fim, 2.2, false) }; }   // medido uma vez por foto
   colunaT(ctx, h, it.lay.itens, tx, h * 0.04, tw, fim, true, it.lay.s, ta);
   ctx.restore();

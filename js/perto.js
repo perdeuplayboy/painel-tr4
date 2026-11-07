@@ -133,7 +133,7 @@ function cartao(ctx, w, h, t, color, it, A, p, ta, L) {             // A: a foto
     cw = Math.min(w * 0.36, ch);
     radar(ctx, x0 + cw / 2, y0 + ch / 2, Math.min(cw, ch) * 0.46, h, p, o, L, color, k, A);
   }
-  const tx = x0 + cw + w * 0.035, tw = w * 0.97 - tx, fim = h * (TELA.relogio ? 0.66 : 0.96);
+  const tx = x0 + cw + w * 0.035, tw = w * 0.97 - tx, fim = h * 0.96;
   if (!it.lay || it.lay.w !== w) { const itens = itensL(o, p, L, color); it.lay = { w, itens, s: encher(ctx, h, itens, tx, h * 0.04, tw, fim, 2.2, false) }; }   // medido uma vez por lugar
   coluna(ctx, h, it.lay.itens, tx, h * 0.04, tw, fim, true, it.lay.s, ta);
   ctx.restore();
@@ -296,7 +296,7 @@ function trilhasInit(ctx, w, h, p, f0) {
     const com = pts.filter(o => o.n).sort((a, b) => a.d - b.d);
     if (com.length) { f = com[TL.i % com.length]; TL.i = (TL.i + 1) % com.length; keep('trilhas.i', TL.i); }
   }
-  const tw = w * 0.97 - (w * 0.03 + h * 0.92 + w * 0.035), fim = h * (TELA.relogio ? 0.7 : 0.96);
+  const tw = w * 0.97 - (w * 0.03 + h * 0.92 + w * 0.035), fim = h * 0.96;
   const dir = (x, y) => PARA[Math.round(((Math.atan2(x, -y) / RAD) % 360 + 360) % 360 / 45) % 8];
   const conta = Object.keys(TIPO).map(k => [k, pts.filter(o => o.t === k).length]).filter(([, n]) => n).map(([k, n]) => `${n} ${n === 1 ? k : PLUR[k]}`);
   const itens = [];

@@ -132,7 +132,7 @@ export function chuva(ctx, w, h, t, color) {
   ctx.globalAlpha = 1;
   const ago = Math.round((F[n - 1].time - fr.time) / 60), quando = ago ? `há ${ago} min · ${hhmm(fr.time * 1000)}` : `agora · ${hhmm(fr.time * 1000)}`;
   const nr = RV.near, situ = !nr ? '' : nr.km <= 3 ? 'está chovendo aí' : nr.km === Infinity ? 'sem chuva num raio de 60 km' : `chuva mais perto: ${fmtN(nr.km)} km ${PARA[dir8(nr.dir)]}`;
-  const hx = w * 0.6, tw = w * 0.97 - hx, fs = Math.max(10, h * 0.075), fim = h * (TELA.relogio ? 0.7 : 0.97);
+  const hx = w * 0.6, tw = w * 0.97 - hx, fs = Math.max(10, h * 0.075), fim = h * 0.97;
   const itens = [situ ? [situ, 1, '#ffffff', LER, '600 ', 3] : null, [quando, 0.8, HUD, LER * 0.8, '', 1]];
   const sc = encher(ctx, h, itens, hx, h * 0.04, tw, fim, 2.2, false), yEnd = coluna(ctx, h, itens, hx, h * 0.04, tw, fim, false, sc);
   const x0 = w * 0.05, x1 = w * 0.5, yb = h * 0.92, taken = [[hx - 8, 0, w, yEnd + 4], [w * 0.55, h * 0.7, w, h], [x0 - 10, yb - fs * 1.4, x1 + 10, h]];
@@ -206,7 +206,7 @@ export function vento(ctx, w, h, t, color) {
   // o vento aqui (o ponto do meio da grade) e na região
   const mid = Math.floor(g.ny / 2) * g.nx + Math.floor(g.nx / 2), sHere = g.spd[mid], gHere = g.gust[mid];
   const nome = s => s < 6 ? 'quase parado' : s < 20 ? 'fraco' : s < 40 ? 'moderado' : s < 60 ? 'forte' : 'muito forte';
-  const hx = w * 0.6, tw = w * 0.97 - hx, fim = h * (TELA.relogio ? 0.7 : 0.97);
+  const hx = w * 0.6, tw = w * 0.97 - hx, fim = h * 0.97;
   const itens = [[`${fmtN(sHere)} km/h`, 1, '#ffffff', 0.15, '700 '],
     [`${sHere < 2 ? '' : DIRS[dir8(g.dirs[mid])] + ' · '}${nome(sHere)}`, 0.9], [`rajadas até ${fmtN(gHere)} km/h`, 0.85],
     [`na região: ${fmtN(Math.min(...g.spd))} a ${fmtN(Math.max(...g.spd))} km/h`, 0.7]];
@@ -278,7 +278,7 @@ export function ar(ctx, w, h, t, color) {
   ctx.fillStyle = '#010205'; ctx.beginPath(); ctx.moveTo(0, h);        // morros
   AS.hills.forEach((v, i) => ctx.lineTo(i / 40 * w, h * (0.9 - v * 0.08))); ctx.lineTo(w, h); ctx.closePath(); ctx.fill();
   const uv = d.uv_index ?? 0, uvn = UVN.find(u => uv < u[0])[1];
-  const tw = w * 0.97 - x0, fim = h * (TELA.relogio ? 0.7 : 0.97), bh = Math.max(3, h * 0.03);
+  const tw = w * 0.97 - x0, fim = h * 0.97, bh = Math.max(3, h * 0.03);
   const itens = [[cat[1], 1, cat[2], 0.13, '700 ', 1], null,
     [`poeira fina: ${fmtN(pm)} µg/m³ · grossa: ${fmtN(d.pm10 ?? 0)}`, 0.8],
     [day ? `sol (UV): ${uv.toFixed(0)}, ${uvn}${uv >= 6 ? ' · use protetor' : ''}` : 'sol (UV): 0 · é noite', 0.8],
@@ -416,7 +416,7 @@ export function lua(ctx, w, h, t, color) {
   encher(ctx, h, [[`${Math.round(LS.f * 100)}% · ${fase(LS.f, LS.wax)}`, 1, '#ffffff', 0.11, '700 ', 1],
     [`nasce ${LS.rise ? hhmm(LS.rise) : '—'} · se põe ${LS.set ? hhmm(LS.set) : '—'}`, 0.85],
     ['PRÓXIMOS NO CÉU', 0.9, color, 0.06, '600 '],
-    ...LS.ev.slice(0, 3).map(e => [`${dm(e.ms)} · ${e.s}`, 0.75, HUD, LER * 0.85, '', 1, true])], x0, h * 0.04, w * 0.97 - x0, h * (TELA.relogio ? 0.7 : 0.96), 2.2);   // no standby, nada embaixo, onde fica o relógio
+    ...LS.ev.slice(0, 3).map(e => [`${dm(e.ms)} · ${e.s}`, 0.75, HUD, LER * 0.85, '', 1, true])], x0, h * 0.04, w * 0.97 - x0, h * 0.96, 2.2);   // no standby, nada embaixo, onde fica o relógio
 }
 chuva.prep = chuvaPrep;
 vento.prep = ventoPrep;
