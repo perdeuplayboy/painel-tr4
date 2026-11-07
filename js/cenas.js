@@ -38,6 +38,8 @@ export function livre(x0, x1) {
 }
 // tamanho mínimo das letras de texto corrido, em fração da altura (lido de longe, no painel do carro)
 export const LER = 0.088;
+// nomes das cidades nos radares (chuva, vento e aviões): o mesmo tamanho em todos
+export const CIDADE = 0.042;
 export const load = (k, d) => { try { const v = localStorage.getItem('tr4.' + k); return v ? JSON.parse(v) : d; } catch { return d; } };
 export const keep = (k, v) => { try { localStorage.setItem('tr4.' + k, JSON.stringify(v)); } catch {} };
 export const here = () => { const p = load('lastPos', null); return p && Number.isFinite(p.lat) ? p : { lat: -23.55, lon: -46.63, padrao: true }; };   // sem GPS ainda: centro de São Paulo
@@ -247,12 +249,12 @@ export function regiao(ctx, w, h, t, color) {
   RS.last = t;
   const S = RG.S, H = RG.grid, half = (S - 1) / 2, size = RG.km * 1000;
   const ex = clamp(size * 0.09 / Math.max(1, RS.hi - RS.lo), 2, 12);   // exagero do relevo: lugar plano também aparece
-  const ang = t * 0.1, ca = Math.cos(ang), sa = Math.sin(ang), tiltK = 0.6, f = w * 0.55;   // começa com o norte lá no fundo, como um mapa
+  const ang = t * 0.1, ca = Math.cos(ang), sa = Math.sin(ang), tiltK = 0.6, f = Math.min(w * 0.6, h * 1.4);   // começa com o norte lá no fundo, como um mapa
   const center = H[Math.round(half) * S + Math.round(half)];
   const at = (x, z, y) => {                                        // x para o leste, z para o norte, y para cima (metros)
     const xr = x * ca - z * sa, zr = x * sa + z * ca, dist = size * 1.3 + zr * Math.cos(tiltK) - y * Math.sin(tiltK);
     const yv = y * Math.cos(tiltK) + zr * Math.sin(tiltK);           // o que está longe sobe na tela, como o chão visto do alto
-    return [w / 2 + xr / dist * f, h * 0.5 - yv / dist * f, dist];
+    return [w * 0.6 + xr / dist * f, h * 0.45 - yv / dist * f, dist];   // à direita do texto do canto, onde sobra tela
   };
   // malha em metros, girando em volta do carro. A linha j=0 do mapa é a do norte.
   const proj = (i, j) => at((i - half) / (S - 1) * size, (half - j) / (S - 1) * size, (H[j * S + i] - center) * ex);
@@ -318,9 +320,9 @@ export function previsao(ctx, w, h, t, color) {
   if (!ok) { if (!FC.loading || t > 10) return true; hudText(ctx, h, ['PREVISÃO · carregando…'], w / 2, h * 0.45, 'center'); return; }
   if (!FS || t < FS.last) FS = { drops: Array.from({ length: 160 }, () => [Math.random(), Math.random(), 0.6 + Math.random() * 0.8]), flash: 0 };
   const dt = clamp(t - (FS.last ?? t), 0, 0.1); FS.last = t;
-  const D = FC.data.slice(0, 13), n = D.length, cw = w / n, top = h * 0.02, skyH = h * (TELA.relogio ? 0.36 : 0.5);   // no standby, embaixo fica livre para o relógio
+  const D = FC.data.slice(0, 13), n = D.length, mx = w * 0.04 /* a moldura come as bordas da tela */, cw = (w - 2 * mx) / n, top = h * 0.02, skyH = h * (TELA.relogio ? 0.36 : 0.5);   // no standby, embaixo fica livre para o relógio
   D.forEach((o, i) => {                                            // céu de cada hora
-    const x = i * cw, cl = o.cloud / 100, g = ctx.createLinearGradient(0, top, 0, top + skyH);
+    const x = mx + i * cw, cl = o.cloud / 100, g = ctx.createLinearGradient(0, top, 0, top + skyH);
     const a = o.day ? [`rgb(${40 - 10 * cl},${90 - 20 * cl},${150 - 40 * cl})`, `rgb(${110 - 30 * cl},${150 - 40 * cl},${190 - 50 * cl})`] : ['#060a18', '#101a34'];
     g.addColorStop(0, a[0]); g.addColorStop(1, a[1]); ctx.fillStyle = g; ctx.fillRect(x, top, cw + 1, skyH);
     const cx = x + cw / 2, cy = top + skyH * 0.32;
@@ -345,22 +347,22 @@ export function previsao(ctx, w, h, t, color) {
   });
   FS.flash = Math.max(0, FS.flash - dt * 4);
   ctx.strokeStyle = '#000'; ctx.globalAlpha = 0.5; ctx.lineWidth = 1; ctx.beginPath();   // divisões das horas
-  for (let i = 1; i < n; i++) { ctx.moveTo(i * cw, top); ctx.lineTo(i * cw, top + skyH); } ctx.stroke(); ctx.globalAlpha = 1;
-  ctx.strokeStyle = color; ctx.lineWidth = 2.2; ctx.strokeRect(1, top, cw - 2, skyH);   // agora
+  for (let i = 1; i < n; i++) { ctx.moveTo(mx + i * cw, top); ctx.lineTo(mx + i * cw, top + skyH); } ctx.stroke(); ctx.globalAlpha = 1;
+  ctx.strokeStyle = color; ctx.lineWidth = 2.2; ctx.strokeRect(mx + 1, top, cw - 2, skyH);   // agora
   const temps = D.map(o => o.temp), lo = Math.min(...temps) - 1, hi = Math.max(...temps) + 1;
   const base = top + skyH + h * 0.15, ty = v => base + (1 - (v - lo) / (hi - lo)) * h * 0.08;
   const prog = ease(t / 4);                                        // a linha da temperatura vai se desenhando
   ctx.strokeStyle = color; ctx.lineWidth = Math.max(1.5, h * 0.007); ctx.beginPath();
-  D.forEach((o, i) => { const x = i * cw + cw / 2; if (i / (n - 1) <= prog) i ? ctx.lineTo(x, ty(o.temp)) : ctx.moveTo(x, ty(o.temp)); }); ctx.stroke();
+  D.forEach((o, i) => { const x = mx + i * cw + cw / 2; if (i / (n - 1) <= prog) i ? ctx.lineTo(x, ty(o.temp)) : ctx.moveTo(x, ty(o.temp)); }); ctx.stroke();
   const fs = Math.max(10, h * 0.09), fr = Math.max(9, h * 0.06);
   ctx.font = `600 ${fs}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = HUD;
   D.forEach((o, i) => {
-    const x = i * cw + cw / 2;
+    const x = mx + i * cw + cw / 2;
     if (i / (n - 1) <= prog) { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, ty(o.temp), Math.max(2, h * 0.008), 0, TAU); ctx.fill(); }
     ctx.fillStyle = HUD;
     if (i % 2 === 0 && i / (n - 1) <= prog) ctx.fillText(`${Math.round(o.temp)}°`, x, ty(o.temp) - fs * 0.3);
     ctx.textBaseline = 'top'; ctx.globalAlpha = 0.8;
-    if (i % 2 === 0) ctx.fillText(i ? `${String(o.hour).padStart(2, '0')}h` : 'agora', i ? x : Math.max(x, ctx.measureText('agora').width / 2 + 2), base + h * 0.14);
+    if (i % 2 === 0) ctx.fillText(i ? `${String(o.hour).padStart(2, '0')}h` : 'agora', i ? x : Math.max(x, mx + ctx.measureText('agora').width / 2 + 2), base + h * 0.14);
     if (o.rain >= 30) { ctx.save(); ctx.font = `${fr}px monospace`; ctx.fillStyle = '#9cc4ff'; ctx.fillText(`${o.rain}%`, x, top + skyH + h * 0.01); ctx.restore(); }
     ctx.globalAlpha = 1; ctx.textBaseline = 'bottom';
   });

@@ -3,7 +3,7 @@
 // constelações com nome em português, a Via Láctea, as Nuvens de Magalhães, os planetas e a Lua na fase certa, com o
 // lado aceso virado para o Sol. A vista é a de uma lente grande-angular (estereográfica, como nos planetários), que gira
 // devagar pelo horizonte e olha para cima quando um planeta ou a Lua está alto. Sem o catálogo, usa só as estrelas brilhantes.
-import { here, load, keep, hudText, HUD, clamp, ease, rng, ST, skyAt, galToEq } from './cenas.js';
+import { here, load, keep, hudText, HUD, clamp, ease, rng, ST, skyAt, galToEq, livre } from './cenas.js';
 import { sunEq, moonEq, wrap, hhmm, online } from './mundo.js';
 
 const TAU = Math.PI * 2, RAD = Math.PI / 180;
@@ -230,8 +230,11 @@ export function ceu(ctx, w, h, t, color) {
   ctx.lineTo(w + 60, h + 60); ctx.lineTo(-60, h + 60); ctx.closePath(); ctx.fill();
   // nomes, do mais importante para o menos, sem um cobrir o outro nem o texto do canto e o relógio
   const hud = [SK.label, SK.vistos.length ? `à vista: ${SK.vistos.join(', ')}` : 'nenhum planeta à vista', SK.p.padrao ? 'sem GPS: centro de São Paulo' : null].filter(Boolean);
-  const hx = w * 0.04, hfs = Math.max(10, h * 0.075); ctx.font = `${hfs}px monospace`;
-  const taken = [[hx - 6, 0, hx + Math.max(...hud.map(s => ctx.measureText(s).width)) + 6, h * 0.04 + hud.length * hfs * 1.3 + 4], [w * 0.55, h * 0.7, w, h]];
+  // o texto fica no canto de baixo à direita (no standby, logo acima do relógio)
+  const hx = w * 0.97, hfs = Math.max(10, h * 0.075); ctx.font = `${hfs}px monospace`;
+  const hw = Math.max(...hud.map(s => ctx.measureText(s).width)), [, lb, rel] = livre(hx - hw, hx);
+  const hy = Math.min(h * 0.97, rel ? rel.t : lb) - hud.length * hfs * 1.3;
+  const taken = [[hx - hw - 6, hy - 4, w, h], [w * 0.55, h * 0.7, w, h]];
   ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
   const put = (s, x, y, f, col, a, bold = false, d = null) => {     // com d: tenta em cima, embaixo, à direita e à esquerda do astro
     ctx.font = `${bold ? '600 ' : ''}${f}px system-ui, sans-serif`;
@@ -258,6 +261,6 @@ export function ceu(ctx, w, h, t, color) {
     ctx.globalAlpha = 0.6; ctx.fillText(n, PX, PY);
   }
   ctx.globalAlpha = 1;
-  hudText(ctx, h, hud, hx, h * 0.04);
+  hudText(ctx, h, hud, hx, hy, 'right');
 }
 ceu.prep = catalog;                                                 // o catálogo de estrelas, antes de a cena entrar

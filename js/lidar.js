@@ -1,6 +1,8 @@
 // Visão do drone: nuvem de pontos tipo LiDAR (terreno, estrada, mata, cidade, fazenda, a TR4 andando) em WebGL puro.
 // Desenha numa tela WebGL escondida e copia para o canvas 2D do player, com o HUD por cima.
 
+import { livre } from './cenas.js';
+
 const L = 320;                                   // o mundo se repete a cada L metros (sem emenda)
 const F = Math.PI * 2 / L;
 // Cada vez que a animação começa sorteia um mundo novo: o tipo de cenário (serra, cidade, deserto, litoral,
@@ -470,9 +472,12 @@ function laserLine(ctx, w, h, cam, zz) {
 }
 
 function hud(ctx, w, h, t, color, alt, yaw) {
-  const mx = w * 0.11, my = h * 0.2, b = h * 0.12, fs = Math.max(10, h * 0.055);
+  // moldura e informações nas bordas da tela; em cima, cada lado desce só o que o canto arredondado da moldura pede
+  const mx = w * 0.02, b = h * 0.12, fs = Math.max(10, h * 0.075), pad = h * 0.03, tw = fs * 9;
+  const myL = Math.max(h * 0.03, livre(mx, mx + tw)[0]), myR = Math.max(h * 0.03, livre(w - mx - tw, w - mx)[0]);
+  const myB = h - Math.min(h * 0.97, livre(mx, w - mx)[1]), relR = livre(w - mx - tw, w - mx)[2], myBR = relR ? h - relR.t : myB;   // no standby, o REC fica acima do relógio
   ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.8;
-  for (const [x, y, sx, sy] of [[mx, my, 1, 1], [w - mx, my, -1, 1], [mx, h - my, 1, -1], [w - mx, h - my, -1, -1]]) {
+  for (const [x, y, sx, sy] of [[mx, myL, 1, 1], [w - mx, myR, -1, 1], [mx, h - myB, 1, -1], [w - mx, h - myBR, -1, -1]]) {
     ctx.beginPath(); ctx.moveTo(x, y + sy * b); ctx.lineTo(x, y); ctx.lineTo(x + sx * b, y); ctx.stroke();
   }
   const cx = w / 2, cy = h / 2, r = h * 0.06;                        // mira
@@ -486,17 +491,17 @@ function hud(ctx, w, h, t, color, alt, yaw) {
   ctx.font = `${fs}px monospace`; ctx.textBaseline = 'top';
   const hdg = ((Math.round(yaw * 57.3 + 312) % 360) + 360) % 360;
   ctx.textAlign = 'left';
-  ctx.fillText(`ALT ${alt.toFixed(1).replace('.', ',')} m`, mx + h * 0.04, my + h * 0.04);
-  ctx.fillText(`VEL 40 km/h`, mx + h * 0.04, my + h * 0.04 + fs * 1.3);
-  ctx.fillText(`RUMO ${String(hdg).padStart(3, '0')}°`, mx + h * 0.04, my + h * 0.04 + fs * 2.6);
+  ctx.fillText(`ALT ${alt.toFixed(1).replace('.', ',')} m`, mx + pad, myL + pad);
+  ctx.fillText(`VEL 40 km/h`, mx + pad, myL + pad + fs * 1.3);
+  ctx.fillText(`RUMO ${String(hdg).padStart(3, '0')}°`, mx + pad, myL + pad + fs * 2.6);
   ctx.textAlign = 'right';
-  ctx.fillText(`LIDAR · ${TYPE_NAME[W.type]}`, w - mx - h * 0.04, my + h * 0.04);
-  ctx.fillText(`${(1.2 + t * 0.047).toFixed(2).replace('.', ',')} M pts`, w - mx - h * 0.04, my + h * 0.04 + fs * 1.3);
+  ctx.fillText(`LIDAR · ${TYPE_NAME[W.type]}`, w - mx - pad, myR + pad);
+  ctx.fillText(`${(1.2 + t * 0.047).toFixed(2).replace('.', ',')} M pts`, w - mx - pad, myR + pad + fs * 1.3);
   if (Math.sin(t * 5) > 0) {
     ctx.fillStyle = '#ff3b30';
-    ctx.beginPath(); ctx.arc(w - mx - h * 0.04 - fs * 3.2, h - my - h * 0.04 - fs * 0.45, fs * 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(w - mx - pad - fs * 3.2, h - myBR - pad - fs * 0.45, fs * 0.3, 0, Math.PI * 2); ctx.fill();
   }
   ctx.fillStyle = '#d8f6ff'; ctx.textBaseline = 'bottom';
-  ctx.fillText('REC', w - mx - h * 0.04, h - my - h * 0.04);
+  ctx.fillText('REC', w - mx - pad, h - myBR - pad);
   ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.textBaseline = 'alphabetic';
 }

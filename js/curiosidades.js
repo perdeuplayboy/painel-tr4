@@ -4,6 +4,7 @@
 // Selos ao lado da foto: ameaçado de extinção, raro por aqui (poucos registros na região), raro no mundo, endêmico e veio de fora.
 // HOJE NA HISTÓRIA: o que aconteceu neste mesmo dia em outros anos (Wikipédia em português), com a foto do artigo.
 // O que baixa fica guardado; sem dados, a cena termina na hora.
+import { porEstrada, textoEstrada } from './estrada.js';
 import { here, load, keep, hudText, HUD, clamp, ease, rng, TELA, LER, coluna as colunaT, encher, livre } from './cenas.js';
 import { cities, kmBetween, online, fmtN, say } from './mundo.js';
 
@@ -111,7 +112,8 @@ function onde(p, o) {
   if (o.ob) return `uns ${fmtN(km)} km ${dir} (local protegido)`;   // o iNaturalist esconde o ponto exato das espécies ameaçadas
   const CL = cities(p); let perto = null;
   if (CL) for (const c of CL) { const d = kmBetween(c, { lat: o.la, lon: o.lo }); if (d < 12 && (!perto || d < perto.d)) perto = { n: c.n, d }; }
-  return `${perto ? `perto de ${perto.n} · ` : ''}${fmtN(km)} km ${dir}`;
+  const r = porEstrada(p, { lat: o.la, lon: o.lo });               // de carro, se o roteador já respondeu (senão, em linha reta)
+  return `${perto ? `perto de ${perto.n} · ` : ''}${r ? textoEstrada(r) : `${fmtN(km)} km ${dir}`}`;
 }
 let BS = null;
 async function bichosPrep() {                                     // também chamada antes de a cena entrar, para ela já abrir pronta
@@ -119,6 +121,10 @@ async function bichosPrep() {                                     // também cha
   if (BX.key !== key) { const c = load('bichos', null); if (c?.v === 2 && c.key === key && c.list?.length) Object.assign(BX, { key, list: c.list, total: c.total, at: c.at, i: load('bichos.i', 0) % c.list.length }); }   // continua de onde parou
   if ((BX.key !== key || Date.now() - BX.at > 6 * 3600000) && !BX.loading && online() && Date.now() - BX.tried > 120000) await loadBichos(p, key);
   const o = BX.key === key ? BX.list?.[BX.i] : null; if (o?.u) foto(o.u);   // a foto do próximo bicho
+  if (BX.key === key) for (let k = 0; k < 2 && BX.list?.length; k++) {   // a rota dos próximos já vai sendo pedida (não nos de local protegido)
+    const q = BX.list[(BX.i + k) % BX.list.length];
+    if (!q.ob && kmBetween(p, { lat: q.la, lon: q.lo }) >= 1.5) porEstrada(p, { lat: q.la, lon: q.lo });
+  }
 }
 export function bichos(ctx, w, h, t, color) {
   const p = here(), key = `${p.lat.toFixed(1)},${p.lon.toFixed(1)}`;
@@ -156,7 +162,8 @@ function ficha(ctx, w, h, t, color, it, alpha, p, ta) {   // alpha: a foto; ta: 
   ctx.save(); caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.clip(); cover(ctx, im, x0, y0, cw, ch, 1.02 + 0.06 * kb); ctx.restore();
   caixa(ctx, x0, y0, cw, ch, h * 0.03); ctx.strokeStyle = color; ctx.globalAlpha = alpha * 0.35; ctx.lineWidth = Math.max(1, h * 0.003); ctx.stroke();
   const tx = x0 + cw + w * 0.035, tw = w * 0.97 - tx, fim = h * 0.96;   // no standby, embaixo à direita fica o relógio
-  if (!it.lay || it.lay.w !== w) { const itens = itensB(o, p, color); it.lay = { w, itens, s: encher(ctx, h, itens, tx, h * 0.04, tw, fim, 2.2, false) }; }   // medido uma vez por foto
+  const est = !o.ob && !!porEstrada(p, { lat: o.la, lon: o.lo });   // a distância de carro chegou: mede de novo
+  if (!it.lay || it.lay.w !== w || it.lay.est !== est) { const itens = itensB(o, p, color); it.lay = { w, est, itens, s: encher(ctx, h, itens, tx, h * 0.04, tw, fim, 2.2, false) }; }   // medido uma vez por foto
   colunaT(ctx, h, it.lay.itens, tx, h * 0.04, tw, fim, true, it.lay.s, ta);
   ctx.restore();
 }
@@ -233,10 +240,16 @@ export function historia(ctx, w, h, t, color) {
   let y = h * 0.04;
   // a data comemorativa vai em cima da foto (do lado direito), e a coluna da esquerda fica inteira para o ano e o fato;
   // sem foto, ela fica em cima da coluna
-  const img0 = o.img ? foto(o.img) : null, holY = h * 0.04;
+  // a data comemorativa vai numa linha só, no meio, em cima (longe dos cantos); o ano, o fato e a foto ficam embaixo dela
   let hb = 0;
-  if (WK.hol[0] && img0) hb = colunaT(ctx, h, [[`hoje: ${WK.hol[0]}`, 0.8, HUD, LER, '', 2]], w * 0.64, holY, w * 0.33) - holY;
-  else if (WK.hol[0]) { y = colunaT(ctx, h, [[`hoje: ${WK.hol[0]}`, 0.8, HUD, 0.065, '', 1]], lx0, y, cw); }
+  if (WK.hol[0]) {
+    const s0 = `hoje: ${WK.hol[0]}`, fh = Math.max(10, h * LER * 0.9), hy0 = h * 0.025;
+    ctx.save(); ctx.font = `${fh}px system-ui, sans-serif`; const tw0 = ctx.measureText(s0).width;
+    if (tw0 > w * 0.6) ctx.font = `${fh * w * 0.6 / tw0}px system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = HUD; ctx.globalAlpha = 0.8; ctx.shadowColor = '#000'; ctx.shadowBlur = 4;
+    ctx.fillText(s0, w / 2, hy0); ctx.restore();
+    hb = hy0 + fh * 1.25 - h * 0.04; y = h * 0.04 + hb;
+  }
   y = Math.max(y, livre(lx0, lx0 + w * 0.3)[0]);                     // o ano não fica atrás do canto arredondado da moldura
   const yr = Math.round(Y + (o.y - Y) * roll), n = Y - o.y, fy0 = y + h * 0.19;
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = out;

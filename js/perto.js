@@ -2,6 +2,7 @@
 // LUGARES PERTO: o que tem artigo na Wikipédia num raio de 25 km (cidades, museus, usinas, estações, igrejas), com a
 // foto, a distância, a direção e o começo do artigo. A lista vem do Wikidata e muda sozinha quando o carro se afasta.
 // Lugar sem foto aparece num radar, na direção em que está.
+import { porEstrada, textoEstrada } from './estrada.js';
 import { here, load, keep, hudText, HUD, clamp, ease, TELA, LER, coluna, encher } from './cenas.js';
 import { kmBetween, online, fmtN, say } from './mundo.js';
 import { foto, falhou, borrado, cover, caixa, linhas, caber, PARA } from './curiosidades.js';
@@ -84,7 +85,8 @@ function ondeFica(p, o, L) {
   const q = { lat: o.la, lon: o.lo }, km = kmBetween(p, q);
   if (o.t === 'cidade' && km < 4 && !L.some(c => c.t === 'cidade' && kmBetween(p, { lat: c.la, lon: c.lo }) < km)) return 'você está aqui';   // a cidade mais perto
   if (km < 1.5) return 'pertinho daqui';
-  return `${kmTxt(km)} km ${PARA[Math.round(rumo(p, q) / 45) % 8]}`;
+  const r = porEstrada(p, q);                                       // de carro, se o roteador já respondeu (senão, em linha reta)
+  return r ? textoEstrada(r) : `${kmTxt(km)} km ${PARA[Math.round(rumo(p, q) / 45) % 8]}`;
 }
 async function lugaresPrep() {                                     // também chamada antes de a cena entrar, para ela já abrir pronta
   const p = here();
@@ -92,6 +94,7 @@ async function lugaresPrep() {                                     // também ch
   const dist = LG.c ? kmBetween(p, LG.c) : Infinity;
   if ((dist > 8 || Date.now() - LG.at > 14 * 86400000) && !LG.loading && online() && Date.now() - LG.tried > 120000) await loadLugares(p);
   const o = LG.list?.[LG.i]; if (o?.u) foto(o.u);                   // a foto do próximo lugar
+  for (let k = 0; k < 2 && LG.list?.length; k++) { const q = LG.list[(LG.i + k) % LG.list.length]; if (kmBetween(p, { lat: q.la, lon: q.lo }) >= 1.5) porEstrada(p, { lat: q.la, lon: q.lo }); }   // a rota dos próximos já vai sendo pedida
 }
 let LS = null;
 export function lugares(ctx, w, h, t, color) {
@@ -134,7 +137,8 @@ function cartao(ctx, w, h, t, color, it, A, p, ta, L) {             // A: a foto
     radar(ctx, x0 + cw / 2, y0 + ch / 2, Math.min(cw, ch) * 0.46, h, p, o, L, color, k, A);
   }
   const tx = x0 + cw + w * 0.035, tw = w * 0.97 - tx, fim = h * 0.96;
-  if (!it.lay || it.lay.w !== w) { const itens = itensL(o, p, L, color); it.lay = { w, itens, s: encher(ctx, h, itens, tx, h * 0.04, tw, fim, 2.2, false) }; }   // medido uma vez por lugar
+  const est = !!porEstrada(p, { lat: o.la, lon: o.lo });           // a distância de carro chegou: mede de novo
+  if (!it.lay || it.lay.w !== w || it.lay.est !== est) { const itens = itensL(o, p, L, color); it.lay = { w, est, itens, s: encher(ctx, h, itens, tx, h * 0.04, tw, fim, 2.2, false) }; }   // medido uma vez por lugar
   coluna(ctx, h, it.lay.itens, tx, h * 0.04, tw, fim, true, it.lay.s, ta);
   ctx.restore();
 }
@@ -232,7 +236,8 @@ export function trilhas(ctx, w, h, t, color) {
     hudText(ctx, h, ['TRILHAS E CACHOEIRAS · procurando no mapa…'], w / 2, h * 0.45, 'center'); return;
   }
   const nova = !TS || t < TS.last;
-  if (nova || TS.w !== w || TS.roads !== TL.roads || TS.src !== TL.pts) TS = trilhasInit(ctx, w, h, p, nova ? null : TS.f);
+  const est = !nova && TS.f && !TS.f.r && TS.f.d >= 1 && !!porEstrada(p, { lat: TS.f.la, lon: TS.f.lo });   // a distância de carro chegou: monta de novo
+  if (nova || est || TS.w !== w || TS.roads !== TL.roads || TS.src !== TL.pts) TS = trilhasInit(ctx, w, h, p, nova ? null : TS.f);
   TS.last = t;
   const S = TS, x0 = w * 0.03, y0 = h * 0.04, B = h * 0.92, cx = x0 + B / 2, cy = y0 + B / 2, f = S.f;
   // o mapa bem perto do carro (de longe, no painel, só assim dá para ver as estradas): abre de 1,5 até 4 km
@@ -294,8 +299,9 @@ function trilhasInit(ctx, w, h, p, f0) {
   let f = f0 ? pts.find(o => o.n === f0.n && o.t === f0.t) || null : null;
   if (!f0) {                                                        // um passeio com nome por vez, do mais perto para o mais longe
     const com = pts.filter(o => o.n).sort((a, b) => a.d - b.d);
-    if (com.length) { f = com[TL.i % com.length]; TL.i = (TL.i + 1) % com.length; keep('trilhas.i', TL.i); }
+    if (com.length) { f = com[TL.i % com.length]; TL.i = (TL.i + 1) % com.length; keep('trilhas.i', TL.i); const nx = com[TL.i % com.length]; if (nx.d >= 1) porEstrada(p, { lat: nx.la, lon: nx.lo }); }   // a rota do próximo já vai sendo pedida
   }
+  if (f) f = { ...f, r: f.d >= 1 ? porEstrada(p, { lat: f.la, lon: f.lo }) : null };   // de carro, quando o roteador já respondeu
   const tw = w * 0.97 - (w * 0.03 + h * 0.92 + w * 0.035), fim = h * 0.96;
   const dir = (x, y) => PARA[Math.round(((Math.atan2(x, -y) / RAD) % 360 + 360) % 360 / 45) % 8];
   const conta = Object.keys(TIPO).map(k => [k, pts.filter(o => o.t === k).length]).filter(([, n]) => n).map(([k, n]) => `${n} ${n === 1 ? k : PLUR[k]}`);
@@ -307,7 +313,7 @@ function trilhasInit(ctx, w, h, p, f0) {
   if (f) {
     const [nome, cor] = TIPO[f.t];
     itens.push([nome, 0.95, cor, 0.06, '600 ', 1], [f.n, 1, '#ffffff', 0.11, '600 ', 2],
-      [[`${kmTxt(f.d)} km ${dir(f.x, f.y)}`, f.ele ? `${fmtN(f.ele)} m` : '', f.alt ? `queda de ${fmtN(f.alt)} m` : ''].filter(Boolean).join(' · '), 0.9, HUD, LER * 0.85, '', 1]);
+      [[f.r ? textoEstrada(f.r) : `${kmTxt(f.d)} km ${dir(f.x, f.y)}`, f.ele ? `${fmtN(f.ele)} m` : '', f.alt ? `queda de ${fmtN(f.alt)} m` : ''].filter(Boolean).join(' · '), 0.9, HUD, LER * 0.85, '', 1]);
   }
   if (conta.length) itens.push([`em 40 km: ${conta.join(' · ')}`, 0.7, HUD, 0.055, '', 1]);
   return { w, roads: TL.roads, src: TL.pts, terra, trilha, pts, f, itens, tw, fim };

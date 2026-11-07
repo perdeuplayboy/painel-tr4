@@ -2,7 +2,7 @@
 // satélites passando sobre o carro agora (órbitas do CelesTrak), terremotos das últimas 24 horas num globo (USGS)
 // e a Terra com o dia e a noite deste instante (mapa do Natural Earth), mais os aviões em volta (ADS-B, por um
 // intermediário no Cloudflare). Sem dados, a cena termina na hora.
-import { here, load, keep, hudText, skyAt, ST, HUD, rng, clamp, ease, coluna, encher, TELA, LER } from './cenas.js';
+import { here, load, keep, hudText, skyAt, ST, HUD, rng, clamp, ease, coluna, encher, TELA, LER, CIDADE } from './cenas.js';
 
 const TAU = Math.PI * 2, RAD = Math.PI / 180, RE = 6378.137;
 const days = ms => ms / 86400000 + 2440587.5 - 2451545.0;          // dias desde o ano 2000 ao meio-dia (J2000)
@@ -194,7 +194,7 @@ export function satelites(ctx, w, h, t, color) {
   const issTxt = !SS.iss ? null : issUp ? `ISS passando agora a ${Math.round(issUp.el)}° de altura`
     : SS.pass ? `ISS: dá para ver ${dia(SS.pass.ms)} às ${hhmm(SS.pass.ms)}, até ${Math.round(SS.pass.top)}° de altura` : 'ISS: sem passagem visível nas próximas 24 h';
   const hud = [[`${n0} acima do horizonte · ${dark ? `${nv} dá para ver agora` : 'de dia não dá para ver'}`, 0.9, '#ffffff', LER, '600 ', 1], issTxt ? [issTxt, 0.85, HUD, LER, '', 2] : null, p.padrao ? ['sem GPS: céu do centro de São Paulo', 0.7] : null];
-  const fs = Math.max(10, h * 0.06);
+  const fs = Math.max(10, h * 0.052);                               // nomes um pouco menores que o texto de baixo
   const taken = [];                                                 // o texto fica embaixo, no chão escuro
   const free = b => !taken.some(o => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]);
   const named = up.filter(u => u.el > 0).sort((a, b) => (b.s.big - a.s.big) || (b.el - a.el));
@@ -202,7 +202,7 @@ export function satelites(ctx, w, h, t, color) {
   ctx.font = `${fs}px monospace`;
   for (const u of named) {                                          // nomes sem trombar com o texto nem entre si
     if (labels >= 6) break;
-    const x = X(u.az), y = Y(u.el), r = (u.s.big ? 3.2 : 1.8) * Math.max(1, h / 300), s = `${u.s.nm} · ${fmtN(u.km)} km`, tw = ctx.measureText(s).width;
+    const x = X(u.az), y = Y(u.el), r = (u.s.big ? 5 : 3.4) * Math.max(1, h / 300), s = `${u.s.nm} · ${fmtN(u.km)} km`, tw = ctx.measureText(s).width;
     for (const side of x > w * 0.8 ? [-1, 1] : [1, -1]) {
       for (const up2 of [1, -1]) {
         const x0 = side > 0 ? x + r + 4 : x - r - 4 - tw, y1 = up2 > 0 ? y - r : y + r + fs * 1.1, b = [x0 - 2, y1 - fs * 1.1, x0 + tw + 2, y1 + 2];
@@ -214,7 +214,7 @@ export function satelites(ctx, w, h, t, color) {
   }
   for (const u of up) {
     if (u.el < 0) continue;
-    const vis = u.lit && dark, x = X(u.az), y = Y(u.el), r = (u.s.big ? 3.2 : 1.8) * Math.max(1, h / 300);
+    const vis = u.lit && dark, x = X(u.az), y = Y(u.el), r = (u.s.big ? 5 : 3.4) * Math.max(1, h / 300);
     if (vis) { ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.25; ctx.beginPath(); ctx.arc(x, y, r * 3, 0, TAU); ctx.fill(); }
     ctx.globalAlpha = vis ? 1 : 0.75; ctx.fillStyle = vis ? '#ffffff' : color; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
     if (u.label) {
@@ -731,7 +731,7 @@ export function avioes(ctx, w, h, t, color) {
     let nc = 0;
     for (const { c } of pick) {
       if (nc >= 10) break;
-      const cfs = fs * 1.56; ctx.font = `${cfs}px system-ui, sans-serif`;   // todas iguais, sem negrito, o dobro de antes, para ler de longe
+      const cfs = Math.max(9, h * CIDADE); ctx.font = `${cfs}px system-ui, sans-serif`;   // o mesmo tamanho em todos os radares, sem negrito
       const [x, y] = P(c.lat, c.lon), tw = ctx.measureText(c.n).width, dr = Math.max(1.2, h * 0.0052);
       for (const [x0, y0] of [[x + dr + 3, y], [x - dr - 3 - tw, y], [x - tw / 2, y - cfs * 0.95], [x - tw / 2, y + cfs * 0.95]]) {   // do lado, em cima ou embaixo
         const bx = [x0 - 2, y0 - cfs * 0.55, x0 + tw + 2, y0 + cfs * 0.55];

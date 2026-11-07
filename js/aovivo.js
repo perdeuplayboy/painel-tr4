@@ -2,7 +2,7 @@
 // radar de chuva (RainViewer), vento agora (Open-Meteo), qualidade do ar (Open-Meteo) e a Lua de hoje com os
 // próximos eventos do céu (foto da NASA; eclipses, superluas e chuvas de meteoros calculados aqui, pelo Meeus).
 // O que baixa fica guardado; sem dados, a cena termina na hora.
-import { here, load, keep, hudText, HUD, rng, clamp, coluna, encher, TELA, LER } from './cenas.js';
+import { here, load, keep, hudText, HUD, rng, clamp, coluna, encher, TELA, LER, CIDADE } from './cenas.js';
 import { world, cities, kmBetween, sunEq, moonEq, altOf, wrap, hhmm, online, fmtN, say } from './mundo.js';
 
 const TAU = Math.PI * 2, RAD = Math.PI / 180;
@@ -36,7 +36,7 @@ function fundoMapa(ctx, w, h, p, M, color, taken, alpha = 1) {
     let n = 0;
     for (const { c } of pick) {
       if (n >= 10) break;
-      const cfs = fs * 1.56; ctx.font = `${cfs}px system-ui, sans-serif`;   // todas iguais, sem negrito, o dobro de antes, para ler de longe
+      const cfs = Math.max(9, h * CIDADE); ctx.font = `${cfs}px system-ui, sans-serif`;   // o mesmo tamanho em todos os radares, sem negrito
       const [x, y] = M.P(c.lat, c.lon), tw = ctx.measureText(c.n).width, dr = Math.max(1.2, h * 0.0052);
       for (const [x0, y0] of [[x + dr + 3, y], [x - dr - 3 - tw, y], [x - tw / 2, y - cfs * 0.95], [x - tw / 2, y + cfs * 0.95]]) {
         const b = [x0 - 2, y0 - cfs * 0.55, x0 + tw + 2, y0 + cfs * 0.55];
