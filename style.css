@@ -59,21 +59,21 @@ button { font: inherit; color: inherit; background: none; border: 0; }
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .8rem;
   text-align: center;
 }
-#wing-left { left: 2rem; top: 18rem; height: 46rem; }   /* abaixo do canto arredondado de cima à esquerda */
+#wing-left { left: 2rem; top: 13.5rem; height: 31rem; }   /* abaixo do canto arredondado de cima à esquerda */
 .clock { font-size: 6.6rem; font-weight: 600; letter-spacing: -.02em; line-height: 1; }
 .date { font-size: 3rem; color: var(--txt); }
 .weekday { font-size: 2.4rem; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
 .wtemp b { font-size: 4.4rem; line-height: 1; display: block; }
 .wtemp small { font-size: 1.9rem; }
-.wing .wtemp:first-child { margin-bottom: 1.4rem; }   /* fora: acima do relógio; motor: abaixo */
-.wing .wtemp:last-child { margin-top: 1.4rem; }
+.wing .wtemp:first-child { margin-bottom: .6rem; }   /* fora: acima do relógio; motor: abaixo */
+.wing .wtemp:last-child { margin-top: .6rem; }
 .wtemp.cold b { color: var(--cold); }
 .wtemp.hot b { color: var(--bad); }
 
 /* ---- área central e páginas ---- */
 #center { position: absolute; left: 23rem; right: 0; top: 0; bottom: 0; }   /* a tela inteira; as cenas desviam o texto dos cantos */
-.page:not([data-page="video"]):not([data-page="nav"]) { padding: 7rem 4rem 2rem 1rem; }   /* páginas de números: longe dos cantos de cima */
-.page[data-page="nav"] { margin: 6rem 4rem 1.5rem 1rem; }
+.page:not([data-page="video"]):not([data-page="nav"]) { padding: 5.5rem 4rem 1rem 1rem; }   /* páginas de números: longe dos cantos de cima */
+.page[data-page="nav"] { margin: 5rem 4rem 1rem 1rem; }
 #screen.semrelogio #wing-left { display: none; }
 #screen.semrelogio #center { left: 0; }   /* sem o relógio: a cena ocupa a tela inteira */
 .page { position: absolute; inset: 0; display: none; flex-direction: column; }
@@ -248,7 +248,7 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 #standby { position: absolute; inset: 0; background: #000; }
 #standby .media, #videoPage .media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .sb-clock {
-  position: absolute; right: 4rem; bottom: 3rem; text-align: right;
+  position: absolute; right: 4rem; bottom: 1.5rem; text-align: right;
   text-shadow: 0 0 1.5rem #000, 0 0 .5rem #000; transition: left 3s ease, top 3s ease;
 }
 .sb-clock b { font-size: 6rem; display: block; line-height: 1; }

@@ -34,11 +34,11 @@ function holePath(x, y) {
     `C${p(8, 5)} ${p(0, 12)} ${p(0, 23)} C${p(0, 37)} ${p(8, 45)} ${p(20, 45)} Z`;
 }
 
-// Janela da moldura medida na foto da tela de medição (07/11/2026), em mm da tela: a tela inteira aparece, menos os
-// dois cantos de cima (o da esquerda bem arredondado, o da direita pequeno). Fora da tela não importa.
+// Janela da moldura medida na foto da tela de medição (07/11/2026), em mm da tela: a largura inteira aparece, menos os
+// dois cantos de cima (o da esquerda bem arredondado, o da direita pequeno); na altura, do banco do motorista, ~47 mm.
 const JANELA = [[-2, 24.1], [0, 24.1], [1.9, 19.5], [4.9, 15.8], [7.5, 13.4], [10.2, 11.3], [14.7, 8.3], [20.8, 5.3], [26.3, 3.6], [32.1, 2.3],
   [37, 1], [41.9, 0], [41.9, -2], [122, -2], [122, 0], [127.6, 1], [132.6, 2.3], [137.4, 3.3], [141.6, 4.5], [145.4, 6.8], [147.7, 8.3],
-  [151, 8.3], [151, 70], [-2, 70]];   // embaixo vai até o fim da tela: do banco do motorista (olho mais alto) aparece mais
+  [151, 8.3], [151, 47], [-2, 47]];   // embaixo: do banco do motorista só aparece até ~47 mm (foto da cena História, 07/11)
 // a área usada (STAGE) é o retângulo da janela dentro da tela; relógio, cenas e configurações ficam dentro dele
 const STAGE = { x: 0, y: 0, w: 140, h: 45 };
 function holeNow(W, H) {
@@ -56,6 +56,7 @@ function layout() {
   if (S.janelaV !== 2) { delete S.holeShape; S.offX = 0; S.offY = 0; S.janelaV = 2; saveSettings(); }   // troca a janela antiga pela medida
   const pts = holeNow(W, H), hole = shapePath(pts);
   TELA.janela = pts;                                                 // as cenas desviam o texto dos cantos da moldura
+  TELA.relogioBox = () => { const el = $('sbClock'); return el && !el.hidden && el.offsetParent ? el.getBoundingClientRect() : null; };
   TELA.tela = () => { const r = $('screen').getBoundingClientRect(); return { left: r.left, top: r.top, mm: r.width / W }; };
   const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
   const x0 = Math.max(0, Math.min(...xs)), y0 = Math.max(0, Math.min(...ys));

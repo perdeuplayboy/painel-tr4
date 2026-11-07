@@ -30,6 +30,10 @@ export function livre(x0, x1) {
     if (a > b) continue;
     top = Math.max(top, (a * T.mm + T.top - r.top) + 2); bot = Math.min(bot, (b * T.mm + T.top - r.top) - 2);
   }
+  if (TELA.relogio && TELA.relogioBox) {                             // standby: o relógio no canto de baixo à direita também ocupa lugar
+    const b = LV.rb ??= TELA.relogioBox();
+    if (b && b.width && r.left + x1 > b.left - 6 && r.left + x0 < b.right + 6) bot = Math.min(bot, b.top - r.top - 4);
+  }
   return [top, bot];
 }
 // tamanho mínimo das letras de texto corrido, em fração da altura (lido de longe, no painel do carro)

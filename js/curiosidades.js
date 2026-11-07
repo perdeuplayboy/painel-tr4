@@ -4,7 +4,7 @@
 // Selos ao lado da foto: ameaçado de extinção, raro por aqui (poucos registros na região), raro no mundo, endêmico e veio de fora.
 // HOJE NA HISTÓRIA: o que aconteceu neste mesmo dia em outros anos (Wikipédia em português), com a foto do artigo.
 // O que baixa fica guardado; sem dados, a cena termina na hora.
-import { here, load, keep, hudText, HUD, clamp, ease, rng, TELA, LER, coluna as colunaT, encher } from './cenas.js';
+import { here, load, keep, hudText, HUD, clamp, ease, rng, TELA, LER, coluna as colunaT, encher, livre } from './cenas.js';
 import { cities, kmBetween, online, fmtN, say } from './mundo.js';
 
 const TAU = Math.PI * 2, RAD = Math.PI / 180;
@@ -231,7 +231,13 @@ export function historia(ctx, w, h, t, color) {
   // em cima, a data comemorativa de hoje (se tiver); depois o ano rodando até o do fato, e o fato com a maior letra que couber
   const lx0 = w * 0.05, cw = w * 0.56;
   let y = h * 0.04;
-  if (WK.hol[0]) { y = colunaT(ctx, h, [[`hoje: ${WK.hol[0]}`, 0.8, HUD, 0.065, '', 1]], lx0, y, cw); }
+  // a data comemorativa vai em cima da foto (do lado direito), e a coluna da esquerda fica inteira para o ano e o fato;
+  // sem foto, ela fica em cima da coluna
+  const img0 = o.img ? foto(o.img) : null, holY = h * 0.04;
+  let hb = 0;
+  if (WK.hol[0] && img0) hb = colunaT(ctx, h, [[`hoje: ${WK.hol[0]}`, 0.8, HUD, LER, '', 2]], w * 0.64, holY, w * 0.33) - holY;
+  else if (WK.hol[0]) { y = colunaT(ctx, h, [[`hoje: ${WK.hol[0]}`, 0.8, HUD, 0.065, '', 1]], lx0, y, cw); }
+  y = Math.max(y, livre(lx0, lx0 + w * 0.3)[0]);                     // o ano não fica atrás do canto arredondado da moldura
   const yr = Math.round(Y + (o.y - Y) * roll), n = Y - o.y, fy0 = y + h * 0.19;
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = out;
   ctx.font = `700 ${h * 0.2}px monospace`; ctx.fillStyle = color; ctx.fillText(anoTxt(yr), lx0, fy0);
@@ -244,7 +250,7 @@ export function historia(ctx, w, h, t, color) {
   // a foto do artigo, do lado direito (sem descer até o relógio)
   const im = o.img ? foto(o.img) : null;
   if (im) {
-    const bx = w * 0.64, by = h * 0.04, bw = w * 0.33, bh = h * (TELA.relogio ? 0.62 : 0.92), s = Math.min(bw / im.naturalWidth, bh / im.naturalHeight);
+    const bx = w * 0.64, by = h * 0.04 + hb, bw = w * 0.33, bh = h * (TELA.relogio ? 0.62 : 0.92) - hb, s = Math.min(bw / im.naturalWidth, bh / im.naturalHeight);
     const iw = im.naturalWidth * s, ih = im.naturalHeight * s, ix = bx + (bw - iw) / 2, iy = by + (bh - ih) / 2, z = 1 + 0.05 * clamp(k / 25);
     if (HS.imT === null) HS.imT = k;                               // foto que chegou atrasada aparece aos poucos
     ctx.globalAlpha = out * ease((k - Math.max(0.6, HS.imT)) / 0.8);
