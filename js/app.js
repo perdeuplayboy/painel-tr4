@@ -1223,6 +1223,41 @@ function fitByTrace() {
   box.addEventListener('pointercancel', () => { stroke = null; });
   addEventListener('resize', size); size(); ask();
 }
+// tela de medição: régua em mm da tela inteira (coordenadas do #screen: 0,0 no canto de cima à esquerda da área acesa).
+// Numa foto pela moldura dá para ler exatamente que pedaço da tela aparece: linhas a cada 1, 5 e 10 mm, cada quadrado
+// de 10 mm com o seu "x,y" escrito, e o contorno da janela que o painel usa hoje em azul.
+function medirTela() {
+  closeSettings();
+  const cv = document.createElement('canvas'); cv.id = 'medir';
+  cv.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;z-index:9999;background:#000;touch-action:none';
+  document.body.append(cv);
+  const draw = () => {
+    const d = devicePixelRatio || 1, r = $('screen').getBoundingClientRect(), mm = r.width / S.screenW, W = S.screenW, H = W * 1080 / 2400;
+    cv.width = innerWidth * d; cv.height = innerHeight * d;
+    const c = cv.getContext('2d');
+    c.setTransform(d * mm, 0, 0, d * mm, d * r.left, d * r.top);
+    c.fillStyle = '#000'; c.fillRect(-5, -5, W + 10, H + 10);
+    for (let x = 0; x <= W; x++) { const m10 = x % 10 === 0, m5 = x % 5 === 0;
+      c.strokeStyle = m10 ? '#ff5a3c' : m5 ? 'rgba(255,90,60,.6)' : 'rgba(255,90,60,.25)'; c.lineWidth = m10 ? 0.35 : m5 ? 0.2 : 0.1;
+      c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H); c.stroke(); }
+    for (let y = 0; y <= H; y++) { const m10 = y % 10 === 0, m5 = y % 5 === 0;
+      c.strokeStyle = m10 ? '#3cc8ff' : m5 ? 'rgba(60,200,255,.6)' : 'rgba(60,200,255,.25)'; c.lineWidth = m10 ? 0.35 : m5 ? 0.2 : 0.1;
+      c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+    c.font = '600 2.2px system-ui, sans-serif'; c.textBaseline = 'top'; c.fillStyle = '#fff';
+    for (let x = 0; x < W; x += 10) for (let y = 0; y < H; y += 10) c.fillText(`${x},${y}`, x + 0.6, y + 0.6);
+    c.fillStyle = '#ffd23c'; c.font = '600 1.6px system-ui, sans-serif';   // meio de cada quadrado: o 5
+    for (let x = 5; x < W; x += 10) for (let y = 5; y < H; y += 10) c.fillText(`${x},${y}`, x + 0.4, y + 0.4);
+    let x0 = (W - 140) / 2 + S.offX, y0 = (H - 45) / 2 + S.offY;
+    c.strokeStyle = '#4aff7a'; c.lineWidth = 0.4; c.setLineDash([1.5, 1]);
+    c.stroke(new Path2D(S.holeShape?.length > 10 ? shapePath(S.holeShape) : holePath(x0, y0)));
+    c.setLineDash([]); c.strokeStyle = '#fff'; c.lineWidth = 0.5; c.strokeRect(0, 0, W, H);   // borda da área acesa
+  };
+  let last = 0;
+  const close = () => { removeEventListener('resize', draw); cv.remove(); };
+  cv.addEventListener('pointerdown', e => { e.stopPropagation(); const now = Date.now(); if (now - last < 450) close(); last = now; });
+  addEventListener('resize', draw); draw();
+}
+$('btnMedir').addEventListener('click', medirTela);
 $('btnFit').addEventListener('click', fitByTrace);
 $('btnFitReset').addEventListener('click', () => { delete S.holeShape; saveSettings(); layout(); });
 
@@ -1385,7 +1420,7 @@ if (navigator.serviceWorker?.controller) navigator.serviceWorker.addEventListene
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { wakeScreen(); keepAwake(); checkUpdate(); } });
 addEventListener('pointerdown', e => {
   if (asleep) { wakeScreen(); return; }
-  if (e.target.closest('#wing-left, #settings, #fitter, .sound-box')) return;   // o relógio é para as configurações
+  if (e.target.closest('#wing-left, #settings, #fitter, #medir, .sound-box')) return;   // o relógio é para as configurações
   holdAt = [e.clientX, e.clientY];
   clearTimeout(holdTimer); holdTimer = setTimeout(sleepScreen, 1500);   // segurar 1,5 s apaga a tela
 }, true);
