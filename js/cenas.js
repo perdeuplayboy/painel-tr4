@@ -39,7 +39,8 @@ export function livre(x0, x1) {
 // tamanho mínimo das letras de texto corrido, em fração da altura (lido de longe, no painel do carro)
 export const LER = 0.088;
 // nomes das cidades nos radares (chuva, vento e aviões): o mesmo tamanho em todos
-export const CIDADE = 0.042;
+export const CIDADE = 0.063;
+export const SEM_CIDADE = new Set(['Guarará'].map(n => n.normalize()));   // cidades que não aparecem nos radares
 export const load = (k, d) => { try { const v = localStorage.getItem('tr4.' + k); return v ? JSON.parse(v) : d; } catch { return d; } };
 export const keep = (k, v) => { try { localStorage.setItem('tr4.' + k, JSON.stringify(v)); } catch {} };
 export const here = () => { const p = load('lastPos', null); return p && Number.isFinite(p.lat) ? p : { lat: -23.55, lon: -46.63, padrao: true }; };   // sem GPS ainda: centro de São Paulo

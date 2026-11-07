@@ -2,7 +2,7 @@
 // satélites passando sobre o carro agora (órbitas do CelesTrak), terremotos das últimas 24 horas num globo (USGS)
 // e a Terra com o dia e a noite deste instante (mapa do Natural Earth), mais os aviões em volta (ADS-B, por um
 // intermediário no Cloudflare). Sem dados, a cena termina na hora.
-import { here, load, keep, hudText, skyAt, ST, HUD, rng, clamp, ease, coluna, encher, TELA, LER, CIDADE, livre } from './cenas.js';
+import { here, load, keep, hudText, skyAt, ST, HUD, rng, clamp, ease, coluna, encher, TELA, LER, CIDADE, SEM_CIDADE, livre } from './cenas.js';
 
 const TAU = Math.PI * 2, RAD = Math.PI / 180, RE = 6378.137;
 const days = ms => ms / 86400000 + 2440587.5 - 2451545.0;          // dias desde o ano 2000 ao meio-dia (J2000)
@@ -731,7 +731,7 @@ export function avioes(ctx, w, h, t, color) {
   if (CL) {                                                         // até 10 cidades dentro dos 30 km, sem trombar
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = HUD;
     // vale mais a cidade grande e a que está perto: uma pequena a 5 km conta mais do que uma igual a 45 km
-    const pick = CL.map(c => ({ c, d: kmBetween(p, c) })).filter(o => o.d <= 30).sort((a, b) => b.c.pop / (1 + b.d / 10) - a.c.pop / (1 + a.d / 10));
+    const pick = CL.map(c => ({ c, d: kmBetween(p, c) })).filter(o => o.d <= 30 && !SEM_CIDADE.has(o.c.n.normalize())).sort((a, b) => b.c.pop / (1 + b.d / 10) - a.c.pop / (1 + a.d / 10));
     let nc = 0;
     for (const { c } of pick) {
       if (nc >= 10) break;

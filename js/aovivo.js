@@ -2,7 +2,7 @@
 // radar de chuva (RainViewer), vento agora (Open-Meteo), qualidade do ar (Open-Meteo) e a Lua de hoje com os
 // próximos eventos do céu (foto da NASA; eclipses, superluas e chuvas de meteoros calculados aqui, pelo Meeus).
 // O que baixa fica guardado; sem dados, a cena termina na hora.
-import { here, load, keep, hudText, HUD, rng, clamp, coluna, encher, TELA, LER, CIDADE } from './cenas.js';
+import { here, load, keep, hudText, HUD, rng, clamp, coluna, encher, TELA, LER, CIDADE, SEM_CIDADE } from './cenas.js';
 import { world, cities, kmBetween, sunEq, moonEq, altOf, wrap, hhmm, online, fmtN, say } from './mundo.js';
 
 const TAU = Math.PI * 2, RAD = Math.PI / 180;
@@ -32,7 +32,7 @@ function fundoMapa(ctx, w, h, p, M, color, taken, alpha = 1) {
   const fs = Math.max(10, h * 0.05), CL = cities(p);
   if (CL) {
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    const pick = CL.map(c => ({ c, d: kmBetween(p, c) })).filter(o => o.d <= 55).sort((a, b) => b.c.pop / (1 + b.d / 10) - a.c.pop / (1 + a.d / 10));
+    const pick = CL.map(c => ({ c, d: kmBetween(p, c) })).filter(o => o.d <= 55 && !SEM_CIDADE.has(o.c.n.normalize())).sort((a, b) => b.c.pop / (1 + b.d / 10) - a.c.pop / (1 + a.d / 10));
     let n = 0;
     for (const { c } of pick) {
       if (n >= 10) break;
