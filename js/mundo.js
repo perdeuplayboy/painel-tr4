@@ -2,7 +2,7 @@
 // satélites passando sobre o carro agora (órbitas do CelesTrak), terremotos das últimas 24 horas num globo (USGS)
 // e a Terra com o dia e a noite deste instante (mapa do Natural Earth), mais os aviões em volta (ADS-B, por um
 // intermediário no Cloudflare). Sem dados, a cena termina na hora.
-import { here, load, keep, hudText, skyAt, ST, HUD, rng, clamp, ease, coluna, encher, TELA, LER, CIDADE } from './cenas.js';
+import { here, load, keep, hudText, skyAt, ST, HUD, rng, clamp, ease, coluna, encher, TELA, LER, CIDADE, livre } from './cenas.js';
 
 const TAU = Math.PI * 2, RAD = Math.PI / 180, RE = 6378.137;
 const days = ms => ms / 86400000 + 2440587.5 - 2451545.0;          // dias desde o ano 2000 ao meio-dia (J2000)
@@ -474,8 +474,12 @@ export function terra(ctx, w, h, t, color) {
   say(ctx, h, S.p.padrao ? 'SÃO PAULO' : 'VOCÊ', cxp + h * 0.03, cyp - h * 0.035, 0.9);
   const simD = new Date(sim), quando = replay ? `${simD.toDateString() === new Date(now).toDateString() ? 'hoje' : 'ontem'} ${hhmm(sim)}` : '';
   const aqui = altOf(sun, sim, S.p.lat, S.p.lon) > -0.833 ? 'aqui é dia' : 'aqui é noite';
-  const sol = S.rise && S.set ? `o sol nasce ${hhmm(S.rise)} e se põe ${hhmm(S.set)}` : null;
-  hudText(ctx, h, [replay ? quando : null, sol ? `${aqui} · ${sol}` : aqui].filter(Boolean), w * 0.04, h * 0.04);
+  const sol = S.rise && S.set ? `sol ${hhmm(S.rise)} – ${hhmm(S.set)}` : null;
+  // em linhas curtas no canto de baixo à direita (no standby, logo acima do relógio), fora do mapa e dos cantos da moldura
+  const lin = [replay ? quando : null, aqui, sol].filter(Boolean), hfs = Math.max(10, h * 0.075);
+  ctx.font = `${hfs}px monospace`; const hw = Math.max(...lin.map(s => ctx.measureText(s).width));
+  const [, lb, rel] = livre(w * 0.97 - hw, w * 0.97);
+  hudText(ctx, h, lin, w * 0.97, Math.min(h * 0.97, rel ? rel.t : lb) - lin.length * hfs * 1.3, 'right');
 }
 
 // =====================================================================================
