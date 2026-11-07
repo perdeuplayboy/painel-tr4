@@ -80,45 +80,53 @@ function car(c, x, y, s, angle = 0) {
   c.restore();
 }
 
-// a TR4 vista de trás (para o inclinômetro), nas mesmas alturas do desenho de lado: chão em 0, teto em -56,5,
-// estepe no centro da tampa (SPY), lanternas em pé nos cantos, para-choque embaixo. Meia largura 25.
-function carTras(c, x, y, s, angle = 0) {
+// a TR4 vista de trás, traçada da foto do usuário (traseira de frente, 500×458): 0,132 unidade por pixel,
+// chão no pé dos pneus (y 450) e centro em x 250. Bate com o desenho de lado: teto em -56,5 e estepe em -30.
+export function carTras(c, x, y, s, angle = 0) {
   c.save(); c.translate(x, y); c.rotate(angle); c.scale(s, s);
   c.lineJoin = 'round'; c.lineCap = 'round';
   const lw = 1.8;
-  for (const sx of [-1, 1]) {                                        // pneus: aparecem embaixo da lataria
-    c.beginPath(); c.roundRect(sx * 21.5 - 4.5, -2 * RAD, 9, 2 * RAD, 2.5); outline(c, lw);
+  for (const sx of [-1, 1]) {                                        // pneus: só a parte de baixo aparece
+    c.beginPath(); c.roundRect(sx > 0 ? 19.8 : -28.6, -14.5, 8.8, 14.5, 2.2); outline(c, lw);   // sobe até o para-choque (no alto é o para-barro preto)
     c.strokeStyle = rgba(OR, 0.35); c.lineWidth = 0.75; c.beginPath();
-    for (const yy of [-16, -10.4, -4.8]) { c.moveTo(sx * 21.5 - 3, yy); c.lineTo(sx * 21.5 + 3, yy); } c.stroke();
+    for (const yy of [-8.5, -5.5, -2.5]) { c.moveTo(sx * 22, yy); c.lineTo(sx * 26.4, yy); } c.stroke();
   }
-  c.beginPath();                                                     // lataria: caixa embaixo, vidros afinando até o teto
-  c.moveTo(-23.5, -12); c.lineTo(-25, -14.5); c.lineTo(-25, -38); c.lineTo(-24, -40.5);
-  c.arcTo(-20.5, -56.5, 0, -56.5, 3.5); c.arcTo(20.5, -56.5, 24, -40.5, 3.5);
-  c.lineTo(24, -40.5); c.lineTo(25, -38); c.lineTo(25, -14.5); c.lineTo(23.5, -12); c.closePath();
+  c.beginPath(); c.rect(-20, -14, 40, 4.5); c.fillStyle = INK; c.fill();   // embaixo do carro, entre as rodas
+  c.strokeStyle = rgba(OR, 0.4); c.lineWidth = 0.8; c.beginPath(); c.moveTo(-18, -10.5); c.lineTo(18, -10.5); c.stroke();
+  c.beginPath();                                                     // lataria: teto estreito, abre até as lanternas e alarga embaixo
+  c.moveTo(-28.4, -13.9); c.lineTo(-28.6, -19.8); c.lineTo(-28.1, -27.7); c.lineTo(-26.4, -31);
+  c.lineTo(-26.6, -40.3); c.quadraticCurveTo(-23.5, -50, -19.8, -52.8); c.quadraticCurveTo(-18.6, -56.5, -15.5, -56.5);
+  c.lineTo(15.5, -56.5); c.quadraticCurveTo(18.6, -56.5, 19.8, -52.8); c.quadraticCurveTo(23.5, -50, 26.6, -40.3);
+  c.lineTo(26.4, -31); c.lineTo(28.1, -27.7); c.lineTo(28.6, -19.8); c.lineTo(28.4, -13.9); c.closePath();
   outline(c, lw);
   c.fillStyle = GLASS;                                               // vidro de trás
-  c.beginPath(); c.moveTo(-19.5, -41.5); c.lineTo(-16.6, -52.6); c.lineTo(16.6, -52.6); c.lineTo(19.5, -41.5); c.closePath(); c.fill();
+  c.beginPath(); c.moveTo(-17.8, -54); c.lineTo(17.8, -54); c.lineTo(21.6, -39.6); c.lineTo(-21.6, -39.6); c.closePath(); c.fill();
   c.strokeStyle = 'rgba(255,200,140,.22)'; c.lineWidth = 1.1;
-  c.beginPath(); c.moveTo(-12, -43.5); c.lineTo(-8, -50.5); c.moveTo(-6, -43.5); c.lineTo(-3, -48.5); c.stroke();
-  c.strokeStyle = rgba(OR, 0.32); c.lineWidth = 0.75;                // tampa traseira e friso
-  c.beginPath(); c.moveTo(-20.5, -40); c.lineTo(-20.5, -21.5); c.lineTo(20.5, -21.5); c.lineTo(20.5, -40);
-  c.moveTo(-25, -25.5); c.lineTo(-20.5, -25.5); c.moveTo(20.5, -25.5); c.lineTo(25, -25.5); c.stroke();
-  c.fillStyle = '#7a1a0c';                                           // lanternas em pé
-  for (const sx of [-1, 1]) { c.beginPath(); c.roundRect(sx * 22.6 - 1.6, -36, 3.2, 9, 0.8); c.fill(); }
-  c.beginPath(); c.roundRect(-25.8, -21.4, 51.6, 8.2, 2); outline(c, lw);   // para-choque
-  c.fillStyle = '#e8e8e8'; c.globalAlpha = 0.5; c.fillRect(-5, -17.8, 10, 2.6); c.globalAlpha = 1;   // placa
-  c.beginPath(); c.arc(0, SPY, 11.5, 0, TAU); outline(c, lw);       // estepe na tampa
-  c.strokeStyle = rgba(OR, 0.45); c.lineWidth = 0.8; c.beginPath(); c.arc(0, SPY, 7.2, 0, TAU); c.stroke();
-  c.beginPath(); c.arc(0, SPY, 2.2, 0, TAU); c.stroke();
-  c.beginPath(); c.moveTo(-17, -57.2); c.lineTo(-15.5, -60.3); c.lineTo(15.5, -60.3); c.lineTo(17, -57.2);   // rack
-  c.strokeStyle = OR; c.lineWidth = lw; c.stroke();
+  c.beginPath(); c.moveTo(-14, -42); c.lineTo(-10, -51.5); c.moveTo(-8, -42); c.lineTo(-5, -48.5); c.stroke();
+  c.fillStyle = '#7a1a0c'; c.fillRect(-5.3, -56.3, 10.6, 1.2);       // brake light no alto
+  c.strokeStyle = rgba(OR, 0.32); c.lineWidth = 0.75;                // tampa traseira
+  c.beginPath(); c.moveTo(-21.8, -39.6); c.lineTo(-21.8, -19.8); c.lineTo(21.8, -19.8); c.lineTo(21.8, -39.6); c.stroke();
+  c.fillStyle = '#7a1a0c';                                           // lanternas em pé e refletores redondos
+  for (const sx of [-1, 1]) {
+    c.beginPath(); c.roundRect(sx > 0 ? 22.2 : -26.4, -39.9, 4.2, 8.6, 0.8); c.fill();
+    c.beginPath(); c.arc(sx * 25, -23.3, 1.2, 0, TAU); c.fill();
+  }
+  c.fillStyle = '#e8e8e8'; c.globalAlpha = 0.45; c.beginPath(); c.roundRect(-21.4, -35.4, 13.2, 4.4, 0.6); c.fill(); c.globalAlpha = 1;   // placa
+  c.beginPath(); c.moveTo(-28.6, -19.8); c.lineTo(28.6, -19.8); c.strokeStyle = OR; c.lineWidth = lw * 0.8; c.stroke();   // para-choque
+  c.strokeStyle = rgba(OR, 0.4); c.lineWidth = 0.8; c.beginPath(); c.moveTo(-15, -15.8); c.lineTo(15, -15.8); c.stroke();
+  c.beginPath(); c.arc(5.3, -30.2, 12.7, 0, TAU); outline(c, lw);   // estepe na tampa, um pouco à direita
+  c.strokeStyle = rgba(OR, 0.45); c.lineWidth = 0.8; c.beginPath(); c.arc(5.3, -30.2, 8.2, 0, TAU); c.stroke();
+  c.beginPath();                                                     // aro de 5 raios duplos
+  for (let k = 0; k < 5; k++) { const a = k * TAU / 5 - Math.PI / 2; c.moveTo(5.3 + Math.cos(a) * 2, -30.2 + Math.sin(a) * 2); c.lineTo(5.3 + Math.cos(a) * 7.6, -30.2 + Math.sin(a) * 7.6); }
+  c.stroke(); c.beginPath(); c.arc(5.3, -30.2, 2, 0, TAU); c.stroke();
+  for (const sx of [-1, 1]) { c.beginPath(); c.moveTo(sx * 15.2, -56.5); c.lineTo(sx * 15.6, -58.6); c.lineTo(sx * 17.4, -58.6); c.lineTo(sx * 17.6, -56.4); c.strokeStyle = OR; c.lineWidth = lw; c.stroke(); }   // pés do rack
   c.restore();
 }
 
 // inclinômetro do painel (página Trilha): a TR4 de lado ou de trás, girando no ponto de apoio, sobre a linha do chão
 export function carroIncl(c, w, h, graus, cor = '#e8e8e8', tras = false) {
   c.clearRect(0, 0, w, h);
-  const s = tras ? Math.min(w / 64, h / 78) : Math.min(w / 112, h / 78), gx = w / 2, gy = h * 0.8;
+  const s = tras ? Math.min(w / 66, h / 78) : Math.min(w / 112, h / 78), gx = w / 2, gy = h * 0.8;
   c.save(); c.strokeStyle = cor; c.globalAlpha = 0.5; c.lineWidth = Math.max(1, s * 0.8); c.setLineDash([4 * s, 4 * s]);
   c.beginPath(); c.moveTo(w * 0.03, gy + 0.5); c.lineTo(w * 0.97, gy + 0.5); c.stroke(); c.restore();
   const a = graus * Math.PI / 180;
