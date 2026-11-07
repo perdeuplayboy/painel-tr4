@@ -93,14 +93,17 @@ export function carTras(c, x, y, s, angle = 0) {
   }
   c.beginPath(); c.rect(-20, -14, 40, 4.5); c.fillStyle = INK; c.fill();   // embaixo do carro, entre as rodas
   c.strokeStyle = rgba(OR, 0.4); c.lineWidth = 0.8; c.beginPath(); c.moveTo(-18, -10.5); c.lineTo(18, -10.5); c.stroke();
-  c.beginPath();                                                     // lataria: teto estreito, abre até as lanternas e alarga embaixo
-  c.moveTo(-28.4, -13.9); c.lineTo(-28.6, -19.8); c.lineTo(-28.1, -27.7); c.lineTo(-26.4, -31);
-  c.lineTo(-26.6, -40.3); c.quadraticCurveTo(-23.5, -50, -19.8, -52.8); c.quadraticCurveTo(-18.6, -56.5, -15.5, -56.5);
-  c.lineTo(15.5, -56.5); c.quadraticCurveTo(18.6, -56.5, 19.8, -52.8); c.quadraticCurveTo(23.5, -50, 26.6, -40.3);
-  c.lineTo(26.4, -31); c.lineTo(28.1, -27.7); c.lineTo(28.6, -19.8); c.lineTo(28.4, -13.9); c.closePath();
+  // lataria: a coluna desce quase reta do teto até a lanterna; embaixo da lanterna a lateral alarga até o para-choque
+  const lado = [[-17.4, -56.5], [-18.7, -55.4], [-19.8, -54.1], [-20.9, -51.5], [-21.8, -48.8], [-22.7, -46.2], [-23.8, -43.6], [-24.8, -40.3],
+                [-25.2, -31], [-26.7, -30.4], [-27.7, -27.7], [-28.4, -25.1], [-28.6, -19.8], [-28.4, -13.9]];
+  c.beginPath();
+  for (const [px, py] of lado) c.lineTo(px, py);
+  for (let k = lado.length - 1; k >= 0; k--) c.lineTo(-lado[k][0], lado[k][1]);
+  c.closePath();
   outline(c, lw);
   c.fillStyle = GLASS;                                               // vidro de trás
-  c.beginPath(); c.moveTo(-17.8, -54); c.lineTo(17.8, -54); c.lineTo(21.6, -39.6); c.lineTo(-21.6, -39.6); c.closePath(); c.fill();
+  c.beginPath(); c.moveTo(-18.2, -53.5); c.quadraticCurveTo(-18, -53.9, -16.8, -53.9); c.lineTo(16.8, -53.9); c.quadraticCurveTo(18, -53.9, 18.2, -53.5);
+  c.lineTo(19.3, -48.8); c.lineTo(20.8, -43.6); c.lineTo(21.6, -39.9); c.lineTo(-21.6, -39.9); c.lineTo(-20.8, -43.6); c.lineTo(-19.3, -48.8); c.closePath(); c.fill();
   c.strokeStyle = 'rgba(255,200,140,.22)'; c.lineWidth = 1.1;
   c.beginPath(); c.moveTo(-14, -42); c.lineTo(-10, -51.5); c.moveTo(-8, -42); c.lineTo(-5, -48.5); c.stroke();
   c.fillStyle = '#7a1a0c'; c.fillRect(-5.3, -56.3, 10.6, 1.2);       // brake light no alto
@@ -108,7 +111,8 @@ export function carTras(c, x, y, s, angle = 0) {
   c.beginPath(); c.moveTo(-21.8, -39.6); c.lineTo(-21.8, -19.8); c.lineTo(21.8, -19.8); c.lineTo(21.8, -39.6); c.stroke();
   c.fillStyle = '#7a1a0c';                                           // lanternas em pé e refletores redondos
   for (const sx of [-1, 1]) {
-    c.beginPath(); c.roundRect(sx > 0 ? 22.2 : -26.4, -39.9, 4.2, 8.6, 0.8); c.fill();
+    c.beginPath(); c.roundRect(sx > 0 ? 22.2 : -26.6, -39.9, 4.4, 8.9, [sx > 0 ? 0.6 : 1.6, sx > 0 ? 1.6 : 0.6, 0.6, 0.6]); c.fill();
+    c.strokeStyle = OR; c.lineWidth = lw * 0.6; c.stroke(); c.fillStyle = '#7a1a0c';
     c.beginPath(); c.arc(sx * 25, -23.3, 1.2, 0, TAU); c.fill();
   }
   c.fillStyle = '#e8e8e8'; c.globalAlpha = 0.45; c.beginPath(); c.roundRect(-21.4, -35.4, 13.2, 4.4, 0.6); c.fill(); c.globalAlpha = 1;   // placa
