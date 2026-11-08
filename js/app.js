@@ -794,6 +794,7 @@ function tick() {
     const v = isNum(gps.speed) ? gps.speed : 0;
     mapView.zoom = navInfo?.dist < 250 || v < 25 ? 17 : v < 70 ? 16 : 15;
     mapView.tilt = !!S.mapTilt; $('map').classList.toggle('tilt', mapView.tilt);
+    mapView.mag = Math.min(3, Math.max(0.5, (S.mapZoom || 100) / 100));
     mapView.draw(mapPos(), gps.speed > 5 ? gps.heading : NaN, nav.route, nav.seg || 0, navInfo ? 0.66 : 0.5);
   }
 
@@ -1010,7 +1011,7 @@ const FIELDS = {
   sRollLimit: 'rollLimit', sPitchLimit: 'pitchLimit', sInvRoll: 'invRoll', sInvPitch: 'invPitch',
   sScreenW: 'screenW', sOffX: 'offX', sOffY: 'offY', sMask: 'mask', sOutline: 'outline',
   sVoice: 'voice', sTheme: 'theme', sNightDim: 'nightDim', sSpotifyId: 'spotifyClient',
-  sAnims: 'anims', sClipSec: 'clipSec', sSleepUnplug: 'sleepUnplug', sCenaRelogio: 'cenaRelogio', sMapTilt: 'mapTilt',
+  sAnims: 'anims', sClipSec: 'clipSec', sSleepUnplug: 'sleepUnplug', sCenaRelogio: 'cenaRelogio', sMapTilt: 'mapTilt', sMapZoom: 'mapZoom',
 };
 
 function renderAnims() {
@@ -1073,15 +1074,16 @@ function renderSpotifySettings() {
 
 const phoneLink = () => new URL(`enviar.html#${S.channel}`, location.href).href;
 // correção de erro baixa = menos quadradinhos, cada um maior; margem branca de 4 (o que as câmeras pedem)
-const qrSvg = txt => { const q = qrcode(0, 'L'); q.addData(txt); q.make(); return q.createSvgTag({ cellSize: 4, margin: 4, scalable: true }); };
+const qrSvg = (txt, margin = 4) => { const q = qrcode(0, 'L'); q.addData(txt); q.make(); return q.createSvgTag({ cellSize: 4, margin, scalable: true }); };
 
 // código grande, do tamanho da parte visível da tela, branco: o celular lê de longe e através do vidro
 function qrGrande() {
   if (!window.qrcode) return;
-  const r = $('stage').getBoundingClientRect(), s = Math.min(r.height, r.width) * 0.96;
+  // a tela toda fica branca (é a margem), então o código usa a altura inteira do que se vê, no meio da tela
+  const r = $('stage').getBoundingClientRect(), s = Math.min(r.height, r.width) * 0.99;
   const box = document.createElement('div');
   box.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#fff;touch-action:none';
-  box.innerHTML = qrSvg(phoneLink());
+  box.innerHTML = qrSvg(phoneLink(), 0);
   const svg = box.firstElementChild;
   svg.style.cssText = `position:absolute;width:${s}px;height:${s}px;left:${r.left + (r.width - s) / 2}px;top:${r.top + (r.height - s) / 2}px`;
   box.addEventListener('pointerdown', e => { e.stopPropagation(); box.remove(); });   // toque fecha

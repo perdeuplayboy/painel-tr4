@@ -248,9 +248,11 @@
       <button id="btnNavStop" class="pill warn" hidden>Encerrar rota</button>
     </div>
     <label class="check"><input id="sMapTilt" type="checkbox"> Mapa inclinado (visão de navegação)</label>
+    <label>Zoom do mapa (%) <input id="sMapZoom" type="number" min="50" max="300" step="5" inputmode="numeric"></label>
     <p class="muted">No carro: na página do mapa toque em "Destino" e fale o endereço.</p>
     <p class="muted">Do seu celular (Google Maps → Compartilhar): toque no código para ele ficar grande, aponte a câmera do seu celular, abra o endereço e instale a página.</p>
-    <div class="row"><div id="phoneQr" class="qr"></div><b id="phoneLink" class="muted"></b></div>
+    <div id="phoneQr" class="qr" title="toque para ampliar"></div>
+    <p class="muted center"><b id="phoneLink"></b></p>
     <p class="muted">Mapa © colaboradores do OpenStreetMap, rotas OSRM, busca Nominatim, envio pelo ntfy.sh.</p>
   </section>
 

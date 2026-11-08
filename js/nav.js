@@ -123,7 +123,51 @@ export function arrowChar(s) {
 
 // ---------------------------------------------------------------------------
 // Busca de endereço e cálculo de rota
+// Link do Google Maps (o "Compartilhar" do app manda https://maps.app.goo.gl/…). O link curto só diz para onde vai
+// pedindo ao Google, que não deixa site ler (CORS): quem abre é o Worker do painel no Cloudflare (/link).
+// O link longo traz as coordenadas (!3d…!4d…, @lat,lon ou q=lat,lon) ou o nome e endereço do lugar (/place/…).
+const WORKER = 'https://tr4-avioes.perdeuplayboy.workers.dev';
+const MAPS_LINK = /https?:\/\/(?:maps\.app\.goo\.gl|goo\.gl\/maps|(?:www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)\S*/i;
+export const isMapsLink = t => MAPS_LINK.test(t || '');
+
+async function openMapsLink(link) {
+  let url = link;
+  if (/goo\.gl/i.test(new URL(link).hostname)) {
+    const j = await (await fetch(`${WORKER}/link?u=${encodeURIComponent(link)}`, { signal: AbortSignal.timeout(12000) })).json();
+    if (!j.url) throw new Error('não consegui abrir o link curto do Google Maps');
+    url = j.url;
+  }
+  const u = new URL(url);
+  if (/consent\./.test(u.hostname) && u.searchParams.get('continue')) return openMapsLink(u.searchParams.get('continue'));
+  const path = decodeURIComponent(u.pathname.replace(/\+/g, ' '));
+  const place = path.match(/\/place\/([^/]+)/)?.[1]?.trim() || '';
+  const n = s => s && s.match(/(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/);
+  const c = url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || n(u.searchParams.get('q')) || n(u.searchParams.get('query')) ||
+    n(u.searchParams.get('destination')) || n(u.searchParams.get('daddr')) || n(u.searchParams.get('ll')) || (!place && url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/));
+  const text = place || u.searchParams.get('q') || u.searchParams.get('query') || u.searchParams.get('destination') || u.searchParams.get('daddr') || '';
+  return { lat: c ? +c[1] : NaN, lon: c ? +c[2] : NaN, text: n(text) ? '' : text };
+}
+
+// do mais completo ao mais simples: o OpenStreetMap nem sempre entende o endereço do Google
+export function addressTries(t) {
+  const parts = t.split(',').map(s => s.trim()).filter(Boolean);
+  const noCep = parts.map(s => s.replace(/\b\d{5}-?\d{3}\b/, '').trim()).filter(Boolean);
+  const city = noCep.find(s => / - [A-Z]{2}$/.test(s));
+  return [...new Set([t, noCep.join(', '), city && [noCep[0], city].join(', '), noCep.slice(1).join(', '), noCep[0]].filter(Boolean))];
+}
+
 export async function geocode(q, near) {
+  const link = q.match(MAPS_LINK)?.[0];
+  if (link) {
+    const L = await openMapsLink(link);
+    const name = L.text.split(',')[0] || 'Local do link';
+    if (isNum(L.lat)) return [{ name, label: L.text.split(',').slice(1, 3).join(',').trim() || `${L.lat.toFixed(5)}, ${L.lon.toFixed(5)}`, lat: L.lat, lon: L.lon }];
+    for (const t of L.text ? addressTries(L.text) : []) {
+      const list = await geocode(t, near);
+      if (list.length) return list;
+    }
+    return [];
+  }
   const c = q.match(/(-?\d{1,2}\.\d+)\s*[,; ]\s*(-?\d{1,3}\.\d+)/);
   if (c) return [{ name: 'Coordenadas', label: `${c[1]}, ${c[2]}`, lat: +c[1], lon: +c[2] }];
   const p = new URLSearchParams({ q, format: 'jsonv2', limit: '6', countrycodes: 'br', 'accept-language': 'pt-BR' });

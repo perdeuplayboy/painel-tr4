@@ -1,6 +1,6 @@
 // Página do seu celular: recebe o "Compartilhar" do Google Maps e manda o destino ao painel
 // pelo ntfy.sh, no canal secreto que o painel gerou.
-import { geocode } from './nav.js';
+import { geocode, isMapsLink } from './nav.js';
 
 const $ = id => document.getElementById(id);
 const KEY = 'tr4.phoneChannel';
@@ -64,9 +64,11 @@ function fromShare() {
     msg('Toque para enviar:');
     return;
   }
+  const link = raw.match(/https?:\/\/\S+/)?.[0];
+  if (!name && link && isMapsLink(link)) { $('q').value = link; search([link]); return; }   // só o link: abre ele
   const rest = title ? lines : lines.slice(1);
   $('q').value = [name, rest[0]].filter(Boolean).join(', ');
-  search([[name, ...rest].join(', '), rest.join(', '), rest[0], name]);
+  search([[name, ...rest].join(', '), rest.join(', '), rest[0], name, isMapsLink(link) && link]);
 }
 
 function start() {

@@ -326,7 +326,9 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 #settings .anim-list .pill + .pill { margin-left: 0; }
 #settings #mediaList { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); margin-top: 6px; }
 #settings .media-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#settings .qr svg { display: block; width: 170px; height: 170px; background: #fff; border-radius: 8px; }
+#settings .qr { display: flex; justify-content: center; margin: 8px 0 4px; cursor: pointer; }
+#settings .qr svg { display: block; width: 230px; height: 230px; background: #fff; border-radius: 8px; }
+#settings .center { text-align: center; word-break: break-all; }
 #phoneLink { word-break: break-all; font-weight: 400; }
 #settings .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 6px 0; }
 #settings .muted { color: var(--muted); font-size: 13px; }
