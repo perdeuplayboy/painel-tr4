@@ -136,9 +136,10 @@ export async function geocode(q, near) {
   });
 }
 
+// a rota e até 3 alternativas (rt.alts), que ficam guardadas para trocar na hora, sem internet, se o carro entrar numa delas
 async function fetchRoute(from, to, heading) {
   const q = `${from.lon.toFixed(6)},${from.lat.toFixed(6)};${to.lon.toFixed(6)},${to.lat.toFixed(6)}` +
-    '?overview=full&geometries=geojson&steps=true';
+    '?overview=full&geometries=geojson&steps=true&alternatives=3';
   // com o rumo do carro a rota sai para a frente (não manda dar meia-volta); se não achar assim, tenta sem
   const tries = isNum(heading) ? [q + `&bearings=${Math.round(heading) % 360},70;`, q] : [q];
   let err;
@@ -146,7 +147,8 @@ async function fetchRoute(from, to, heading) {
     try {
       const j = await (await fetch(base + qq, { signal: AbortSignal.timeout(15000) })).json();
       if (j.code !== 'Ok') throw new Error(j.message || j.code);
-      return buildRoute(j.routes[0]);
+      const [rt, ...alts] = j.routes.map(buildRoute);
+      return { ...rt, alts };
     } catch (e) { err = e; }
   }
   throw err;
@@ -174,14 +176,20 @@ function buildRoute(r) {
 }
 
 // rota guardada no aparelho (para retomar sem internet): só os pontos e as manobras; o resto é refeito
-export function packRoute(rt) {
-  return { p: rt.pts.flatMap(q => [+q.lat.toFixed(6), +q.lon.toFixed(6)]), duration: rt.duration, steps: rt.steps };
+export function packRoute(rt, alts = true) {
+  const o = { p: rt.pts.flatMap(q => [+q.lat.toFixed(6), +q.lon.toFixed(6)]), duration: rt.duration, steps: rt.steps };
+  if (alts && rt.alts?.length) o.alts = rt.alts.map(a => packRoute(a, false));
+  return o;
 }
 export function unpackRoute(o) {
   const pts = [];
   for (let i = 0; i + 1 < o.p.length; i += 2) pts.push({ lat: o.p[i], lon: o.p[i + 1] });
-  return pts.length > 1 ? { ...geometry(pts), duration: o.duration, steps: o.steps } : null;
+  if (pts.length < 2) return null;
+  return { ...geometry(pts), duration: o.duration, steps: o.steps, alts: (o.alts || []).map(unpackRoute).filter(Boolean) };
 }
+
+const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
+const segDir = (rt, i) => { const [ax, ay] = rt.xy[i], [bx, by] = rt.xy[i + 1] || rt.xy[i]; return bx === ax && by === ay ? NaN : (Math.atan2(bx - ax, by - ay) * 180 / Math.PI + 360) % 360; };
 
 // ---------------------------------------------------------------------------
 // Acompanhamento da rota: posição no trajeto, próxima manobra, avisos e recálculo
@@ -195,7 +203,7 @@ export class Navigator {
   // volta a uma rota já calculada, sem precisar de internet
   resume(dest, rt) {
     this.gen++;
-    Object.assign(this, { dest, route: rt, pending: null, busy: false, seg: 0, along: 0, offSince: null, ann: {}, msg: '' });
+    Object.assign(this, { dest, route: rt, pending: null, busy: false, seg: 0, along: 0, offSince: null, ann: {}, msg: '', altsAt: Date.now() - 120000 });
     this.speak(`Retomando a rota para ${dest.name}`);
   }
 
@@ -217,7 +225,7 @@ export class Navigator {
       const hd = pos.speed > 6 && isNum(pos.heading) ? pos.heading : pos.dir;
       const rt = await fetchRoute(pos, dest, hd);
       if (gen !== this.gen) return;
-      Object.assign(this, { route: rt, seg: 0, along: 0, offSince: null, backSince: null, ann: {}, msg: '' });
+      Object.assign(this, { route: rt, seg: 0, along: 0, offSince: null, backSince: null, altSince: null, ann: {}, msg: '', altsAt: Date.now() });
       this.onRoute(dest, rt);
       if (!reroute) this.speak(`Rota para ${dest.name}. ${spokenDist(rt.total)}, chegada às ${hhmm(Date.now() + rt.duration * 1000)}`);
     } catch (e) {
@@ -231,9 +239,45 @@ export class Navigator {
     }
   }
 
+  // o carro entrou numa das alternativas já baixadas? (perto dela e no sentido dela)
+  altHere(pos) {
+    const hd = pos.speed > 6 && isNum(pos.heading) ? pos.heading : NaN;
+    let pick = null;
+    for (const a of this.route.alts || []) {
+      const b = nearest(a, a.toXY(pos.lat, pos.lon), 0, a.xy.length);
+      if (b.d > 20 || (isNum(hd) && angDiff(hd, segDir(a, b.i)) > 60)) continue;
+      if (!pick || b.d < pick.b.d) pick = { a, b };
+    }
+    return pick;
+  }
+
+  // desvio já baixado para quando passar direto: para as próximas 2 manobras (até 2 km), pede a rota que sai
+  // de 60 m depois do cruzamento seguindo reto. Se o carro não virar, troca para ela na hora.
+  async prefetchMiss() {
+    const rt = this.route;
+    rt.missed ||= {};
+    const ahead = rt.steps.map((s, i) => [s, i]).filter(([s]) => s.at > this.along + 40 && s.at < this.along + 2000 && !isTrivial(s) && s.type !== 'arrive').slice(0, 2);
+    const todo = ahead.find(([, i]) => !rt.missed[i]);
+    if (!todo) return;
+    const [s, i] = todo;
+    rt.missed[i] = true;
+    const k = Math.max(1, rt.cum.findIndex(c => c >= s.at)), d = segDir(rt, k - 1);   // trecho que chega ao cruzamento
+    if (!isNum(d)) return;
+    const [x0, y0] = rt.xy[k], a = d * Math.PI / 180, x = x0 + 60 * Math.sin(a), y = y0 + 60 * Math.cos(a);
+    const o = rt.pts[0], from = { lat: o.lat + y / 110574, lon: o.lon + x / (Math.cos(o.lat * Math.PI / 180) * 111320) };
+    this.altBusy = true;
+    try {
+      const n = await fetchRoute(from, this.dest, d);
+      if (this.route !== rt) return;
+      const m = { ...n, alts: undefined }; rt.missed[i] = m;
+      rt.alts = [...(rt.alts || []), m, ...n.alts.map(z => ({ ...z, alts: undefined }))].slice(-6);
+      this.onRoute(this.dest, rt);
+    } catch (e) { rt.missed[i] = false; this.log('desvio: ' + e.message); } finally { this.altBusy = false; }
+  }
+
   update(pos) {
     if (this.pending && pos) this.go(this.pending, pos);
-    const rt = this.route;
+    let rt = this.route;
     if (!rt) return null;
     const now = Date.now();
 
@@ -246,18 +290,31 @@ export class Navigator {
       }
       const moving = pos.speed > 4, canRe = !this.busy && now - (this.lastReroute || 0) > 12000;
       const reroute = () => { this.lastReroute = now; this.offSince = this.backSince = null; this.speak('Recalculando'); this.go(this.dest, pos, true); };
+      // saiu da rota para uma alternativa que já estava baixada: troca na hora, sem esperar a internet
+      const alt = best.d > 30 && moving && this.altHere(pos);
+      if (alt) {
+        this.altSince ??= now;
+        if (now - this.altSince > 1500) {
+          const { a, b } = alt;
+          a.alts = [{ ...rt, alts: undefined }, ...rt.alts.filter(x => x !== a)];   // a de antes vira alternativa
+          Object.assign(this, { route: a, seg: b.i, along: b.s, offSince: null, backSince: null, altSince: null, ann: {}, msg: '' });
+          rt = a; best = b;
+          this.speak('Seguindo pela rota alternativa');
+          this.onRoute(this.dest, a);
+        }
+      } else this.altSince = null;
       if (best.d > 40) {
         this.offSince ??= now; this.backSince = null;
         // parado ou manobrando (estacionamento) não recalcula; andando fora da rota por 5 s, recalcula
-        if ((moving || best.d > 120) && now - this.offSince > 5000 && canRe) reroute();
+        if (!alt && (moving || best.d > 120) && now - this.offSince > 5000 && canRe) reroute();
       } else {
         this.offSince = null; this.seg = best.i; this.along = best.s;
         // em cima da rota mas andando no sentido contrário (não fez o retorno): recalcula para a frente
-        const [ax, ay] = rt.xy[best.i], [bx, by] = rt.xy[best.i + 1] || rt.xy[best.i];
-        const segDir = (Math.atan2(bx - ax, by - ay) * 180 / Math.PI + 360) % 360;
-        const back = moving && pos.speed > 6 && isNum(pos.heading) && (bx !== ax || by !== ay) && Math.abs(((pos.heading - segDir + 540) % 360) - 180) > 135;
+        const sd = segDir(rt, best.i);
+        const back = moving && pos.speed > 6 && isNum(pos.heading) && isNum(sd) && angDiff(pos.heading, sd) > 135;
         if (!back) this.backSince = null;
         else if (now - (this.backSince ??= now) > 8000 && canRe) reroute();
+        if (!back && !this.busy && !this.altBusy && now - (this.altsAt ?? 0) > 3000 && navigator.onLine !== false) { this.altsAt = now; this.prefetchMiss(); }
       }
     }
 
@@ -303,6 +360,7 @@ export class MapView {
   constructor(canvas) {
     this.c = canvas; this.ctx = canvas.getContext('2d');
     this.tiles = new Map(); this.rot = 0; this.zoom = 16;
+    this.mag = 1.15;                                                 // aproxima 15% além do nível do mapa
     this.tilt = false;                                               // mapa inclinado: o canvas é maior e deitado pelo CSS
   }
 
@@ -345,7 +403,7 @@ export class MapView {
       this.rot = (this.rot + d * 0.25 + 360) % 360;
     }
     const z = this.zoom, n = 2 ** z, world = 2 * Math.PI * R, tileM = world / n;
-    const scale = 256 / tileM;                                   // px por metro
+    const scale = 256 * this.mag / tileM, ts = 256 * this.mag + 0.5;   // px por metro; tamanho do ladrilho na tela
     const [cx, cy] = mercator(pos.lat, pos.lon);
     // inclinado: o canvas vai de -35% a 135% na largura e o carro fica no quarto de baixo da janela
     const ox = w * (this.tilt ? (0.35 + anchorX) / 1.7 : anchorX), oy = h * (this.tilt ? 0.84 : 0.7);
@@ -360,11 +418,11 @@ export class MapView {
       for (let tx = tx0; tx <= tx1; tx++) {
         const x = (tx * tileM - world / 2 - cx) * scale, y = (cy - (world / 2 - ty * tileM)) * scale;
         const t = this.tile(z, ((tx % n) + n) % n, ty);
-        if (t.ok) { ctx.drawImage(t.img, x, y, 256.5, 256.5); continue; }
+        if (t.ok) { ctx.drawImage(t.img, x, y, ts, ts); continue; }
         const up = this.tiles.get(`${z - 1}/${(((tx % n) + n) % n) >> 1}/${ty >> 1}`);   // nível anterior ampliado
         if (up?.ok) {
           const s = up.img.width / 2;
-          ctx.drawImage(up.img, (tx & 1) * s, (ty & 1) * s, s, s, x, y, 256.5, 256.5);
+          ctx.drawImage(up.img, (tx & 1) * s, (ty & 1) * s, s, s, x, y, ts, ts);
         }
       }
     }

@@ -378,7 +378,11 @@ const storedRoute = () => { const o = load('navRoute', null); return o?.rt && Da
 const storedRouteFor = dest => { const o = storedRoute(); return o && distM(o.dest, dest) < 50 ? unpackRoute(o.rt) : null; };
 const nav = new Navigator({
   speak: t => speak(t, 'nav'), log, saved: storedRouteFor,
-  onRoute: (dest, rt) => save('navRoute', { dest, rt: packRoute(rt), at: Date.now() }),
+  onRoute: (dest, rt) => {                                           // com as alternativas, se couberem
+    let p = packRoute(rt);
+    if (JSON.stringify(p).length > 1500000) p = packRoute(rt, false);
+    save('navRoute', { dest, rt: p, at: Date.now() });
+  },
   onArrive: () => { const o = storedRoute(); if (o) save('navRoute', { ...o, done: true }); },   // chegou: não oferece retomar
 });
 let navRecent = load('navRecent', []);
