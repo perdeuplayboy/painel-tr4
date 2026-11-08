@@ -228,16 +228,28 @@ function archiveTrip() {
 
 // ---------------------------------------------------------------------------
 // Sensores do celular: GPS (clima, altitude, rumo) e acelerômetro (inclinômetro)
-const gps = { lat: NaN, lon: NaN, alt: NaN, heading: NaN, speed: NaN, at: 0 };
+const gps = { lat: NaN, lon: NaN, alt: NaN, heading: NaN, speed: NaN, at: 0, dir: NaN, dirAt: 0 };
 let lastPos = load('lastPos', null);       // última posição conhecida (tema e busca sem GPS)
 const DEMO = new URLSearchParams(location.search).has('demo');   // GPS falso para testar no PC
+// alguns celulares (o G42 inclusive) às vezes não mandam velocidade nem rumo: calcula pelo caminho andado
+let gpsRef = null;
 navigator.geolocation?.watchPosition(p => {
   if (DEMO) return;
-  const c = p.coords;
-  Object.assign(gps, {
-    lat: c.latitude, lon: c.longitude, alt: c.altitude ?? NaN, heading: c.heading ?? NaN,
-    speed: c.speed == null ? NaN : c.speed * 3.6, at: Date.now(),
-  });
+  const c = p.coords, now = Date.now();
+  let speed = c.speed == null || Number.isNaN(c.speed) ? NaN : c.speed * 3.6, heading = c.heading == null || Number.isNaN(c.heading) ? NaN : c.heading;
+  if (!gpsRef) gpsRef = { lat: c.latitude, lon: c.longitude, at: now };
+  const d = distM(gpsRef, { lat: c.latitude, lon: c.longitude }), dt = (now - gpsRef.at) / 1000;
+  if (d > Math.max(15, c.accuracy || 0) && dt > 0) {
+    if (!isNum(speed)) speed = d / dt * 3.6;
+    if (!isNum(heading) || !(speed > 3)) {
+      const y = c.latitude - gpsRef.lat, x = (c.longitude - gpsRef.lon) * Math.cos(c.latitude * Math.PI / 180);
+      heading = (Math.atan2(x, y) * 180 / Math.PI + 360) % 360;
+    }
+    gpsRef = { lat: c.latitude, lon: c.longitude, at: now };
+  } else if (dt > 12) { if (!isNum(speed)) speed = d / dt * 3.6; gpsRef = { lat: c.latitude, lon: c.longitude, at: now }; }
+  else if (!isNum(speed)) speed = gps.speed;
+  Object.assign(gps, { lat: c.latitude, lon: c.longitude, alt: c.altitude ?? NaN, heading, speed, at: now });
+  if (speed > 6 && isNum(heading)) Object.assign(gps, { dir: heading, dirAt: now });   // último rumo andando (para a rota não mandar voltar)
   if (!lastPos || Date.now() - lastPos.at > 10 * 60000) {
     lastPos = { lat: c.latitude, lon: c.longitude, at: Date.now() };
     save('lastPos', lastPos);
@@ -373,7 +385,7 @@ let navRecent = load('navRecent', []);
 let navInfo = null;
 
 const gpsFix = () => Date.now() - gps.at < 5000 && isNum(gps.lat)
-  ? { lat: gps.lat, lon: gps.lon, heading: gps.heading, speed: gps.speed } : null;
+  ? { lat: gps.lat, lon: gps.lon, heading: gps.heading, speed: gps.speed, dir: Date.now() - gps.dirAt < 180000 ? gps.dir : NaN } : null;
 
 // posição para o mapa: anda entre as leituras do GPS (1 por segundo) para não dar trancos
 function mapPos() {
@@ -1056,15 +1068,28 @@ function renderSpotifySettings() {
 }
 
 const phoneLink = () => new URL(`enviar.html#${S.channel}`, location.href).href;
+// correção de erro baixa = menos quadradinhos, cada um maior; margem branca de 4 (o que as câmeras pedem)
+const qrSvg = txt => { const q = qrcode(0, 'L'); q.addData(txt); q.make(); return q.createSvgTag({ cellSize: 4, margin: 4, scalable: true }); };
+
+// código grande, do tamanho da parte visível da tela, branco: o celular lê de longe e através do vidro
+function qrGrande() {
+  if (!window.qrcode) return;
+  const r = $('stage').getBoundingClientRect(), s = Math.min(r.height, r.width) * 0.96;
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#fff;touch-action:none';
+  box.innerHTML = qrSvg(phoneLink());
+  const svg = box.firstElementChild;
+  svg.style.cssText = `position:absolute;width:${s}px;height:${s}px;left:${r.left + (r.width - s) / 2}px;top:${r.top + (r.height - s) / 2}px`;
+  box.addEventListener('pointerdown', e => { e.stopPropagation(); box.remove(); });   // toque fecha
+  setTimeout(() => box.remove(), 90000);
+  document.body.append(box);
+}
+$('phoneQr').addEventListener('click', qrGrande);
 
 function renderNavSettings() {
   if ($('phoneLink').textContent !== phoneLink()) {
     $('phoneLink').textContent = phoneLink();
-    if (window.qrcode) {
-      const q = qrcode(0, 'M');
-      q.addData(phoneLink()); q.make();
-      $('phoneQr').innerHTML = q.createSvgTag({ cellSize: 4, margin: 3, scalable: true });
-    }
+    if (window.qrcode) $('phoneQr').innerHTML = qrSvg(phoneLink());
   }
   $('navState').textContent = nav.route
     ? `rota para ${nav.dest?.name} · faltam ${navInfo ? fmtDist(navInfo.remain) : '--'}` : nav.msg || 'sem rota';

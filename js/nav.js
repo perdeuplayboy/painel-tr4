@@ -137,13 +137,14 @@ export async function geocode(q, near) {
 }
 
 async function fetchRoute(from, to, heading) {
-  let q = `${from.lon.toFixed(6)},${from.lat.toFixed(6)};${to.lon.toFixed(6)},${to.lat.toFixed(6)}` +
+  const q = `${from.lon.toFixed(6)},${from.lat.toFixed(6)};${to.lon.toFixed(6)},${to.lat.toFixed(6)}` +
     '?overview=full&geometries=geojson&steps=true';
-  if (isNum(heading)) q += `&bearings=${Math.round(heading) % 360},60;`;   // evita rota que manda dar meia-volta
+  // com o rumo do carro a rota sai para a frente (não manda dar meia-volta); se não achar assim, tenta sem
+  const tries = isNum(heading) ? [q + `&bearings=${Math.round(heading) % 360},70;`, q] : [q];
   let err;
-  for (const base of ROUTERS) {
+  for (const qq of tries) for (const base of ROUTERS) {
     try {
-      const j = await (await fetch(base + q, { signal: AbortSignal.timeout(15000) })).json();
+      const j = await (await fetch(base + qq, { signal: AbortSignal.timeout(15000) })).json();
       if (j.code !== 'Ok') throw new Error(j.message || j.code);
       return buildRoute(j.routes[0]);
     } catch (e) { err = e; }
@@ -212,9 +213,11 @@ export class Navigator {
     this.msg = reroute ? 'recalculando…' : 'calculando rota…';
     const gen = ++this.gen;
     try {
-      const rt = await fetchRoute(pos, dest, pos.speed > 10 ? pos.heading : NaN);
+      // rumo: o do GPS andando, ou o último rumo andando (até 3 min) se parou para pedir a rota
+      const hd = pos.speed > 6 && isNum(pos.heading) ? pos.heading : pos.dir;
+      const rt = await fetchRoute(pos, dest, hd);
       if (gen !== this.gen) return;
-      Object.assign(this, { route: rt, seg: 0, along: 0, offSince: null, ann: {}, msg: '' });
+      Object.assign(this, { route: rt, seg: 0, along: 0, offSince: null, backSince: null, ann: {}, msg: '' });
       this.onRoute(dest, rt);
       if (!reroute) this.speak(`Rota para ${dest.name}. ${spokenDist(rt.total)}, chegada às ${hhmm(Date.now() + rt.duration * 1000)}`);
     } catch (e) {
@@ -241,16 +244,20 @@ export class Navigator {
         const all = nearest(rt, p, 0, rt.xy.length);
         if (all.d < best.d - 10) best = all;
       }
-      if (best.d > 50) {
-        this.offSince ??= now;
-        // parado ou manobrando (estacionamento) não recalcula
-        if (pos.speed > 10 && now - this.offSince > 6000 && !this.busy && now - (this.lastReroute || 0) > 15000) {
-          this.lastReroute = now;
-          this.speak('Recalculando');
-          this.go(this.dest, pos, true);
-        }
+      const moving = pos.speed > 4, canRe = !this.busy && now - (this.lastReroute || 0) > 12000;
+      const reroute = () => { this.lastReroute = now; this.offSince = this.backSince = null; this.speak('Recalculando'); this.go(this.dest, pos, true); };
+      if (best.d > 40) {
+        this.offSince ??= now; this.backSince = null;
+        // parado ou manobrando (estacionamento) não recalcula; andando fora da rota por 5 s, recalcula
+        if ((moving || best.d > 120) && now - this.offSince > 5000 && canRe) reroute();
       } else {
         this.offSince = null; this.seg = best.i; this.along = best.s;
+        // em cima da rota mas andando no sentido contrário (não fez o retorno): recalcula para a frente
+        const [ax, ay] = rt.xy[best.i], [bx, by] = rt.xy[best.i + 1] || rt.xy[best.i];
+        const segDir = (Math.atan2(bx - ax, by - ay) * 180 / Math.PI + 360) % 360;
+        const back = moving && pos.speed > 6 && isNum(pos.heading) && (bx !== ax || by !== ay) && Math.abs(((pos.heading - segDir + 540) % 360) - 180) > 135;
+        if (!back) this.backSince = null;
+        else if (now - (this.backSince ??= now) > 8000 && canRe) reroute();
       }
     }
 
