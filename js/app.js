@@ -1092,10 +1092,26 @@ function qrGrande() {
 }
 $('phoneQr').addEventListener('click', qrGrande);
 
+// rolando as configurações até o código, ele aparece grande sozinho: a altura toda do que se vê, no meio da tela,
+// por cima do painel (sem pegar o toque, dá para continuar rolando); rolando para longe, some
+const qrBig = document.createElement('div'); qrBig.id = 'qrBig';
+qrBig.style.cssText = 'position:fixed;z-index:20;background:#fff;pointer-events:none;border-radius:6px';
+qrBig.hidden = true;
+document.body.append(qrBig);
+function qrBigShow(on) {
+  if (!on || !window.qrcode) { qrBig.hidden = true; return; }
+  const r = $('stage').getBoundingClientRect(), s = Math.min(r.height, r.width) * 0.99;
+  if (qrBig.dataset.link !== phoneLink()) { qrBig.innerHTML = qrSvg(phoneLink(), 2); qrBig.dataset.link = phoneLink(); }
+  Object.assign(qrBig.style, { width: s + 'px', height: s + 'px', left: r.left + (r.width - s) / 2 + 'px', top: r.top + (r.height - s) / 2 + 'px' });
+  Object.assign(qrBig.firstElementChild.style, { width: '100%', height: '100%', display: 'block' });
+  qrBig.hidden = false;
+}
+new IntersectionObserver(([e]) => qrBigShow(e.intersectionRatio >= 0.5 && !$('settings').hidden), { root: $('settings'), threshold: [0, 0.5, 1] }).observe($('phoneQr'));
+
 function renderNavSettings() {
   if ($('phoneLink').textContent !== phoneLink()) {
     $('phoneLink').textContent = phoneLink();
-    if (window.qrcode) $('phoneQr').innerHTML = qrSvg(phoneLink());
+    if (window.qrcode) $('phoneQr').innerHTML = qrSvg(phoneLink(), 2);
   }
   $('navState').textContent = nav.route
     ? `rota para ${nav.dest?.name} · faltam ${navInfo ? fmtDist(navInfo.remain) : '--'}` : nav.msg || 'sem rota';
@@ -1192,7 +1208,7 @@ function openSettings() {
   $('screen').classList.add('cfg');
   exitStandby();
 }
-function closeSettings() { $('settings').hidden = true; $('screen').classList.remove('cfg'); }
+function closeSettings() { $('settings').hidden = true; $('screen').classList.remove('cfg'); document.getElementById('qrBig')?.setAttribute('hidden', ''); }
 
 // ---------------------------------------------------------------------------
 // Encaixe na moldura pelo traçado: o dedo percorre a borda de dentro da janela e esse desenho vira a janela.
