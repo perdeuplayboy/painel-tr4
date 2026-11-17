@@ -56,7 +56,13 @@ function layout() {
   if (S.janelaV !== 2) { delete S.holeShape; S.offX = 0; S.offY = 0; S.janelaV = 2; saveSettings(); }   // troca a janela antiga pela medida
   const pts = holeNow(W, H), hole = shapePath(pts);
   TELA.janela = pts;                                                 // as cenas desviam o texto dos cantos da moldura
-  TELA.relogioBox = () => { const el = $('sbClock'); return el && !el.hidden && el.offsetParent ? el.getBoundingClientRect() : null; };
+  // a caixa do relógio do standby e, separadas, as partes dela (a hora e a linha da música, que é mais larga e baixa)
+  TELA.relogioBox = () => {
+    const el = $('sbClock');
+    if (!el || el.hidden || !el.offsetParent) return null;
+    const r = el.getBoundingClientRect(), parts = [...el.children].map(c => { const g = document.createRange(); g.selectNodeContents(c); return g.getBoundingClientRect(); }).filter(b => b.width && b.height);   // só o texto, não o bloco
+    return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height, parts };
+  };
   TELA.tela = () => { const r = $('screen').getBoundingClientRect(); return { left: r.left, top: r.top, mm: r.width / W }; };
   const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
   const x0 = Math.max(0, Math.min(...xs)), y0 = Math.max(0, Math.min(...ys));
