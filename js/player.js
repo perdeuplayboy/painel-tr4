@@ -87,7 +87,7 @@ export class Player {
     if (it.kind === 'image') { this.img.hidden = false; this.img.src = it.url; }
     else { this.canvas.hidden = false; this.animate(ANIMS[it.anim]); }
     const whole = it.kind === 'anim' && ANIMS[it.anim].untilDone;    // algumas animações vão até o fim (com limite)
-    this.timer = setTimeout(() => this.next(), whole ? 4 * 60000 : this.opts.clipMs());
+    this.timer = setTimeout(() => this.next(), whole ? ANIMS[it.anim].maxMs || 4 * 60000 : this.opts.clipMs());
   }
 
   animate(draw) {

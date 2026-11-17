@@ -41,8 +41,21 @@ if (!['RESOURCE.MAP', 'RESOURCE.001', 'SCRANTIC.SCR'].every(n => files[n])) {
       // o dia da história (11 dias, como no original) fica num arquivo que sumiria a cada vez: guarda no aparelho
       const cfg = '/home/web_user/.jc_reborn', saved = localStorage.getItem('johnnyCfg');
       if (saved) FS.writeFile(cfg, saved);
+      // fim da história: o motor lê esse arquivo no começo de cada história (várias cenas e a cena final).
+      // A segunda leitura (pelo menos 30 s depois da primeira) quer dizer que a primeira história inteira acabou.
+      let nosso = false, primeira = 0;
+      const open0 = FS.open;
+      FS.open = function (path, ...rest) {
+        if (!nosso && typeof path === 'string' && path.endsWith('.jc_reborn')) {
+          const now = performance.now();
+          if (!primeira) primeira = now; else if (now - primeira > 30000 && !window.johnnyFim) { window.johnnyFim = true; if (dbg) console.log('fim da história'); }
+        }
+        return open0.call(this, path, ...rest);
+      };
       setInterval(() => {
+        nosso = true;
         try { const now = FS.readFile(cfg, { encoding: 'utf8' }); if (now !== localStorage.getItem('johnnyCfg')) localStorage.setItem('johnnyCfg', now); } catch {}
+        nosso = false;
       }, 2000);
     }],
   };

@@ -401,8 +401,9 @@ window.johnnySound = async nb => {
     src.buffer = buf; src.connect(jAudio.destination); src.start();
   } catch {}
 };
-function johnny(ctx, w, h) {
+function johnny(ctx, w, h, t) {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+  if (jFrame && t < 0.5) { let fim = false; try { fim = jFrame.contentWindow.johnnyFim; } catch {} if (fim) { jFrame.remove(); jFrame = null; } }   // começando de novo logo depois de uma história: motor novo
   if (!jFrame) {
     jFrame = Object.assign(document.createElement('iframe'), { src: 'johnny/index.html', tabIndex: -1 });
     jFrame.style.cssText = 'position:fixed;left:0;top:0;width:640px;height:480px;opacity:0;pointer-events:none;border:0;z-index:-1';
@@ -439,19 +440,27 @@ function johnny(ctx, w, h) {
   const sy = Math.min(src.height - sh, Math.max(0, jCrop));
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(src, 0, sy, src.width, sh, 0, 0, w, h);
+  try { if (jFrame.contentWindow.johnnyFim) return true; } catch {}   // a história inteira acabou (o motor avisa)
 }
+johnny.untilDone = true;                                               // no standby, uma história inteira (várias cenas e a final)
+johnny.maxMs = 25 * 60000;                                             // limite, se o aviso de fim não vier
 
 // Aventuras do Joni: a série fica só no aparelho (Arquivos do painel → offroad.js); aqui só o carregador
-let joniMod = null, joniLoading = false;
+// O relógio da cena anda junto com o movimento (no máximo 0,1 s por quadro): se o celular desenhar devagar,
+// a cena fica mais lenta em vez de acabar antes do Joni chegar ao fim.
+let joniMod = null, joniLoading = false, jniT = 0, jniLast = null;
 function joni(ctx, w, h, t) {
+  if (jniLast == null || t < jniLast) jniT = 0; else jniT += Math.min(0.1, t - jniLast);
+  jniLast = t;
   if (!joniMod) {
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
     if (!joniLoading) { joniLoading = true; extraURL('offroad.js').then(u => u && import(u)).then(m => { joniMod = m || null; }).catch(() => {}).finally(() => { joniLoading = false; }); }
-    return;
+    jniT = 0; return;                                                  // a cena começa quando o arquivo chega
   }
-  return joniMod.trilha(ctx, w, h, t);                                 // true quando a cena termina
+  return joniMod.trilha(ctx, w, h, jniT);                              // true quando a cena termina
 }
 joni.untilDone = true;
+joni.maxMs = 6 * 60000;
 
 export const ANIMS = {
   equalizer, road, warp, topo, scope,
