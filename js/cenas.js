@@ -43,7 +43,7 @@ export const CIDADE = 0.063;
 export const SEM_CIDADE = new Set(['Guarará'].map(n => n.normalize()));   // cidades que não aparecem nos radares
 export const load = (k, d) => { try { const v = localStorage.getItem('tr4.' + k); return v ? JSON.parse(v) : d; } catch { return d; } };
 export const keep = (k, v) => { try { localStorage.setItem('tr4.' + k, JSON.stringify(v)); } catch {} };
-export const here = () => { const p = load('lastPos', null); return p && Number.isFinite(p.lat) ? p : { lat: -23.55, lon: -46.63, padrao: true }; };   // sem GPS ainda: centro de São Paulo
+export const here = () => { const p = load('lastPos', null); return p && Number.isFinite(p.lat) ? p : { lat: -21.7247, lon: -43.0597, padrao: true }; };   // sem GPS ainda: Bicas-MG
 export function rng(seed) {
   return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
@@ -289,7 +289,7 @@ export function regiao(ctx, w, h, t, color) {
     ctx.fillStyle = txt === 'N' ? '#ff6a5a' : HUD; ctx.globalAlpha = txt === 'N' ? 1 : 0.8; ctx.fillText(txt, px, py);
   }
   ctx.restore();
-  const lugar = p.padrao ? 'sem GPS: centro de São Paulo' : RG.nome || `${Math.abs(p.lat).toFixed(3)}°${p.lat < 0 ? 'S' : 'N'} ${Math.abs(p.lon).toFixed(3)}°${p.lon < 0 ? 'O' : 'L'}`;
+  const lugar = p.padrao ? 'sem GPS: Bicas-MG' : RG.nome || `${Math.abs(p.lat).toFixed(3)}°${p.lat < 0 ? 'S' : 'N'} ${Math.abs(p.lon).toFixed(3)}°${p.lon < 0 ? 'O' : 'L'}`;
   hudText(ctx, h, [lugar, `${RS.lo} a ${RS.hi} m`], w * 0.03, h * 0.04);
 }
 

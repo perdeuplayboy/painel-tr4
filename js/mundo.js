@@ -193,7 +193,7 @@ export function satelites(ctx, w, h, t, color) {
   const dia = ms => new Date(ms).toDateString() === new Date(now).toDateString() ? 'hoje' : 'amanhã';
   const issTxt = !SS.iss ? null : issUp ? `ISS passando agora a ${Math.round(issUp.el)}° de altura`
     : SS.pass ? `ISS: dá para ver ${dia(SS.pass.ms)} às ${hhmm(SS.pass.ms)}, até ${Math.round(SS.pass.top)}° de altura` : 'ISS: sem passagem visível nas próximas 24 h';
-  const hud = [[`${n0} acima do horizonte · ${dark ? `${nv} dá para ver agora` : 'de dia não dá para ver'}`, 0.9, '#ffffff', LER, '600 ', 1], issTxt ? [issTxt, 0.85, HUD, LER, '', 2] : null, p.padrao ? ['sem GPS: céu do centro de São Paulo', 0.7] : null];
+  const hud = [[`${n0} acima do horizonte · ${dark ? `${nv} dá para ver agora` : 'de dia não dá para ver'}`, 0.9, '#ffffff', LER, '600 ', 1], issTxt ? [issTxt, 0.85, HUD, LER, '', 2] : null, p.padrao ? ['sem GPS: céu de Bicas-MG', 0.7] : null];
   const fs = Math.max(10, h * 0.052);                               // nomes um pouco menores que o texto de baixo
   const taken = [];                                                 // o texto fica embaixo, no chão escuro
   const free = b => !taken.some(o => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]);
@@ -708,7 +708,7 @@ export function avioes(ctx, w, h, t, color) {
   const near = flying[0], who = a => a.cs || a.reg || a.hex.toUpperCase();
   const hx = w * 0.62, htw = w * 0.97 - hx, hfim = h * 0.97;
   const hud = [[n25 === 0 ? 'nenhum avião em 25 km' : n25 === 1 ? '1 avião em 25 km' : `${n25} aviões em 25 km`, 1, '#ffffff', LER, '600 ', 3],
-    near ? [`mais perto: ${who(near)} a ${fmtN(near.km)} km`, 0.85, HUD, LER, '', 3] : null, p.padrao ? ['sem GPS: centro de São Paulo', 0.7] : null];
+    near ? [`mais perto: ${who(near)} a ${fmtN(near.km)} km`, 0.85, HUD, LER, '', 3] : null, p.padrao ? ['sem GPS: Bicas-MG', 0.7] : null];
   const hs = encher(ctx, h, hud, hx, h * 0.04, htw, hfim, 2.2, false), hEnd = coluna(ctx, h, hud, hx, h * 0.04, htw, hfim, false, hs);
   const taken = [[hx - 8, 0, w, hEnd + 4], [w * 0.55, h * 0.7, w, h], ...marks];   // texto do canto (com a fonte dos dados), relógio e marcas
   const free = b => !taken.some(o => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]);

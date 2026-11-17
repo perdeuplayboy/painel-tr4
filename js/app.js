@@ -431,10 +431,10 @@ function resumeRoute() {
   showPage(PAGES.indexOf('nav'));
 }
 
-// ?demo: parado na Av. Paulista; com rota, anda por ela na velocidade da simulação
+// ?demo: parado no centro de Bicas-MG; com rota, anda por ela na velocidade da simulação
 if (DEMO) {
   let demoRoute = null, demoS = 0;
-  Object.assign(gps, { lat: -23.5614, lon: -46.6559, alt: 820, heading: 0, speed: 0 });
+  Object.assign(gps, { lat: -21.7247, lon: -43.0597, alt: 640, heading: 0, speed: 0 });
   setInterval(() => {
     const rt = nav.route;
     const v = Date.now() - src.d.updatedAt < 5000 && isNum(src.d.speedKmh) ? src.d.speedKmh : 0;

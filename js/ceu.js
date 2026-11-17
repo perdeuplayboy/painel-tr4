@@ -229,7 +229,7 @@ export function ceu(ctx, w, h, t, color) {
   }
   ctx.lineTo(w + 60, h + 60); ctx.lineTo(-60, h + 60); ctx.closePath(); ctx.fill();
   // nomes, do mais importante para o menos, sem um cobrir o outro nem o texto do canto e o relógio
-  const hud = [SK.label, SK.vistos.length ? `à vista: ${SK.vistos.join(', ')}` : 'nenhum planeta à vista', SK.p.padrao ? 'sem GPS: centro de São Paulo' : null].filter(Boolean);
+  const hud = [SK.label, SK.vistos.length ? `à vista: ${SK.vistos.join(', ')}` : 'nenhum planeta à vista', SK.p.padrao ? 'sem GPS: Bicas-MG' : null].filter(Boolean);
   // o texto fica no canto de baixo à direita (no standby, logo acima do relógio)
   const hx = w * 0.97, hfs = Math.max(10, h * 0.075); ctx.font = `${hfs}px monospace`;
   const hw = Math.max(...hud.map(s => ctx.measureText(s).width)), [, lb, rel] = livre(hx - hw, hx);
