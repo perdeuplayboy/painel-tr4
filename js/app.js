@@ -5,7 +5,7 @@ import { loadSettings, loadUpkeep, load, save, addVideos, folderOf, listVideos, 
 import { MapView, Navigator, geocode, distM, fmtDist, arrowPath, arrowChar, packRoute, unpackRoute } from './nav.js';
 import { Spotify } from './spotify.js';
 import { Player } from './player.js';
-import { ANIMS, ANIM_NAMES } from './anims.js';
+import { ANIMS, ANIM_NAMES, SOM, abrirMic, fecharMic } from './anims.js';
 import { TELA } from './cenas.js';
 
 const $ = id => document.getElementById(id);
@@ -525,6 +525,7 @@ armed($('btnNavCancel'), stopNav);
 // ---------------------------------------------------------------------------
 // Spotify: a música da sua conta, tocando no seu celular ou em outro aparelho
 const spot = new Spotify({ load, save });
+SOM.tocando = () => spot.connected && spot.now ? !!spot.now.playing : spot.connected ? false : null;
 if (DEMO && !spot.connected) {                                  // música de mentira para testar a tela
   Object.defineProperty(spot, 'connected', { value: true });
   spot.now = { title: 'Highway Star', artist: 'Deep Purple', art: 'https://i.scdn.co/image/ab67616d00001e02ff9ca10b55ce82ae553c8228', playing: true, progress: 62000, duration: 368000, device: 'Moto G (demo)', at: Date.now() };
@@ -1401,6 +1402,13 @@ $('sFiles').addEventListener('change', async e => {
 filesInfo();
 $('sJohnnySom').checked = localStorage.getItem('johnnySom') === '1';
 $('sJohnnySom').addEventListener('change', e => localStorage.setItem('johnnySom', e.target.checked ? '1' : ''));
+$('sEqMic').checked = localStorage.getItem('eqMic') === '1';
+$('sEqMic').addEventListener('change', async e => {             // pede a permissão do microfone agora, com o toque
+  localStorage.setItem('eqMic', e.target.checked ? '1' : '');
+  if (!e.target.checked) { fecharMic(); return; }
+  if (!await abrirMic()) { e.target.checked = false; localStorage.setItem('eqMic', ''); log('Equalizador: microfone não liberado'); return; }
+  fecharMic();
+});
 armed($('btnResetFuel'), () => {
   fuelStats.gasolina = { km: 0, l: 0 }; fuelStats.etanol = { km: 0, l: 0 }; persist();
 });

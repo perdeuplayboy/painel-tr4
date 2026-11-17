@@ -14,18 +14,75 @@ import { loadJohnnyFiles, extraURL, extrasReady } from './store.js';
 
 const TAU = Math.PI * 2;
 
-// Equalizador de LEDs: barras "dançando" com picos que caem devagar
-const peaks = [];
+// Equalizador de LEDs: barras com picos que caem devagar.
+// Com a opção "Equalizador ouve o som do carro", as barras seguem o que o microfone escuta (o Spotify não
+// entrega o áudio a outros apps). O som fica só no aparelho: nada é gravado nem enviado. O microfone só fica
+// aberto enquanto o equalizador está na tela. Sem microfone, as barras dançam sozinhas e baixam com a música pausada.
+export const SOM = { tocando: () => null };          // o painel diz se o Spotify está tocando (null: não sabe)
+const peaks = [], eqLv = [];
+let mic = null, micBusy = false, micLast = 0, micRef = 0;
+export async function abrirMic() {
+  if (mic || micBusy) return mic;
+  micBusy = true;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    const ac = new AudioContext(), an = ac.createAnalyser();
+    an.fftSize = 2048; an.smoothingTimeConstant = 0.55; an.minDecibels = -95; an.maxDecibels = -20;
+    ac.createMediaStreamSource(stream).connect(an);
+    mic = { stream, ac, an, data: new Uint8Array(an.frequencyBinCount) };
+  } catch { mic = null; }
+  micBusy = false;
+  return mic;
+}
+export function fecharMic() {
+  if (!mic) return;
+  mic.stream.getTracks().forEach(k => k.stop());
+  mic.ac.close().catch(() => {});
+  mic = null;
+}
+setInterval(() => { if (mic && performance.now() - micLast > 3000) fecharMic(); }, 2000);   // saiu do equalizador
+addEventListener('pointerdown', () => { if (mic?.ac.state === 'suspended') mic.ac.resume().catch(() => {}); });
+
+// bandas do microfone (40 Hz a 12 kHz, espaçadas como o ouvido escuta), 0..1 com ganho que se ajusta ao volume
+function bandas(n) {
+  const { an, ac, data } = mic;
+  if (ac.state === 'suspended') ac.resume().catch(() => {});
+  an.getByteFrequencyData(data);
+  const hz = ac.sampleRate / an.fftSize, out = [];
+  let top = 0;
+  for (let i = 0; i < n; i++) {
+    const a = Math.max(1, Math.floor(40 * 300 ** (i / n) / hz)), b = Math.max(a + 1, Math.floor(40 * 300 ** ((i + 1) / n) / hz));
+    let m = 0;
+    for (let k = a; k < b && k < data.length; k++) m = Math.max(m, data[k]);
+    out.push(m / 255); top = Math.max(top, m / 255);
+  }
+  micRef = Math.max(top, micRef * 0.995, 0.35);                    // volume baixo não vira barra cheia de ruído
+  return out.map(v => Math.max(0, (v / micRef - 0.25) / 0.75));
+}
+
 function equalizer(ctx, w, h, t, color) {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, w, h);
   const n = 26, gap = w * 0.008, bw = (w - gap * (n + 1)) / n;
   const rows = 16, seg = (h * 0.86) / rows;
+  let ouvido = null;
+  if (localStorage.getItem('eqMic') === '1') {
+    micLast = performance.now();
+    if (mic) ouvido = bandas(n); else abrirMic();
+  }
+  const parado = !ouvido && SOM.tocando() === false;                 // Spotify pausado: barras quase paradas
   for (let i = 0; i < n; i++) {
     const f = i / n;
-    let v = 0.55 + 0.22 * Math.sin(t * 2.3 + i * 0.6) + 0.16 * Math.sin(t * 5.1 + i * 1.9) +
-      0.12 * Math.sin(t * 11.3 + i * 0.37) + 0.1 * Math.sin(t * 1.3 + i * 3.1);
-    v = Math.max(0.05, Math.min(1, v * (1.1 - 0.4 * f)));        // graves mais altos
+    let v;
+    if (ouvido) v = ouvido[i];
+    else {
+      v = 0.55 + 0.22 * Math.sin(t * 2.3 + i * 0.6) + 0.16 * Math.sin(t * 5.1 + i * 1.9) +
+        0.12 * Math.sin(t * 11.3 + i * 0.37) + 0.1 * Math.sin(t * 1.3 + i * 3.1);
+      v *= 1.1 - 0.4 * f;                                             // graves mais altos
+      if (parado) v *= 0.12;
+    }
+    eqLv[i] = Math.max(v, (eqLv[i] ?? 0) - 0.06);                    // sobe na hora, desce devagar
+    v = Math.max(0.03, Math.min(1, eqLv[i]));
     const lit = Math.round(v * rows);
     peaks[i] = Math.max(lit, (peaks[i] ?? 0) - 0.15);
     const x = gap + i * (bw + gap);
