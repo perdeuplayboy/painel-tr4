@@ -237,7 +237,7 @@ export class ElmBleSource {
   }
 
   async open() {
-    this.state = State.CONNECTING; this.err = '';
+    this.state = State.CONNECTING; this.err = ''; this.ecuTried = false;
     this.log(`conectando em ${this.device.name || this.device.id}`);
     try {
       const server = await this.device.gatt.connect();
@@ -299,6 +299,22 @@ export class ElmBleSource {
     return p;
   }
 
+  // espera o resto da resposta do comando anterior (o '>'), sem enviar nada
+  listen(timeout) {
+    const run = async () => {
+      if (!this.rxBuf.includes('>')) {
+        await new Promise(res => {
+          this.waiter = res;
+          setTimeout(() => { if (this.waiter === res) { this.waiter = null; res(); } }, timeout);
+        });
+      }
+      return this.rxBuf.replace(/[> ]/g, '').trim();
+    };
+    const p = this.queue.then(run, run);
+    this.queue = p.catch(() => {});
+    return p;
+  }
+
   async initAdapter() {
     let alive = false;
     for (const c of ['ATZ', 'ATE0', 'ATL0', 'ATS0', 'ATH0', 'ATSP0', 'ATAT1']) {
@@ -309,15 +325,42 @@ export class ElmBleSource {
     return alive;
   }
 
+  // Acha o protocolo do carro. A busca automática do ELM (ATSP0) passa por todos e, na linha K
+  // (ISO 9141 / KWP, comum em carros como a TR4), pode levar mais de 10 s: esperar até o fim, porque
+  // qualquer comando enviado no meio interrompe a busca ("STOPPED"). O protocolo que deu certo fica
+  // guardado e é tentado primeiro da próxima vez.
+  async ecuTry(sp, timeout) {
+    if (sp) await this.cmd('ATSP' + sp, 1500);
+    let r = await this.cmd('0100', timeout);
+    if (/SEARCHING/i.test(r) && !r.includes('41') && !/UNABLE|ERROR|NO DATA/.test(r)) {   // ainda buscando: espera mais
+      r = await this.listen(20000);                                // sem enviar nada (interromperia a busca)
+    }
+    this.log(`ATSP${sp || '0'} 0100 -> ${r.replace(/\s+/g, ' ')}`);
+    this.lastReply = r.replace(/SEARCHING\.*|BUS INIT:?\s*\.*/gi, '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    return r.includes('41') ? r : null;
+  }
+
   async initEcu() {
-    const r = await this.cmd('0100', 10000);                 // força busca de protocolo
-    this.log(`0100 -> ${r.replace(/\s+/g, ' ')}`);
-    if (!r.includes('41')) { this.err = 'ECU não respondeu (ignição ligada?)'; return false; }
+    let saved = ''; try { saved = localStorage.getItem('obdProto') || ''; } catch {}
+    let r = null;
+    if (saved) r = await this.ecuTry(saved, 8000);
+    if (!r) r = await this.ecuTry('0', 30000);
+    if (!r && !this.ecuTried) {                                    // a busca automática falhou: tenta a linha K uma a uma
+      this.ecuTried = true;
+      for (const sp of ['3', '4', '5']) if (sp !== saved && (r = await this.ecuTry(sp, 9000))) break;
+    }
+    if (!r) {
+      await this.cmd('ATSP0', 1500);
+      this.err = `ECU não respondeu${this.lastReply ? ': ' + this.lastReply : ''} (ignição ligada?)`;
+      return false;
+    }
     this.err = '';
     this.parseSupported(r, 0x00, 0);
     if (this.has(0x20)) this.parseSupported(await this.cmd('0120', 3000), 0x20, 1);
     if (this.has(0x40)) this.parseSupported(await this.cmd('0140', 3000), 0x40, 2);
     this.protocol = await this.cmd('ATDPN');
+    const n = /([1-9A-C])\s*$/i.exec(this.protocol)?.[1];
+    if (n) try { localStorage.setItem('obdProto', n); } catch {}
     const pids = [];
     for (let p = 1; p <= 0x60; p++) if (this.has(p)) pids.push(hex2(p));
     this.log(`protocolo=${this.protocol} pids=${pids.join(' ')}`);

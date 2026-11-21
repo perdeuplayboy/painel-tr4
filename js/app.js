@@ -985,7 +985,7 @@ function render(d, fresh, speed, running, t) {
   if (strip) msg = `${arrowChar(ni.step)} ${fmtDist(ni.dist)} · ${ni.step.name || ni.text}`;
   else if (S.source !== 'sim' && src.state !== State.CONNECTED) {
     err = true;
-    msg = src.device?.gatt.connected ? `OBD: ${src.state}` : `OBD: ${src.err || src.state} · toque aqui para conectar`;
+    msg = src.device?.gatt.connected ? `OBD: ${src.state === State.WAIT_ECU && src.lastReply ? 'sem ECU: ' + src.lastReply : src.state}` : `OBD: ${src.err || src.state} · toque aqui para conectar`;
   }
   if (st.textContent !== msg) st.textContent = msg;
   st.classList.toggle('err', err);
