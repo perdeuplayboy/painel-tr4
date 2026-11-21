@@ -4,12 +4,16 @@ import { ANIMS } from './anims.js';
 import { TELA } from './cenas.js';
 
 const BAG = 'tr4.baralho';                                            // o que ainda falta passar nesta rodada
+const FALHA_MS = 3 * 60000;                                           // cena que pulou por falta de dados fica de lado esse tempo
+const falhou = new Map();                                             // chave → quando pulou (vale para o standby e a página Vídeos)
+const key = it => `${it.kind}|${it.anim || it.url}`;
+const recente = k => Date.now() - (falhou.get(k) || 0) < FALHA_MS;
 
 export class Player {
   // box: elemento onde as mídias entram; items(): [{ kind: 'video'|'image'|'anim', url?, anim?, weight? }] (weight: chance relativa, padrão 1)
   // opts: { clipMs(): tempo de GIF/animação, color(): cor das animações }
   constructor(box, items, opts) {
-    Object.assign(this, { box, items, opts, on: false, cur: null, last: -1, timer: 0, raf: 0 });
+    Object.assign(this, { box, items, opts, on: false, cur: null, last: -1, timer: 0, raf: 0, t0: 0 });
     this.video = Object.assign(document.createElement('video'), { muted: true, playsInline: true });
     this.img = document.createElement('img');
     this.img.alt = '';
@@ -48,7 +52,7 @@ export class Player {
   // weight < 1: entra só em parte das rodadas (o Johnny, que tem muitas cenas, entra em 1 de cada 4).
   pick(list, avoid) {
     if (list.length < 2) return 0;
-    const key = it => `${it.kind}|${it.anim || it.url}`, keys = list.map(key), ex = keys[avoid];
+    const keys = list.map(key), ex = keys[avoid];
     let bag = []; try { bag = JSON.parse(localStorage.getItem(BAG) || '[]'); } catch {}
     bag = bag.filter(k => keys.includes(k));
     if (bag.length > 1 && bag[0] === ex) bag.push(bag.shift());
@@ -58,7 +62,13 @@ export class Player {
       for (let j = bag.length - 1; j > 0; j--) { const r = Math.floor(Math.random() * (j + 1)); [bag[j], bag[r]] = [bag[r], bag[j]]; }
       if (bag[0] === ex) bag.push(bag.shift());                         // o que acabou de passar não abre a rodada
     }
-    const k = bag.shift();
+    // sem internet as cenas de dados pulam em 1 s: as que acabaram de pular esperam no fim do baralho
+    const j = bag.findIndex(k => !recente(k));
+    if (j < 0) {                                                      // só sobraram as que pularam: repete outra enquanto isso
+      const livres = keys.filter(k => !recente(k) && k !== ex);
+      if (livres.length) return keys.indexOf(livres[Math.floor(Math.random() * livres.length)]);
+    }
+    const k = bag.splice(j < 0 ? 0 : j, 1)[0];
     try { localStorage.setItem(BAG, JSON.stringify(bag)); } catch {}
     return keys.indexOf(k);
   }
@@ -69,7 +79,7 @@ export class Player {
     const list = this.items();
     if (!chosen && !list.length) { this.cur = null; return; }
     const same = (a, b) => !!a && !!b && a.kind === b.kind && a.anim === b.anim && a.url === b.url;
-    let i = this.up ? list.findIndex(x => same(x, this.up)) : -1;           // o que já tinha sido sorteado como o próximo
+    let i = this.up && !recente(key(this.up)) ? list.findIndex(x => same(x, this.up)) : -1;           // o que já tinha sido sorteado como o próximo
     if (i < 0 || (i === this.last && list.length > 1)) i = this.pick(list, this.last);
     this.last = i;
     const it = this.cur = chosen || list[i];
@@ -85,9 +95,24 @@ export class Player {
       return;
     }
     if (it.kind === 'image') { this.img.hidden = false; this.img.src = it.url; }
-    else { this.canvas.hidden = false; this.animate(ANIMS[it.anim]); }
+    else { this.canvas.hidden = false; this.t0 = performance.now(); this.animate(ANIMS[it.anim]); }
     const whole = it.kind === 'anim' && ANIMS[it.anim].untilDone;    // algumas animações vão até o fim (com limite)
     this.timer = setTimeout(() => this.next(), whole ? ANIMS[it.anim].maxMs || 4 * 60000 : this.opts.clipMs());
+  }
+
+  // a animação terminou; se foi logo no começo, ela não tinha o que mostrar (sem internet ou sem dados)
+  acabou() {
+    const it = this.cur;
+    if (it?.kind === 'anim' && performance.now() - this.t0 < 4000) {
+      const k = key(it);
+      falhou.set(k, Date.now());
+      try {                                                           // volta para o baralho, para passar mais tarde nesta rodada
+        const bag = JSON.parse(localStorage.getItem(BAG) || '[]');
+        if (!bag.includes(k)) { bag.push(k); localStorage.setItem(BAG, JSON.stringify(bag)); }
+      } catch {}
+      this.opts.log?.(`cena pulada (sem dados agora): ${it.anim}`);
+    }
+    this.next();
   }
 
   animate(draw) {
@@ -107,7 +132,7 @@ export class Player {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       TELA.canvas = c;                                                     // para o texto da cena saber onde estão os cantos da moldura
       const rel = this.opts.relogio; TELA.relogio = !!(typeof rel === 'function' ? rel() : rel);   // standby: relógio no canto da cena
-      if (draw(ctx, w, h, (now - t0) / 1000, this.opts.color()) === true) this.next();   // a animação terminou
+      if (draw(ctx, w, h, (now - t0) / 1000, this.opts.color()) === true) this.acabou();   // a animação terminou
     };
     this.raf = requestAnimationFrame(frame);
   }

@@ -643,6 +643,7 @@ const playerOpts = {
   volume: () => S.videoVolume,
   clipMs: () => Math.max(5, S.clipSec) * 1000,
   color: () => $('musicPage').style.getPropertyValue('--m-accent') || '#ffb020',
+  log,
 };
 
 let asleep = false;                                                   // tela apagada (ver sleepScreen)

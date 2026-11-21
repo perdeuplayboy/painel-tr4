@@ -436,7 +436,7 @@ function glow(ctx, w, h) {
 
 // Johnny Castaway: o protetor original rodando no motor Johnny Reborn (página johnny/ num iframe escondido).
 // Os dados do original ficam só no aparelho; sem eles aparece um aviso.
-let jFrame = null, jStop = 0, jScan = 0, jCrop = 180, jTarget = 180;
+let jFrame = null, jCena = null, jStop = 0, jScan = 0, jCrop = 180, jTarget = 180;
 let jAudio = null, jSounds = null;
 // a página do motor avisa qual efeito tocar; toca aqui, por cima da música (opção "Som do Johnny")
 window.johnnySound = async nb => {
@@ -460,7 +460,7 @@ window.johnnySound = async nb => {
 };
 function johnny(ctx, w, h, t) {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
-  if (jFrame && t < 0.5) { let fim = false; try { fim = jFrame.contentWindow.johnnyFim; } catch {} if (fim) { jFrame.remove(); jFrame = null; } }   // começando de novo logo depois de uma história: motor novo
+  if (t < 0.5 || jCena == null) { jCena = null; try { jCena = jFrame?.contentWindow.johnnyCenas || 0; } catch {} }   // vez nova: conta a partir da cena atual
   if (!jFrame) {
     jFrame = Object.assign(document.createElement('iframe'), { src: 'johnny/index.html', tabIndex: -1 });
     jFrame.style.cssText = 'position:fixed;left:0;top:0;width:640px;height:480px;opacity:0;pointer-events:none;border:0;z-index:-1';
@@ -497,10 +497,11 @@ function johnny(ctx, w, h, t) {
   const sy = Math.min(src.height - sh, Math.max(0, jCrop));
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(src, 0, sy, src.width, sh, 0, 0, w, h);
-  try { if (jFrame.contentWindow.johnnyFim) return true; } catch {}   // a história inteira acabou (o motor avisa)
+  // uma cena inteira por vez: termina quando o motor começa a cena seguinte (motor novo: a primeira é a dele)
+  try { if ((jFrame.contentWindow.johnnyCenas || 0) >= Math.max(jCena, 1) + 1) return true; } catch {}
 }
-johnny.untilDone = true;                                               // no standby, uma história inteira (várias cenas e a final)
-johnny.maxMs = 25 * 60000;                                             // limite, se o aviso de fim não vier
+johnny.untilDone = true;                                               // no standby vai até o fim da cena, não por tempo
+johnny.maxMs = 4 * 60000;                                              // limite, se o aviso de cena nova não vier
 
 // Aventuras do Joni: a série fica só no aparelho (Arquivos do painel → offroad.js); aqui só o carregador
 // O relógio da cena anda junto com o movimento (no máximo 0,1 s por quadro): se o celular desenhar devagar,

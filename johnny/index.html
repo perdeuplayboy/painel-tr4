@@ -30,8 +30,16 @@ if (!['RESOURCE.MAP', 'RESOURCE.001', 'SCRANTIC.SCR'].every(n => files[n])) {
   };
   window.Module = {
     canvas: document.getElementById('canvas'),
-    arguments: ['window'],                                         // sem pedir tela cheia
-    print: dbg ? console.log : () => {}, printErr: dbg ? console.warn : () => {},   // ?debug mostra o que o motor faz
+    // com 'debug' o motor escreve o que faz; a linha "Playing ADS" marca o começo de cada cena (o painel mostra uma por vez)
+    arguments: ['window', 'debug'],                                // sem pedir tela cheia
+    print: s => {
+      if (s.startsWith('==========') && s.includes('Playing ADS')) {
+        window.johnnyCenas = (window.johnnyCenas || 0) + 1;
+        window.johnnyCena = s.replace(/=|Playing ADS:/g, '').trim();
+        if (dbg) console.log(s);
+      }
+    },
+    printErr: dbg ? console.warn : () => {},                      // ?debug mostra as cenas e os avisos do motor
     preRun: [() => {
       FS.mkdir('/data');
       for (const [name, data] of Object.entries(files)) {               // os sons o motor procura em minúsculas
@@ -41,21 +49,8 @@ if (!['RESOURCE.MAP', 'RESOURCE.001', 'SCRANTIC.SCR'].every(n => files[n])) {
       // o dia da história (11 dias, como no original) fica num arquivo que sumiria a cada vez: guarda no aparelho
       const cfg = '/home/web_user/.jc_reborn', saved = localStorage.getItem('johnnyCfg');
       if (saved) FS.writeFile(cfg, saved);
-      // fim da história: o motor lê esse arquivo no começo de cada história (várias cenas e a cena final).
-      // A segunda leitura (pelo menos 30 s depois da primeira) quer dizer que a primeira história inteira acabou.
-      let nosso = false, primeira = 0;
-      const open0 = FS.open;
-      FS.open = function (path, ...rest) {
-        if (!nosso && typeof path === 'string' && path.endsWith('.jc_reborn')) {
-          const now = performance.now();
-          if (!primeira) primeira = now; else if (now - primeira > 30000 && !window.johnnyFim) { window.johnnyFim = true; if (dbg) console.log('fim da história'); }
-        }
-        return open0.call(this, path, ...rest);
-      };
       setInterval(() => {
-        nosso = true;
         try { const now = FS.readFile(cfg, { encoding: 'utf8' }); if (now !== localStorage.getItem('johnnyCfg')) localStorage.setItem('johnnyCfg', now); } catch {}
-        nosso = false;
       }, 2000);
     }],
   };
