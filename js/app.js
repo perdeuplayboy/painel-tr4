@@ -149,8 +149,13 @@ async function autoConnect(s) {
   if (!ElmBleSource.available()) { s.state = State.ERROR; s.err = 'Bluetooth indisponível neste navegador'; return; }
   if (!S.deviceId) { s.err = 'adaptador não configurado'; return; }
   try {
+    // reconectar sozinho precisa do getDevices do Chrome (no Android fica atrás de uma flag)
+    if (!navigator.bluetooth.getDevices) {
+      s.err = 'toque para conectar'; log('OBD: o Chrome não deixa reconectar sozinho; ative a flag "Use the new permissions backend for Web Bluetooth" em chrome://flags');
+      return;
+    }
     const dev = await ElmBleSource.remembered(S.deviceId);
-    if (!dev) { s.err = 'toque para conectar'; return; }
+    if (!dev) { s.err = 'toque para conectar'; log('OBD: o Chrome não lembra do adaptador; toque e escolha o KONNWEI de novo'); return; }
     await s.connect(dev);
   } catch (e) {
     log('reconexão automática: ' + e.message);
