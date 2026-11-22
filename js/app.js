@@ -824,12 +824,14 @@ function tick() {
 
   // standby
   const engineOff = !running;
-  const moving = speed > 3;
+  // velocidade só do GPS (sem OBD): parado ele oscila uns km/h, então só conta como andando acima de 10 km/h
+  const moving = fresh && isNum(d.speedKmh) ? speed > 3 : speed > 10;
+  if (moving) sb.movedAt = now;
   if (engineOff) sb.engineOffSince ??= now; else sb.engineOffSince = null;
   if (!moving) sb.stoppedSince ??= now; else sb.stoppedSince = null;
-  if (moving && sb.on && !sb.forced) exitStandby();
+  if (moving && sb.on && !sb.forced) { log(`standby: saiu (andando a ${Math.round(speed)} km/h)`); exitStandby(); }
   if (moving) sb.suppressUntil = 0;
-  const wantStandby = $('alert').hidden && $('settings').hidden && now >= sb.suppressUntil &&
+  const wantStandby = $('alert').hidden && $('settings').hidden && now >= sb.suppressUntil && now - (sb.movedAt || -1e9) > 15000 &&
     !(nav.active && running) && (
     (sb.engineOffSince != null && now - sb.engineOffSince > STANDBY_ENGINE_OFF_MS) ||
     (sb.stoppedSince != null && now - sb.stoppedSince > S.standbyMin * 60000));

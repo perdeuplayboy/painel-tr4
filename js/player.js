@@ -25,7 +25,13 @@ export class Player {
 
   get empty() { return !this.items().length; }
 
-  start() { if (!this.on) { this.on = true; this.next(); } }
+  // voltou logo depois de parar (standby saiu e entrou de novo): continua no mesmo item em vez de sortear outro
+  start() {
+    if (this.on) return;
+    this.on = true;
+    const volta = this.prev && performance.now() - this.stopAt < 30000 && this.items().some(x => key(x) === key(this.prev));
+    this.next(volta ? this.prev : undefined);
+  }
 
   // começa por um item escolhido (ex.: "ver" uma animação nas configurações)
   show(item) { this.on = true; this.next(item); }
@@ -34,6 +40,7 @@ export class Player {
     if (!this.on) return;
     this.on = false;
     this.clear();
+    this.prev = this.cur; this.stopAt = performance.now();
     this.cur = null;
   }
 
@@ -73,18 +80,24 @@ export class Player {
     return keys.indexOf(k);
   }
 
+  sorteia(list) {
+    const same = (a, b) => !!a && !!b && a.kind === b.kind && a.anim === b.anim && a.url === b.url;
+    let i = this.up && !recente(key(this.up)) ? list.findIndex(x => same(x, this.up)) : -1;           // o que já tinha sido sorteado como o próximo
+    if (i < 0 || (i === this.last && list.length > 1)) i = this.pick(list, this.last);
+    this.last = i;
+    return list[i];
+  }
+
   next(chosen) {
     if (!this.on) return;
     this.clear();
     const list = this.items();
     if (!chosen && !list.length) { this.cur = null; return; }
     const same = (a, b) => !!a && !!b && a.kind === b.kind && a.anim === b.anim && a.url === b.url;
-    let i = this.up && !recente(key(this.up)) ? list.findIndex(x => same(x, this.up)) : -1;           // o que já tinha sido sorteado como o próximo
-    if (i < 0 || (i === this.last && list.length > 1)) i = this.pick(list, this.last);
-    this.last = i;
-    const it = this.cur = chosen || list[i];
+    const it = this.cur = chosen || this.sorteia(list);
     // já sorteia o seguinte e pede o que ele precisa da internet, para ele abrir pronto quando chegar a vez
-    this.up = list.length > 1 ? list[this.pick(list, i)] : null;
+    // (com um item escolhido, o próximo sorteado continua o mesmo, se já tinha um)
+    if (!chosen || !this.up) this.up = list.length > 1 ? list[this.pick(list, Math.max(0, list.findIndex(x => same(x, it))))] : null;
     if (this.up?.kind === 'anim') { try { ANIMS[this.up.anim]?.prep?.(); } catch {} }
     if (it.kind === 'video') {
       this.video.hidden = false;
