@@ -455,7 +455,9 @@ window.johnnySound = async nb => {
     const buf = (await jSounds)[nb];
     if (!buf) return;
     const src = jAudio.createBufferSource();
-    src.buffer = buf; src.connect(jAudio.destination); src.start();
+    const g = jAudio.createGain();                                     // volume do botão de som (johnnyVol, 0..1)
+    g.gain.value = Math.max(0, Math.min(1, parseFloat(localStorage.getItem('johnnyVol') ?? '0.7')));
+    src.buffer = buf; src.connect(g).connect(jAudio.destination); src.start();
   } catch {}
 };
 function johnny(ctx, w, h, t) {

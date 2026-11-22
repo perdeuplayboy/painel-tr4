@@ -699,33 +699,50 @@ $('standby').addEventListener('pointercancel', () => { sbTouch = null; });
 // botão de som no standby e na página Vídeos: liga e desliga o som dos vídeos (vale para os dois)
 // tocar no ícone abre a barra de volume (some sozinha em 4 s); tocar de novo no ícone com a barra aberta liga/desliga o som
 let volTimer = 0;
+// no Johnny o mesmo botão liga/desliga e ajusta o som dele (efeitos), guardado à parte do som dos vídeos
+const isJohnny = p => p.cur?.kind === 'anim' && p.cur.anim === 'johnny';
+const somDe = p => isJohnny(p)
+  ? { on: localStorage.getItem('johnnySom') === '1', vol: parseFloat(localStorage.getItem('johnnyVol') ?? '0.7') }
+  : { on: !!S.videoSound, vol: S.videoVolume };
+function setSom(p, on, vol) {
+  if (isJohnny(p)) {
+    localStorage.setItem('johnnySom', on ? '1' : '');
+    if (vol != null) localStorage.setItem('johnnyVol', String(vol));
+    $('sJohnnySom').checked = on;
+    showSoundBtn();
+    return;
+  }
+  S.videoSound = on; if (vol != null) S.videoVolume = vol;
+  applySound();
+}
 function showSoundBtn() {
-  $('sbSoundBox').hidden = !(sb.on && sbPlayer.cur?.kind === 'video');
-  $('pgSoundBox').hidden = !(!sb.on && PAGES[page] === 'video' && pgPlayer.cur?.kind === 'video');
-  for (const id of ['sbSound', 'pgSound']) { $(id).hidden = false; $(id).classList.toggle('on', !!S.videoSound); }
+  const tem = p => p.cur?.kind === 'video' || isJohnny(p);
+  $('sbSoundBox').hidden = !(sb.on && tem(sbPlayer));
+  $('pgSoundBox').hidden = !(!sb.on && PAGES[page] === 'video' && tem(pgPlayer));
+  for (const [id, p] of [['sbSound', sbPlayer], ['pgSound', pgPlayer]]) { $(id).hidden = false; $(id).classList.toggle('on', somDe(p).on); }
 }
 function applySound() {
   saveSettings();
   for (const p of [sbPlayer, pgPlayer]) { p.video.muted = !S.videoSound; p.video.volume = S.videoVolume; if (S.videoSound && p.on) p.video.play().catch(() => {}); }
   showSoundBtn();
 }
-function volBar(box, show) {
-  const bar = box.querySelector('.vol');
-  bar.hidden = !show; bar.value = S.videoSound ? Math.round(S.videoVolume * 100) : 0;
+function volBar(box, p, show) {
+  const bar = box.querySelector('.vol'), som = somDe(p);
+  bar.hidden = !show; bar.value = som.on ? Math.round(som.vol * 100) : 0;
   clearTimeout(volTimer); if (show) volTimer = setTimeout(() => { bar.hidden = true; }, 4000);
 }
-for (const id of ['sbSound', 'pgSound']) {
+for (const [id, pl] of [['sbSound', () => sbPlayer], ['pgSound', () => pgPlayer]]) {   // pgPlayer é criado mais abaixo
   const box = $(id + 'Box'), bar = box.querySelector('.vol');
   box.addEventListener('pointerdown', e => e.stopPropagation());     // não troca de vídeo nem sai do standby
   box.addEventListener('pointerup', e => e.stopPropagation());
   $(id).addEventListener('pointerup', () => {
-    if (bar.hidden) { if (!S.videoSound) { S.videoSound = true; applySound(); } volBar(box, true); }
-    else { S.videoSound = !S.videoSound; applySound(); volBar(box, true); }
+    const p = pl(), som = somDe(p);
+    if (bar.hidden) { if (!som.on) setSom(p, true); volBar(box, p, true); }
+    else { setSom(p, !som.on); volBar(box, p, true); }
   });
   bar.addEventListener('input', () => {
-    const v = bar.value / 100;
-    S.videoSound = v > 0; if (v > 0) S.videoVolume = v;
-    applySound(); volBar(box, true);
+    const p = pl(), v = bar.value / 100;
+    setSom(p, v > 0, v > 0 ? v : null); volBar(box, p, true);
   });
 }
 setInterval(showSoundBtn, 500);
