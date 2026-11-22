@@ -87,6 +87,9 @@ button { font: inherit; color: inherit; background: none; border: 0; }
   font-size: 2rem; letter-spacing: .05em; color: var(--accent);
   border: .25rem solid var(--accent); border-radius: 3rem; padding: .2rem 1.4rem;
 }
+.badge.parcial { background: none; font: inherit; font-size: 2rem; letter-spacing: .05em; text-transform: none; color: var(--text, #fff); border-color: var(--muted); }
+.badge.parcial b { font-weight: 600; }
+.badge.parcial.zerar { color: var(--warn); border-color: var(--warn); }
 
 .status { position: absolute; left: 50%; bottom: 2.9rem; transform: translateX(-50%); font-size: 1.9rem; color: var(--muted); white-space: nowrap; }
 .status.err { color: var(--warn); }

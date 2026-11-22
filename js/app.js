@@ -193,12 +193,14 @@ let batt = load('batt', { restV: NaN, crankV: NaN, at: 0 });
 let chargeV = NaN;
 
 let odo = load('odo', null);               // hodômetro do carro; o app soma o que o OBD mede
+// parcial: como o "trip" do painel do carro, só zera quando você manda (o OBD da TR4 não informa o hodômetro)
+const parcial = load('parcial', null) || { km: 0, since: Date.now() };
 const upkeep = loadUpkeep();
 let trips = load('trips', []);
 
 function persist() {
   save('trip', trip); save('fuelStats', fuelStats); save('lastRunningAt', lastRunningAt); save('batt', batt);
-  save('odo', odo);
+  save('odo', odo); save('parcial', parcial);
 }
 setInterval(persist, 5000);
 addEventListener('pagehide', persist);
@@ -796,6 +798,7 @@ function tick() {
     const fs = fuelStats[S.fuel] ||= { km: 0, l: 0 };
     fs.km += dKm; fs.l += dL;
     if (S.source === 'obd' && isNum(odo)) odo += dKm;
+    if (S.source === 'obd' && dKm > 0) parcial.km += dKm;
   }
 
   let speed = fresh ? d.speedKmh : NaN;
@@ -930,6 +933,7 @@ function render(d, fresh, speed, running, t) {
   const price = S.fuel === 'etanol' ? S.priceE : S.priceG;
   const elapsed = (Date.now() - trip.startAt) / 60000;
   set('fuelName', (FUELS[S.fuel] || FUELS.gasolina).name);
+  if (!$('parcial').classList.contains('zerar')) set('parcialKm', fmt(parcial.km, 1));
   set('tripKm', fmt(trip.distanceKm, 1));
   set('tripTime', `${Math.floor(elapsed / 60)}h${String(Math.floor(elapsed % 60)).padStart(2, '0')}`);
   set('tripL', fmt(trip.fuelL, 2));
@@ -1400,6 +1404,23 @@ $('btnQuit').addEventListener('click', e => {
   setTimeout(() => { e.target.textContent = 'use o botão início'; }, 400);   // se não deixou
 });
 $('btnConnect').addEventListener('click', pickAdapter);
+// parcial: um toque pede confirmação ("toque de novo para zerar"), o segundo em até 4 s zera
+let parcialTimer = 0;
+$('parcial').addEventListener('pointerdown', e => e.stopPropagation());     // não troca de página
+$('parcial').addEventListener('click', () => {
+  const b = $('parcial');
+  if (!b.classList.contains('zerar')) {
+    b.classList.add('zerar'); b.textContent = 'toque de novo para zerar';
+    clearTimeout(parcialTimer);
+    parcialTimer = setTimeout(() => { b.classList.remove('zerar'); b.innerHTML = 'parcial <b data-k="parcialKm"></b> km'; rebindParcial(); }, 4000);
+    return;
+  }
+  clearTimeout(parcialTimer);
+  Object.assign(parcial, { km: 0, since: Date.now() }); persist();
+  b.classList.remove('zerar'); b.innerHTML = 'parcial <b data-k="parcialKm"></b> km'; rebindParcial();
+  log('parcial zerado');
+});
+function rebindParcial() { binds.parcialKm = [...document.querySelectorAll('[data-k="parcialKm"]')]; set('parcialKm', fmt(parcial.km, 1)); }
 $('btnEngine').addEventListener('click', () => { src.setEngine?.(!src.engineOn); updateSettingsInfo(); });
 $('sFolder').addEventListener('change', async e => {         // pasta inteira: só os vídeos e GIFs dela
   const files = [...e.target.files].filter(f => /^(video|image\/(gif|webp))/.test(f.type));
