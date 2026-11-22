@@ -308,7 +308,7 @@ export class ElmBleSource {
           setTimeout(() => { if (this.waiter === res) { this.waiter = null; res(); } }, timeout);
         });
       }
-      return this.rxBuf.replace(/[> ]/g, '').trim();
+      return this.rxBuf.replace(/[>\0]/g, '').trim();
     };
     const p = this.queue.then(run, run);
     this.queue = p.catch(() => {});
@@ -377,6 +377,7 @@ export class ElmBleSource {
 
   async readPid(pid, key, conv, minBytes = 1) {
     const r = await this.cmd('01' + hex2(pid), 1000);
+    if (pid === 0x0d) this.speedRaw = r.replace(/\s+/g, ' ');          // para o registro, se a velocidade vier estranha
     const b = parse(r, pid);
     if (b && b.length >= minBytes) { this.d[key] = conv(b); return true; }
     if (/NO DATA|UNABLE|STOPPED|7F01|ERROR/.test(r)) this.d[key] = NaN;

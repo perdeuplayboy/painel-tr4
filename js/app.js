@@ -762,6 +762,7 @@ function pageVideo() {
 let lastTick = performance.now();
 let wasRunning = false;
 let lowBattSince = null, tiltSince = null, milWasOn = false;
+let speedLogs = 0, speedLogAt = -1e9;
 const volts = [];                       // [tempo, tensão] dos últimos 10 s com motor parado
 let restV = NaN;
 
@@ -772,6 +773,17 @@ function tick() {
   const d = src.d;
   const fresh = Date.now() - d.updatedAt < 5000;
   const fuel = FUELS[S.fuel] || FUELS.gasolina;
+
+  // A ECU às vezes manda 0 km/h (ou nada) com o carro andando, ao tirar o pé do acelerador:
+  // com o motor girando e o GPS mostrando movimento, vale a velocidade do GPS (também para o hodômetro)
+  const gpsV = Date.now() - gps.at < 5000 && isNum(gps.speed) ? gps.speed : NaN;
+  if (fresh && S.source === 'obd' && !(d.speedKmh >= 3) && d.rpm > 1100 && gpsV > 10) {
+    if (speedLogs < 5 && now - speedLogAt > 30000) {
+      speedLogs++; speedLogAt = now;
+      log(`OBD: velocidade ${isNum(d.speedKmh) ? Math.round(d.speedKmh) : 'vazia'} a ${Math.round(d.rpm)} rpm (resposta "${src.speedRaw || ''}"), GPS ${Math.round(gpsV)} km/h: usando o GPS`);
+    }
+    d.speedKmh = gpsV;
+  }
 
   // integração da viagem e do consumo por combustível
   if (fresh) {
